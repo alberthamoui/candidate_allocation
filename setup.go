@@ -20,9 +20,10 @@ func main() {
         CREATE TABLE IF NOT EXISTS pessoa (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
-            email_insper TEXT NOT NULL UNIQUE,
-            email_pessoal TEXT NOT NULL UNIQUE,
             cpf TEXT NOT NULL UNIQUE,
+            numero TEXT NOT NULL,
+            email_insper TEXT NOT NULL,
+            email_pessoal TEXT NOT NULL,
             semestre INTEGER NOT NULL,
             curso TEXT NOT NULL
         );
@@ -50,6 +51,7 @@ func main() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             pessoa_id INTEGER NOT NULL,
             opcao_id INTEGER NOT NULL,
+            preferencia INTEGER NOT NULL,
             FOREIGN KEY(pessoa_id) REFERENCES pessoa(id),
             FOREIGN KEY(opcao_id) REFERENCES opcoes_horario(id)
         );

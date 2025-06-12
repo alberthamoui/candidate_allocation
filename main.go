@@ -21,12 +21,10 @@ type Horario struct {
 	Candidatos []int
 }
 
-
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 func carregarHorarios(db *sql.DB) map[int]*Horario { // Lê todos os horários disponíveis e monta a estrutura de dados.
 	horarios := map[int]*Horario{}
-
 
 	return horarios
 }
@@ -34,7 +32,6 @@ func carregarHorarios(db *sql.DB) map[int]*Horario { // Lê todos os horários d
 func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]int { // Constrói as listas de preferências das pessoas e preenche os candidatos de cada horário.
 	pessoaPreferencias := map[int][]int{}
 
-	
 	return pessoaPreferencias
 }
 
@@ -42,8 +39,6 @@ func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]i
 
 func filtrarHorariosValidos(horarios map[int]*Horario) []*Horario { // Tira horarios com menos gente que o minimo
 	validHorarios := []*Horario{}
-
-	
 
 	return validHorarios
 } // Retorna uma lista com os horários válidos
