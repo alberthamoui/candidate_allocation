@@ -11,7 +11,7 @@ import (
 
 const (
 	MIN_PESSOAS_POR_HORARIO = 5
-	MAX_PESSOAS_POR_HORARIO = 8
+	MAX_PESSOAS_POR_HORARIO = 60
 )
 
 type Horario struct {
@@ -26,7 +26,7 @@ type Horario struct {
 func carregarHorarios(db *sql.DB) map[int]*Horario { // Lê todos os horários disponíveis e monta a estrutura de dados.
 	horarios := map[int]*Horario{}
 
-	rows, err := db.Query(`SELECT id, data, hora, local FROM opcoes_horario`)
+	rows, err := db.Query(`SELECT id, data, hora FROM opcoes_horario`)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -148,11 +148,48 @@ func alocarPessoa(pessoaID int, opcaoID int, alocacao map[int]int, pessoasAlocad
 
 func imprimirAlocacao(alocacao map[int]int, horarios map[int]*Horario) { // Imprime quem foi alocado em qual horário.
 	fmt.Printf("\n---- ALOCAÇÃO FINAL ----\n")
+	alocados := map[int]bool{}
+	naoAlocados := []int{}
 	for pessoaID, opcaoID := range alocacao {
 		h := horarios[opcaoID]
 		fmt.Printf("Pessoa %d -> %s %s (Horario ID %d)\n", pessoaID, h.Data, h.Hora, h.ID)
+		alocados[pessoaID] = true
+	}
+
+	// Descobrir todas as pessoas possíveis
+	todasPessoas := map[int]bool{}
+	for _, h := range horarios {
+		for _, pessoaID := range h.Candidatos {
+			todasPessoas[pessoaID] = true
+		}
+	}
+
+	// Descobrir quem não foi alocado
+	for pessoaID := range todasPessoas {
+		if !alocados[pessoaID] {
+			naoAlocados = append(naoAlocados, pessoaID)
+		}
+	}
+
+	// Imprimir não alocados
+	fmt.Printf("\n---- NÃO ALOCADOS (%d) ----\n", len(naoAlocados))
+	fmt.Println(naoAlocados)
+}
+
+func imprimirHorariosPreenchidos(horarios map[int]*Horario, alocacao map[int]int) {
+	fmt.Printf("\n---- HORÁRIOS PREENCHIDOS ----\n")
+	horarioToPessoas := make(map[int][]int)
+	for pessoaID, horarioID := range alocacao {
+		horarioToPessoas[horarioID] = append(horarioToPessoas[horarioID], pessoaID)
+	}
+
+	for _, h := range horarios {
+		pessoas := horarioToPessoas[h.ID]
+		fmt.Printf("Horário %d (%s %s): %d pessoas - %v\n", h.ID, h.Data, h.Hora, len(pessoas), pessoas)
+		// fmt.Printf("Horário %d (%s %s): %d pessoas\n", h.ID, h.Data, h.Hora, len(pessoas))
 	}
 }
+
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
@@ -172,4 +209,6 @@ func main() {
 	alocacao := fazerAlocacao(validHorarios, pessoaPreferencias)
 
 	imprimirAlocacao(alocacao, horarios)
+
+	imprimirHorariosPreenchidos(horarios, alocacao)
 }
