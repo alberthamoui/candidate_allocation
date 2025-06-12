@@ -18,9 +18,6 @@ func main() {
 		log.Fatal(err)
 	}
 	defer conn.Close()
-	// conn.Exec("DELETE FROM disponibilidade")
-	// conn.Exec("DELETE FROM opcoes_horario")
-	// conn.Exec("DELETE FROM pessoa")
 
 	// 1) adiciona 10 pessoas
 	var personIDs []int64
