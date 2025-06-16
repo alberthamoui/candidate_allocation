@@ -50,10 +50,10 @@ func main() {
         CREATE TABLE IF NOT EXISTS disponibilidade (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             pessoa_id INTEGER NOT NULL,
-            opcao_id INTEGER NOT NULL,
+            horario_id INTEGER NOT NULL,
             preferencia INTEGER NOT NULL,
             FOREIGN KEY(pessoa_id) REFERENCES pessoa(id),
-            FOREIGN KEY(opcao_id) REFERENCES opcoes_horario(id)
+            FOREIGN KEY(horario_id) REFERENCES opcoes_horario(id)
         );
     `)
 	if err != nil {

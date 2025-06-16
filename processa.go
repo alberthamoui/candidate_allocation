@@ -47,7 +47,7 @@ func carregarHorarios(db *sql.DB) map[int]*Horario { // Lê todos os horários d
 func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]int { // Constrói as listas de preferências das pessoas e preenche os candidatos de cada horário.
 	pessoaPreferencias := map[int][]int{}
 
-	rows, err := db.Query(`SELECT pessoa_id, opcao_id FROM disponibilidade`)
+	rows, err := db.Query(`SELECT pessoa_id, horario_id FROM disponibilidade`)
 	if err != nil {
 		log.Fatal(err)
 	}

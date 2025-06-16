@@ -10,6 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"regexp"
+	"database/sql"
+	dbpkg "github.com/alberthamoui/candidate_allocation/db"
+	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -278,7 +281,51 @@ func processData(data []Usuario) []Usuario {
 	return dataLimpa
 }
 
+func getHorarios(data []Usuario) []string {
+	horariosMap := make(map[string]bool)
+	for _, usuario := range data {
+		for _, opcao := range usuario.Opcoes {
+			horariosMap[opcao] = true
+		}
+	}
 
+	horariosUnicos := []string{}
+	for horario := range horariosMap {
+		horariosUnicos = append(horariosUnicos, horario)
+	}
+
+	return horariosUnicos
+}
+
+func fillDb(db *sql.DB, data []Usuario) {
+	// HORARIOS
+	idHorarios := map[string]int64{}
+	horarios := getHorarios(data)
+	for _, horario := range horarios {
+		base := strings.Split(horario, " - ")
+		hora := base[0]
+		date := base[1]
+		idHorario, _ := dbpkg.AddHorario(db ,date, hora, "None")
+		idHorarios[horario] = idHorario
+	}
+	fmt.Println("Horários inseridos no banco de dados.")
+
+	// CANDIDATOS & DISPONIBILIDADES
+	for _, usuario := range data {
+		semestreInt, _ := strconv.Atoi(usuario.Semestre)
+		id, _ := dbpkg.AddPessoa(db, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
+		fmt.Printf("Adicionando usuário: %s (ID: %d)\n", usuario.Nome, id)
+		count := 0
+		for _, opcao := range usuario.Opcoes {
+			count++
+			fmt.Printf("Adicionando disponibilidade para usuário %s (ID: %d) - Horário: %s (ID HORARIO: %d)\n", usuario.Nome, id, opcao, idHorarios[opcao])
+			dbpkg.AddDisponibilidade(db, id, idHorarios[opcao], int64(count))
+			
+		}
+	}
+
+
+}
 
 
 func main() {
@@ -297,6 +344,16 @@ func main() {
 
 	fmt.Println("Dados processados com sucesso!")
 	fmt.Println(strings.Repeat("----", 25))
+
+
+	conn, err := sql.Open("sqlite3", "./insper.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+	fmt.Println("Salvando dados no banco de dados...")
+	fillDb(conn, usuarios)
+	fmt.Println("Dados salvos com sucesso!")
 
 	if err != nil {
 		log.Fatal(err)
