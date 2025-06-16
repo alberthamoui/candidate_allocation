@@ -26,8 +26,8 @@ type Usuario struct {
 }
 
 type colInfo struct {
-	field    string // “timestamp”, “nome”, “cpf”, “numero”, “semestre”, “curso”, “email_insper”, “email_pessoal” ou “opcao”
-	optIndex int    // de 1 até nOpcoes, apenas para “opcao”
+	field    string // "timestamp", "nome", "cpf", "numero", "semestre", "curso", "email_insper", "email_pessoal", "opcao" ou "none"
+	optIndex int    // de 1 até nOpcoes, apenas para "opcao"
 }
 
 func ParseExcelInteractive(path string) ([]Usuario, error) {
@@ -54,39 +54,160 @@ func ParseExcelInteractive(path string) ([]Usuario, error) {
 
 	header := rows[0]
 	colMap := make([]colInfo, len(header))
+	validTypes := map[string]bool{
+		"timestamp":     true,
+		"nome":          true,
+		"cpf":           true,
+		"numero":        true,
+		"semestre":      true,
+		"curso":         true,
+		"email_insper":  true,
+		"email_pessoal": true,
+		"opcao":         true,
+		"none":          true,
+	}
 
-	// 2) Para cada coluna, pergunta o tipo (só valores válidos)
-	fmt.Println("Agora, para cada coluna, escolha entre:")
-	fmt.Println("  timestamp, nome, cpf, numero, semestre, curso, email_insper, email_pessoal, opcao ou none")
-	for i, h := range header {
-		var typ string
-		for {
-			fmt.Printf("Coluna %d (%q): ", i+1, h)
-			in, _ := reader.ReadString('\n')
-			typ = strings.ToLower(strings.TrimSpace(in))
-			if typ == "timestamp" || typ == "nome" || typ == "cpf" ||
-				typ == "numero" || typ == "semestre" || typ == "curso" ||
-				typ == "email_insper" || typ == "email_pessoal" ||
-				typ == "opcao" || typ == "none" {
-				break
+	// Função interna para validar mapeamento duplicado (exceto coluna "opcao" com índice diferente)
+	findDuplicate := func(t string, idx int, exclude int) int {
+		for j, ci := range colMap {
+			if j == exclude {
+				continue
 			}
-			fmt.Println("Inválido. Escolha: timestamp, nome, cpf, numero, semestre, curso, email_insper, email_pessoal, opcao ou none")
-		}
-
-		ci := colInfo{field: typ}
-		if typ == "opcao" {
-			// pergunta índice (1..nOpcoes)
-			for {
-				fmt.Printf("  Qual o índice da opção (1..%d)? ", nOpcoes)
-				in2, _ := reader.ReadString('\n')
-				idx, err := strconv.Atoi(strings.TrimSpace(in2))
-				if err == nil && idx >= 1 && idx <= nOpcoes {
-					ci.optIndex = idx
-					break
+			if t == "opcao" {
+				if ci.field == "opcao" && ci.optIndex == idx {
+					return j
+				}
+			} else {
+				if ci.field == t {
+					return j
 				}
 			}
 		}
-		colMap[i] = ci
+		return -1
+	}
+
+	// 2) Para cada coluna, pergunta o tipo e trata duplicidade
+	fmt.Println("Agora, para cada coluna, escolha entre:")
+	fmt.Println("  timestamp, nome, cpf, numero, semestre, curso, email_insper, email_pessoal, opcao ou none")
+	for i, colHeader := range header {
+		var chosenType string
+		var chosenOptIndex int
+
+		for {
+			fmt.Printf("Coluna %q: ", colHeader)
+			in, _ = reader.ReadString('\n')
+			typ := strings.ToLower(strings.TrimSpace(in))
+			if !validTypes[typ] {
+				fmt.Println("Inválido. Escolha: timestamp, nome, cpf, numero, semestre, curso, email_insper, email_pessoal, opcao ou none")
+				continue
+			}
+
+			if typ == "opcao" {
+				var idx int
+				for {
+					fmt.Printf("  Qual o índice da opção (1..%d)? ", nOpcoes)
+					in, _ = reader.ReadString('\n')
+					tmp, err := strconv.Atoi(strings.TrimSpace(in))
+					if err != nil || tmp < 1 || tmp > nOpcoes {
+						continue
+					}
+					idx = tmp
+					dup := findDuplicate("opcao", idx, -1)
+					if dup != -1 {
+						fmt.Printf("Já existe mapeamento para 'opcao' com índice %d na coluna %q. Deseja substituir? (s/n): ", idx, header[dup])
+						resp, _ := reader.ReadString('\n')
+						resp = strings.ToLower(strings.TrimSpace(resp))
+						if resp == "s" {
+							// Se o mapeamento antigo for também "opcao", permite remapear para outro índice
+							for {
+								fmt.Printf("Para qual campo deseja remapear a coluna %q? ", header[dup])
+								newField, _ := reader.ReadString('\n')
+								newField = strings.ToLower(strings.TrimSpace(newField))
+								// Se o usuário desejar manter como opcao, permita escolher um novo índice
+								if newField == "opcao" {
+									var newIdx int
+									for {
+										fmt.Printf("  Qual o novo índice da opção para a coluna %q? ", header[dup])
+										in, _ := reader.ReadString('\n')
+										tmp, err := strconv.Atoi(strings.TrimSpace(in))
+										if err != nil || tmp < 1 || tmp > nOpcoes {
+											continue
+										}
+										newIdx = tmp
+										if findDuplicate("opcao", newIdx, dup) != -1 {
+											fmt.Println("Esse índice já está mapeado, tente outro.")
+											continue
+										}
+										break
+									}
+									colMap[dup] = colInfo{field: "opcao", optIndex: newIdx}
+									break
+								} else if !validTypes[newField] || newField == "opcao" {
+									// Se não for "opcao" (caso inválido, repetir)
+									fmt.Println("Inválido. Digite um campo válido (exceto opcao) ou digite 'opcao' para remapear com novo índice.")
+									continue
+								} else {
+									if findDuplicate(newField, 0, dup) != -1 {
+										fmt.Println("Esse campo já está mapeado em outra coluna, tente outro.")
+										continue
+									}
+									colMap[dup] = colInfo{field: newField}
+									break
+								}
+							}
+							chosenType = "opcao"
+							chosenOptIndex = idx
+							break
+						} else {
+							fmt.Println("Por favor, escolha outro índice para esta coluna.")
+							continue
+						}
+					} else {
+						chosenType = "opcao"
+						chosenOptIndex = idx
+						break
+					}
+				}
+			} else if typ != "none" {
+				dup := findDuplicate(typ, 0, -1)
+				if dup != -1 {
+					fmt.Printf("Já existe mapeamento para '%s' na coluna %q. Deseja substituir? (s/n): ", typ, header[dup])
+					resp, _ := reader.ReadString('\n')
+					resp = strings.ToLower(strings.TrimSpace(resp))
+					if resp == "s" {
+						for {
+							fmt.Printf("Para qual campo deseja remapear a coluna %q? ", header[dup])
+							newField, _ := reader.ReadString('\n')
+							newField = strings.ToLower(strings.TrimSpace(newField))
+							if newField == "opcao" {
+								fmt.Println("Utilize 'opcao' apenas na definição original informando o índice.")
+								continue
+							}
+							if !validTypes[newField] {
+								fmt.Println("Inválido. Digite um campo válido (exceto opcao).")
+								continue
+							}
+							if findDuplicate(newField, 0, dup) != -1 {
+								fmt.Println("Esse campo já está mapeado em outra coluna, tente outro.")
+								continue
+							}
+							colMap[dup] = colInfo{field: newField}
+							break
+						}
+						chosenType = typ
+					} else {
+						fmt.Println("Por favor, escolha outro campo para esta coluna.")
+						continue
+					}
+				} else {
+					chosenType = typ
+				}
+			} else {
+				chosenType = typ
+			}
+			break
+		}
+		colMap[i] = colInfo{field: chosenType, optIndex: chosenOptIndex}
 	}
 
 	// 3) Monta slice de usuários
@@ -96,6 +217,9 @@ func ParseExcelInteractive(path string) ([]Usuario, error) {
 			Opcoes: make([]string, nOpcoes),
 		}
 		for idx, cell := range row {
+			if idx >= len(colMap) {
+				continue
+			}
 			ci := colMap[idx]
 			switch ci.field {
 			case "timestamp":
