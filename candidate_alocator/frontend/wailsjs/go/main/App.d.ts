@@ -4,4 +4,4 @@ import {main} from '../models';
 
 export function Greet(arg1:string):Promise<string>;
 
-export function ParseExcelInteractive(arg1:string):Promise<Array<main.Usuario>>;
+export function ParseExcelInteractive(arg1:Array<number>,arg2:number):Promise<Array<main.Usuario>>;

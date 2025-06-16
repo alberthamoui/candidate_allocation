@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -116,8 +117,9 @@ func askOverrideOrReselect(reader *bufio.Reader, existingMapping colInfo, curren
 }
 
 // ParseExcelInteractive lê o arquivo Excel e solicita interativamente o mapeamento de cada coluna.
-func (a *App) ParseExcelInteractive(path string) ([]Usuario, error) {
-	file, err := excelize.OpenFile(path)
+func (a *App) ParseExcelInteractive(data []byte, nOpcoes int) ([]Usuario, error) {
+	readerData := bytes.NewReader(data)
+	file, err := excelize.OpenReader(readerData)
 	if err != nil {
 		return nil, err
 	}
@@ -133,15 +135,6 @@ func (a *App) ParseExcelInteractive(path string) ([]Usuario, error) {
 	}
 
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Quantas opções de alocação? ")
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-	nOpcoes, err := strconv.Atoi(strings.TrimSpace(input))
-	if err != nil {
-		return nil, fmt.Errorf("número de opções inválido")
-	}
 
 	header := rows[0]
 	lista_colunas := make([]colInfo, len(header))
