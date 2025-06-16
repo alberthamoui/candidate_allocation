@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"regexp"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -195,6 +196,91 @@ func ParseExcelInteractive(path string) ([]Usuario, error) {
 	return users, nil
 }
 
+
+func processData(data []Usuario) []Usuario {
+	cpfVistos := map[string]bool{}
+	emailPessoalVistos := map[string]bool{}
+	emailInsperVistos := map[string]bool{}
+	dataLimpa := []Usuario{}
+	erros := []string{}
+	var why string
+
+	for _, entrada := range data {
+		entrada.CPF = strings.TrimSpace(entrada.CPF)
+		entrada.EmailInsper = strings.ToLower(strings.TrimSpace(entrada.EmailInsper))
+		entrada.EmailPessoal = strings.ToLower(strings.TrimSpace(entrada.EmailPessoal))
+		entrada.Numero = strings.TrimSpace(entrada.Numero)
+
+		// -=-=-=-=-=-=-=- Verifica duplicatas -=-=-=-=-=-=-=-=
+		if cpfVistos[entrada.CPF] || emailInsperVistos[entrada.EmailInsper] || emailPessoalVistos[entrada.EmailPessoal] {
+			var antiga *Usuario
+			for _, d := range dataLimpa {
+				if d.CPF == entrada.CPF || d.EmailInsper == entrada.EmailInsper || d.EmailPessoal == entrada.EmailPessoal {
+					antiga = &d
+					break
+				}
+			}
+
+			// Remove duplicata antiga
+			newDataLimpa := []Usuario{}
+			for _, d := range dataLimpa {
+				if d.CPF != entrada.CPF && d.EmailInsper != entrada.EmailInsper && d.EmailPessoal != entrada.EmailPessoal {
+					newDataLimpa = append(newDataLimpa, d)
+				}
+			}
+			dataLimpa = newDataLimpa
+
+			if entrada.CPF == antiga.CPF {
+				why = "CPF"
+			} else if entrada.EmailInsper == antiga.EmailInsper {
+				why = "Email Insper"
+			} else if entrada.EmailPessoal == antiga.EmailPessoal {
+				why = "Email Pessoal"
+			}
+			erros = append(erros, fmt.Sprintf("- Duplicate %+v \n\t- Usuario removida: %+v\n\t- Usuario mantida: %+v", why, entrada, antiga))
+			continue
+		}
+
+		// -=-=-=-=-=-=-=- Validações -=-=-=-=-=-=-=-=
+		if !regexp.MustCompile(`^[^@]+@[^@]+\.[^@]+$`).MatchString(entrada.EmailPessoal) {
+			erros = append(erros, fmt.Sprintf("Email pessoal inválido: %+v", entrada))
+		}
+		if !regexp.MustCompile(`^[^@]+@al\.insper\.edu\.br$`).MatchString(entrada.EmailInsper) {
+			erros = append(erros, fmt.Sprintf("Email Insper inválido: %+v", entrada))
+		}
+		if !regexp.MustCompile(`^\d{11}$`).MatchString(entrada.CPF) {
+			erros = append(erros, fmt.Sprintf("CPF inválido: %+v", entrada))
+		}
+		if !regexp.MustCompile(`^\d{9}$`).MatchString(entrada.Numero) {
+			erros = append(erros, fmt.Sprintf("Número inválido: %+v", entrada))
+		}
+		if !regexp.MustCompile(`^[1-8]$`).MatchString(entrada.Semestre) {
+			erros = append(erros, fmt.Sprintf("Semestre inválido: %+v", entrada))
+		}
+
+		// -=-=-=-=-=-=-=- Marca como visto e salva -=-=-=-=-=-=-=-=
+		cpfVistos[entrada.CPF] = true
+		emailInsperVistos[entrada.EmailInsper] = true
+		emailPessoalVistos[entrada.EmailPessoal] = true
+		dataLimpa = append(dataLimpa, entrada)
+	}
+
+	if len(erros) > 0 {
+		fmt.Println(strings.Repeat("----", 25))
+		fmt.Println("Erros encontrados:")
+		for _, err := range erros {
+			fmt.Println(err)
+			fmt.Println(strings.Repeat("----", 25))
+		}
+		return nil
+	}
+
+	return dataLimpa
+}
+
+
+
+
 func main() {
 	path := flag.String("file", "", "caminho para o arquivo .xlsx")
 	flag.Parse()
@@ -204,9 +290,18 @@ func main() {
 	}
 
 	usuarios, err := ParseExcelInteractive(*path)
+
+	fmt.Println("Processando dados...")
+
+	usuarios = processData(usuarios)
+
+	fmt.Println("Dados processados com sucesso!")
+	fmt.Println(strings.Repeat("----", 25))
+
 	if err != nil {
 		log.Fatal(err)
 	}
 	out, _ := json.MarshalIndent(usuarios, "", "  ")
+
 	fmt.Println(string(out))
 }

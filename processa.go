@@ -190,7 +190,6 @@ func imprimirHorariosPreenchidos(horarios map[int]*Horario, alocacao map[int]int
 	}
 }
 
-
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 func main() {
