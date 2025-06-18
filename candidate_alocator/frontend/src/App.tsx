@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import wailsLogo from "./assets/wails.png";
 import "./App.css";
 import { Greet, SuggestMapping } from "../wailsjs/go/main/App";
@@ -13,7 +14,7 @@ function App() {
 	const updateName = (e: React.ChangeEvent<HTMLInputElement>) =>
 		setName(e.target.value);
 	const updateResultText = (result: string) => setResultText(result);
-
+	const navigate = useNavigate();
 	function greet() {
 		Greet(name).then(updateResultText);
 	}
@@ -36,6 +37,9 @@ function App() {
 					const data = new Uint8Array(fileData as ArrayBuffer);
 					// Chama a nova função que aceita os dados do arquivo.
 					const result = await SuggestMapping(Array.from(data), 5);
+					console.log(result, "resultado");
+					// Navega para a nova página passando o mapeamento via state
+					navigate("/mapping", { state: { mapping: result } });
 					setFileResult(JSON.stringify(result, null, 2));
 				} catch (error) {
 					setFileResult("Erro ao processar o arquivo: " + error);
