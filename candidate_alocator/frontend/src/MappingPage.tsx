@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react"; // adicionada a importação do useRef
 import { motion } from "framer-motion";
 
 interface MappingItem {
@@ -11,6 +11,9 @@ interface MappingItem {
 export default function MappingPage() {
 	const location = useLocation();
 	const navigate = useNavigate();
+
+	// Referência para indicar se o drag está ativo
+	const dragActiveRef = useRef<boolean>(false);
 
 	// Processa o mapeamento recebido via state
 	const processMapping = () => {
@@ -62,9 +65,26 @@ export default function MappingPage() {
 		setMapping(initialMapping);
 	}, [location.state]);
 
+	// Listener global para autoscroll durante o drag
+	useEffect(() => {
+		const handleAutoScroll = (e: DragEvent) => {
+			if (!dragActiveRef.current) return;
+			const threshold = 50;
+			const scrollSpeed = 4;
+			if (e.clientY < threshold) {
+				window.scrollBy(0, -scrollSpeed);
+			} else if (e.clientY > window.innerHeight - threshold) {
+				window.scrollBy(0, scrollSpeed);
+			}
+		};
+		window.addEventListener("dragover", handleAutoScroll);
+		return () => window.removeEventListener("dragover", handleAutoScroll);
+	}, []);
+
 	// Inicia o drag armazenando o índice da linha
 	function onDragStart(e: React.DragEvent<HTMLDivElement>, index: number) {
 		setDraggedIndex(index);
+		dragActiveRef.current = true;
 
 		// Configura a imagem fantasma personalizada
 		const ghostElement = document.createElement("div");
@@ -116,11 +136,13 @@ export default function MappingPage() {
 		setMapping(newMapping);
 		setDraggedIndex(null);
 		setDragOverIndex(null);
+		dragActiveRef.current = false;
 	}
 
 	function onDragEnd() {
 		setDraggedIndex(null);
 		setDragOverIndex(null);
+		dragActiveRef.current = false;
 	}
 
 	function onConfirm() {
