@@ -1,7 +1,7 @@
 import { useState } from "react";
 import wailsLogo from "./assets/wails.png";
 import "./App.css";
-import { Greet, ParseExcelInteractive } from "../wailsjs/go/main/App";
+import { Greet, SuggestMapping } from "../wailsjs/go/main/App";
 
 function App() {
 	const [resultText, setResultText] = useState(
@@ -35,9 +35,7 @@ function App() {
 					// Converte o ArrayBuffer para Uint8Array
 					const data = new Uint8Array(fileData as ArrayBuffer);
 					// Chama a nova função que aceita os dados do arquivo.
-					const result = await ParseExcelInteractive(
-						Array.from(data)
-					);
+					const result = await SuggestMapping(Array.from(data), 5);
 					setFileResult(JSON.stringify(result, null, 2));
 				} catch (error) {
 					setFileResult("Erro ao processar o arquivo: " + error);

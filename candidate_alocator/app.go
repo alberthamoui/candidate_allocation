@@ -1,11 +1,11 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"os"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -62,62 +62,75 @@ type Usuario struct {
 	Opcoes       []string `json:"opcoes"`
 }
 
-type colInfo struct {
-	nome          string
-	optIndexOpcao int
+func getUsuarioFields(quantidade_opcoes int) []string {
+	t := reflect.TypeOf(Usuario{})
+	var fields []string
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		tag := field.Tag.Get("json")
+		if tag != "" && tag != "-" {
+			if tag == "opcoes" {
+				for j := 1; j <= quantidade_opcoes; j++ {
+					fields = append(fields, fmt.Sprintf("opcao %d", j))
+				}
+			} else {
+				fields = append(fields, tag)
+			}
+		}
+	}
+	return fields
 }
 
-// findDuplicateMappingIndex retorna o índice de um mapeamento duplicado em mappings,
-// ignorando o índice indicado por ignoreColumnIndex. Para "opcao", compara também o índice da opção.
-func findDuplicateMappingIndex(mappingTipo string, optionNumber int, ignoreColumnIndex int, mappings []colInfo) int {
-	for idx, mapping := range mappings {
-		if idx == ignoreColumnIndex {
-			continue
-		}
-		if mappingTipo == "opcao" {
-			if mapping.nome == "opcao" && mapping.optIndexOpcao == optionNumber {
-				return idx
-			}
+func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]string, error) {
+	readerData := bytes.NewReader(data)
+	file, err := excelize.OpenReader(readerData)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	sheet := file.GetSheetName(0)
+	rows, err := file.GetRows(sheet)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) < 1 {
+		return nil, fmt.Errorf("arquivo sem dados")
+	}
+	header := rows[0]
+
+	// Lista de possíveis variáveis da struct Usuario (em minúsculo)
+	variaveisUsuario := getUsuarioFields(quantidade_opcoes)
+
+	// Alocação aleatória das variáveis para cada coluna
+	mappingList := make([]string, len(header))
+	variaveisUsuarioIdx := 0
+	for i, colName := range header {
+		var usuarioVar string
+		if variaveisUsuarioIdx < len(variaveisUsuario) {
+			usuarioVar = variaveisUsuario[variaveisUsuarioIdx]
+			variaveisUsuarioIdx++
 		} else {
-			if mapping.nome == mappingTipo {
-				return idx
-			}
+			usuarioVar = "none"
 		}
+		// Formato: [[nome na row, indice da row], variavel do usuario escolhida]
+		mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", colName, i, usuarioVar)
 	}
-	return -1
+
+	return mappingList, nil
 }
 
-// promptUserForColumn exibe o prompt para configurar o mapeamento de uma coluna e retorna o tipo escolhido e, se for o caso, o número da opção.
-func promptUserForColumn(reader *bufio.Reader, colName string) (string, int) {
-	fmt.Printf("Coluna %q : ", colName)
-	input, _ := reader.ReadString('\n')
-	chosen := strings.ToLower(strings.TrimSpace(input))
-	optIdx := 0
-	if chosen == "opcao" {
-		fmt.Print("Digite o número da opção: ")
-		optInput, _ := reader.ReadString('\n')
-		optIdx, _ = strconv.Atoi(strings.TrimSpace(optInput))
-	}
-	return chosen, optIdx
-}
-
-// askOverrideOrReselect pergunta se o usuário deseja sobrepor o mapeamento duplicado ou reescolher para a coluna atual.
-func askOverrideOrReselect(reader *bufio.Reader, existingMapping colInfo, currentCol string) string {
-	fmt.Printf("Ja existe uma coluna marcada como %q deseja sobrepor com a coluna %q", existingMapping.nome, currentCol)
-	if existingMapping.nome == "opcao" {
-		fmt.Printf(" com opção %d", existingMapping.optIndexOpcao)
-	}
-	fmt.Println(". Deseja sobrepor? (s para sobrepor, qualquer outra tecla para reescolher)")
-	choice, _ := reader.ReadString('\n')
-	choice = strings.ToLower(strings.TrimSpace(choice))
-	if choice == "s" {
-		return "override"
-	}
-	return "reselect"
-}
-
-// ParseExcelInteractive lê o arquivo Excel e solicita interativamente o mapeamento de cada coluna.
-func (a *App) ParseExcelInteractive(data []byte, nOpcoes int) ([]Usuario, error) {
+// BuildUsuariosWithMapping monta o slice de usuários utilizando a alocação informada.
+// O parâmetro mapping é uma lista de strings no formato:
+//
+//	[[ "Nome da Coluna", índice ], "campo_do_usuario"]
+//
+// Exemplo:
+//
+//	[["TimeStamp", 0], "timestamp"]
+//	[["Primeira Opção", 8], "opcao 1"]
+func (a *App) BuildUsuariosWithMapping(data []byte, mapping []string, nOpcoes int) ([]Usuario, error) {
+	// Abre o arquivo Excel a partir dos dados em []byte
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
 	if err != nil {
@@ -131,72 +144,66 @@ func (a *App) ParseExcelInteractive(data []byte, nOpcoes int) ([]Usuario, error)
 		return nil, err
 	}
 	if len(rows) < 2 {
-		return nil, fmt.Errorf("arquivo sem dados")
+		return nil, fmt.Errorf("arquivo sem dados além do header")
 	}
 
-	reader := bufio.NewReader(os.Stdin)
-
-	header := rows[0]
-	lista_colunas := make([]colInfo, len(header))
-	validTypes := map[string]bool{
-		"timestamp":     true,
-		"nome":          true,
-		"cpf":           true,
-		"numero":        true,
-		"semestre":      true,
-		"curso":         true,
-		"email_insper":  true,
-		"email_pessoal": true,
-		"opcao":         true,
-		"none":          true,
+	// Define uma struct auxiliar para armazenar o mapeamento
+	type MappingItem struct {
+		HeaderName string
+		ColIndex   int
+		UserField  string
 	}
 
-	// Para cada coluna, solicita o mapeamento com verificação de duplicidade.
-	fmt.Println("Escolha com os seguintes tipos: timestamp, nome, cpf, numero, semestre, curso, email_insper, email_pessoal, opcao ou none")
-	for i, colName := range header {
-		for {
-
-			chosenType, chosenOptIndex := promptUserForColumn(reader, colName)
-			if !validTypes[chosenType] {
-				fmt.Println("Inválido. Escolha: timestamp, nome, cpf, numero, semestre, curso, email_insper, email_pessoal, opcao ou none")
-				continue
-			}
-			dupIdx := findDuplicateMappingIndex(chosenType, chosenOptIndex, i, lista_colunas)
-
-			if dupIdx == -1 {
-				// se não for sai
-				lista_colunas[i].nome = chosenType
-				lista_colunas[i].optIndexOpcao = chosenOptIndex
-				break
-			}
-			decision := askOverrideOrReselect(reader, lista_colunas[dupIdx], colName)
-			if decision == "override" {
-
-				// Atribui o mapeamento atual.
-				lista_colunas[i].nome = chosenType
-				lista_colunas[i].optIndexOpcao = chosenOptIndex
-
-				colName = header[dupIdx]
-				i = dupIdx
-			} else {
-				// Reselect: repete o loop para a coluna atual.
-				continue
-			}
+	// Converte cada string do mapping para MappingItem usando unmarshal JSON
+	var mappingItems []MappingItem
+	for _, mStr := range mapping {
+		// O mapping deve ter o formato: [[ "Header", índice ], "userField"]
+		var item []interface{}
+		if err := json.Unmarshal([]byte(mStr), &item); err != nil {
+			return nil, fmt.Errorf("erro ao parsear mapping: %v", err)
 		}
+		if len(item) != 2 {
+			return nil, fmt.Errorf("formato de mapping inválido")
+		}
+		// O primeiro elemento deve ser um array: ["Header", índice]
+		headerPart, ok := item[0].([]interface{})
+		if !ok || len(headerPart) != 2 {
+			return nil, fmt.Errorf("formato de header inválido no mapping")
+		}
+		headerName, ok := headerPart[0].(string)
+		if !ok {
+			return nil, fmt.Errorf("header name inválido")
+		}
+		colIndexFloat, ok := headerPart[1].(float64)
+		if !ok {
+			return nil, fmt.Errorf("col index inválido")
+		}
+		colIndex := int(colIndexFloat)
+		// O segundo elemento é a variável do usuário
+		userField, ok := item[1].(string)
+		if !ok {
+			return nil, fmt.Errorf("user field inválido")
+		}
+		mappingItems = append(mappingItems, MappingItem{
+			HeaderName: headerName,
+			ColIndex:   colIndex,
+			UserField:  userField,
+		})
 	}
 
-	// Monta slice de usuários
 	var users []Usuario
+	// Processa as linhas do Excel, ignorando o header (linha 0)
 	for _, row := range rows[1:] {
 		u := Usuario{
 			Opcoes: make([]string, nOpcoes),
 		}
-		for idx, cell := range row {
-			if idx >= len(lista_colunas) {
+		// Para cada mapping, pega o conteúdo da coluna correspondente e atribui
+		for _, mItem := range mappingItems {
+			if mItem.ColIndex >= len(row) {
 				continue
 			}
-			ci := lista_colunas[idx]
-			switch ci.nome {
+			cell := row[mItem.ColIndex]
+			switch mItem.UserField {
 			case "timestamp":
 				u.Timestamp = cell
 			case "nome":
@@ -213,13 +220,53 @@ func (a *App) ParseExcelInteractive(data []byte, nOpcoes int) ([]Usuario, error)
 				u.EmailInsper = cell
 			case "email_pessoal":
 				u.EmailPessoal = cell
-			case "opcao":
-				if ci.optIndexOpcao-1 < len(u.Opcoes) && ci.optIndexOpcao-1 >= 0 {
-					u.Opcoes[ci.optIndexOpcao-1] = cell
+			default:
+				// Se for uma opção, o mItem.UserField deve estar no formato "opcao X"
+				if strings.HasPrefix(mItem.UserField, "opcao") {
+					parts := strings.Split(mItem.UserField, " ")
+					if len(parts) == 2 {
+						optionNum, err := strconv.Atoi(parts[1])
+						if err == nil && optionNum > 0 && optionNum <= nOpcoes {
+							u.Opcoes[optionNum-1] = cell
+						}
+					}
 				}
 			}
 		}
 		users = append(users, u)
 	}
+
 	return users, nil
 }
+
+// func main() {
+// 	path := flag.String("file", "", "caminho para o arquivo .xlsx")
+// 	flag.Parse()
+// 	if *path == "" {
+// 		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
+// 		os.Exit(1)
+// 	}
+
+// 	data, err := os.ReadFile(*path)
+// 	if err != nil {
+// 		fmt.Println("Erro ao ler o arquivo:", err)
+// 		os.Exit(1)
+// 	}
+
+// 	app := NewApp()
+// 	mapping, err := app.SuggestMapping(data, 5)
+// 	if err != nil {
+// 		fmt.Println("Erro ao sugerir mapeamento:", err)
+// 		os.Exit(1)
+// 	}
+// 	usuarios, err := app.BuildUsuariosWithMapping(data, mapping, 5)
+// 	if err != nil {
+// 		fmt.Println("Erro ao montar os usuários:", err)
+// 		os.Exit(1)
+// 	}
+// 	out1, _ := json.MarshalIndent(mapping, "", " ")
+// 	out, _ := json.MarshalIndent(usuarios, "", "  ")
+// 	fmt.Println(string(out1))
+// 	fmt.Println("\n")
+// 	fmt.Println(string(out))
+// }
