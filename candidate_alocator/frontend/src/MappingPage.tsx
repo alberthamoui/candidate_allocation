@@ -92,12 +92,16 @@ export default function MappingPage() {
 		setDragOverIndex(index);
 	}
 
-	function onDragLeave() {
+	// Melhore o evento onDragLeave para garantir que o estado é limpo
+	function onDragLeave(e: React.DragEvent<HTMLDivElement>) {
+		// Previne limpeza incorreta quando movendo entre elementos filhos
+		if (e.currentTarget.contains(e.relatedTarget as Node)) return;
 		setDragOverIndex(null);
 	}
 
 	// Ao soltar, troca o conteúdo da célula "nomeColuna" entre a linha arrastada e a linha alvo
-	function onDrop(dropIndex: number) {
+	function onDrop(e: React.DragEvent<HTMLDivElement>, dropIndex: number) {
+		e.preventDefault();
 		if (draggedIndex === null) return;
 		const newMapping = [...mapping];
 		const temp = newMapping[draggedIndex].nomeColuna;
@@ -153,7 +157,7 @@ export default function MappingPage() {
 							{mapping.map((item, index) => (
 								<tr
 									key={index}
-									className={`border-b border-gray-200 hover:bg-blue-50 transition-colors ${
+									className={`border-b border-gray-200 transition-colors ${
 										dragOverIndex === index
 											? "bg-blue-100"
 											: ""
@@ -171,8 +175,12 @@ export default function MappingPage() {
 											onDragOver={(
 												e: React.DragEvent<HTMLDivElement>
 											) => onDragOver(e, index)}
-											onDragLeave={onDragLeave}
-											onDrop={() => onDrop(index)}
+											onDragLeave={(
+												e: React.DragEvent<HTMLDivElement>
+											) => onDragLeave(e)}
+											onDrop={(
+												e: React.DragEvent<HTMLDivElement>
+											) => onDrop(e, index)}
 											onDragEnd={onDragEnd}
 											whileHover={{ scale: 1.02 }}
 											whileTap={{ scale: 0.98 }}
@@ -185,16 +193,6 @@ export default function MappingPage() {
                                                 border-2 
                                                 shadow-sm
                                                 transition-all
-                                                ${
-													draggedIndex === index
-														? "opacity-50 border-blue-400"
-														: "border-blue-200"
-												}
-                                                ${
-													dragOverIndex === index
-														? "border-blue-500 bg-blue-50"
-														: ""
-												}
                                             `}
 										>
 											<div className="flex items-center justify-between">
