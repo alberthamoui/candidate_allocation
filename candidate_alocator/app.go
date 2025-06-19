@@ -3,16 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"log"
-	"reflect"
-	"regexp"
+	"os"
 	"strconv"
 	"strings"
-
-	dbpkg "candidate_alocator/db"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -69,151 +65,6 @@ type Usuario struct {
 	Opcoes       []string `json:"opcoes"`
 }
 
-func getUsuarioFields(quantidade_opcoes int) []string {
-	t := reflect.TypeOf(Usuario{})
-	var fields []string
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		tag := field.Tag.Get("json")
-		if tag != "" && tag != "-" {
-			if tag == "opcoes" {
-				for j := 1; j <= quantidade_opcoes; j++ {
-					fields = append(fields, fmt.Sprintf("opcao %d", j))
-				}
-			} else {
-				fields = append(fields, tag)
-			}
-		}
-	}
-	return fields
-}
-
-func processData(data []Usuario) []Usuario {
-	cpfVistos := map[string]bool{}
-	emailPessoalVistos := map[string]bool{}
-	emailInsperVistos := map[string]bool{}
-	dataLimpa := []Usuario{}
-	erros := []string{}
-	var why string
-
-	for _, entrada := range data {
-		entrada.CPF = strings.TrimSpace(entrada.CPF)
-		entrada.EmailInsper = strings.ToLower(strings.TrimSpace(entrada.EmailInsper))
-		entrada.EmailPessoal = strings.ToLower(strings.TrimSpace(entrada.EmailPessoal))
-		entrada.Numero = strings.TrimSpace(entrada.Numero)
-
-		// -=-=-=-=-=-=-=- Verifica duplicatas -=-=-=-=-=-=-=-=
-		if cpfVistos[entrada.CPF] || emailInsperVistos[entrada.EmailInsper] || emailPessoalVistos[entrada.EmailPessoal] {
-			var antiga *Usuario
-			for _, d := range dataLimpa {
-				if d.CPF == entrada.CPF || d.EmailInsper == entrada.EmailInsper || d.EmailPessoal == entrada.EmailPessoal {
-					antiga = &d
-					break
-				}
-			}
-
-			// Remove duplicata antiga
-			newDataLimpa := []Usuario{}
-			for _, d := range dataLimpa {
-				if d.CPF != entrada.CPF && d.EmailInsper != entrada.EmailInsper && d.EmailPessoal != entrada.EmailPessoal {
-					newDataLimpa = append(newDataLimpa, d)
-				}
-			}
-			dataLimpa = newDataLimpa
-
-			if entrada.CPF == antiga.CPF {
-				why = "CPF"
-			} else if entrada.EmailInsper == antiga.EmailInsper {
-				why = "Email Insper"
-			} else if entrada.EmailPessoal == antiga.EmailPessoal {
-				why = "Email Pessoal"
-			}
-			erros = append(erros, fmt.Sprintf("- Duplicate %+v \n\t- Usuario removida: %+v\n\t- Usuario mantida: %+v", why, entrada, antiga))
-			continue
-		}
-
-		// -=-=-=-=-=-=-=- Validações -=-=-=-=-=-=-=-=
-		if !regexp.MustCompile(`^[^@]+@[^@]+\.[^@]+$`).MatchString(entrada.EmailPessoal) {
-			erros = append(erros, fmt.Sprintf("Email pessoal inválido: %+v", entrada))
-		}
-		if !regexp.MustCompile(`^[^@]+@al\.insper\.edu\.br$`).MatchString(entrada.EmailInsper) {
-			erros = append(erros, fmt.Sprintf("Email Insper inválido: %+v", entrada))
-		}
-		if !regexp.MustCompile(`^\d{11}$`).MatchString(entrada.CPF) {
-			erros = append(erros, fmt.Sprintf("CPF inválido: %+v", entrada))
-		}
-		if !regexp.MustCompile(`^\d{9}$`).MatchString(entrada.Numero) {
-			erros = append(erros, fmt.Sprintf("Número inválido: %+v", entrada))
-		}
-		if !regexp.MustCompile(`^[1-8]$`).MatchString(entrada.Semestre) {
-			erros = append(erros, fmt.Sprintf("Semestre inválido: %+v", entrada))
-		}
-
-		// -=-=-=-=-=-=-=- Marca como visto e salva -=-=-=-=-=-=-=-=
-		cpfVistos[entrada.CPF] = true
-		emailInsperVistos[entrada.EmailInsper] = true
-		emailPessoalVistos[entrada.EmailPessoal] = true
-		dataLimpa = append(dataLimpa, entrada)
-	}
-
-	if len(erros) > 0 {
-		fmt.Println(strings.Repeat("----", 25))
-		fmt.Println("Erros encontrados:")
-		for _, err := range erros {
-			fmt.Println(err)
-			fmt.Println(strings.Repeat("----", 25))
-		}
-		return nil
-	}
-
-	return dataLimpa
-}
-
-func getHorarios(data []Usuario) []string {
-	horariosMap := make(map[string]bool)
-	for _, usuario := range data {
-		for _, opcao := range usuario.Opcoes {
-			horariosMap[opcao] = true
-		}
-	}
-
-	horariosUnicos := []string{}
-	for horario := range horariosMap {
-		horariosUnicos = append(horariosUnicos, horario)
-	}
-
-	return horariosUnicos
-}
-
-func fillDb(db *sql.DB, data []Usuario) {
-	// HORARIOS
-	idHorarios := map[string]int64{}
-	horarios := getHorarios(data)
-	for _, horario := range horarios {
-		base := strings.Split(horario, " - ")
-		hora := base[0]
-		date := base[1]
-		idHorario, _ := dbpkg.AddHorario(db, date, hora, "None")
-		idHorarios[horario] = idHorario
-	}
-	fmt.Println("Horários inseridos no banco de dados.")
-
-	// CANDIDATOS & DISPONIBILIDADES
-	for _, usuario := range data {
-		semestreInt, _ := strconv.Atoi(usuario.Semestre)
-		id, _ := dbpkg.AddPessoa(db, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
-		fmt.Printf("Adicionando usuário: %s (ID: %d)\n", usuario.Nome, id)
-		count := 0
-		for _, opcao := range usuario.Opcoes {
-			count++
-			fmt.Printf("Adicionando disponibilidade para usuário %s (ID: %d) - Horário: %s (ID HORARIO: %d)\n", usuario.Nome, id, opcao, idHorarios[opcao])
-			dbpkg.AddDisponibilidade(db, id, idHorarios[opcao], int64(count))
-
-		}
-	}
-
-}
-
 func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]string, error) {
 	a.excelData = data
 	a.nOpcoes = quantidade_opcoes
@@ -256,7 +107,49 @@ func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]string, erro
 	return mappingList, nil
 }
 
-func (a *App) BuildUsuariosWithMapping(mappingJSON string) ([]Usuario, error) {
+type MappingItem struct {
+	NomeColuna string `json:"nomeColuna"`
+	Indice     int    `json:"indice"`
+	Variavel   string `json:"variavel"`
+}
+
+// ProcessMapping converte cada string JSON "[[nomeColuna,indice],variavel]"
+// em um Mapping. Retorna erro se algum item não for JSON válido.
+func ProcessMapping(items []string) ([]MappingItem, error) {
+	var result []MappingItem
+
+	for _, item := range items {
+		// decodifica o JSON em um slice genérico
+		var arr []interface{}
+		if err := json.Unmarshal([]byte(item), &arr); err != nil {
+			return nil, fmt.Errorf("invalid JSON '%s': %w", item, err)
+		}
+		if len(arr) != 2 {
+			continue
+		}
+
+		// arr[0] => [nomeColuna, indice]
+		info, ok := arr[0].([]interface{})
+		if !ok || len(info) != 2 {
+			continue
+		}
+		nomeColuna, ok1 := info[0].(string)
+		indiceF, ok2 := info[1].(float64)
+		variavel, ok3 := arr[1].(string)
+		if !ok1 || !ok2 || !ok3 {
+			continue
+		}
+
+		result = append(result, MappingItem{
+			NomeColuna: nomeColuna,
+			Indice:     int(indiceF),
+			Variavel:   variavel,
+		})
+	}
+
+	return result, nil
+}
+func (a *App) BuildUsuariosWithMapping(mappingJSON string) (map[int]ValidationResult, error) {
 	// Abre o arquivo Excel a partir dos dados em []byte
 	data := a.excelData
 	nOpcoes := a.nOpcoes
@@ -277,11 +170,6 @@ func (a *App) BuildUsuariosWithMapping(mappingJSON string) ([]Usuario, error) {
 	}
 
 	// Define uma struct auxiliar para armazenar o mapeamento
-	type MappingItem struct {
-		NomeColuna string `json:"nomeColuna"`
-		Indice     int    `json:"indice"`
-		Variavel   string `json:"variavel"`
-	}
 
 	// Converte cada string do mapping para MappingItem usando unmarshal JSON
 	var mappingItems []MappingItem
@@ -334,45 +222,56 @@ func (a *App) BuildUsuariosWithMapping(mappingJSON string) ([]Usuario, error) {
 		users = append(users, u)
 	}
 	users_limpo := processData(users)
-	conn, err := sql.Open("sqlite3", "./insper.db")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-	fmt.Println("Salvando dados no banco de dados...")
-	fillDb(conn, users_limpo)
-	fmt.Println("Dados salvos com sucesso!")
+	// fmt.Println(users_limpo)
+	// conn, err := sql.Open("sqlite3", "./insper.db")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer conn.Close()
+	// fmt.Println("Salvando dados no banco de dados...")
+	// fillDb(conn, users_limpo)
+	// fmt.Println("Dados salvos com sucesso!")
 	return users_limpo, nil
 }
 
-// func main() {
-// 	path := flag.String("file", "", "caminho para o arquivo .xlsx")
-// 	flag.Parse()
-// 	if *path == "" {
-// 		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
-// 		os.Exit(1)
-// 	}
+func main() {
+	path := flag.String("file", "", "caminho para o arquivo .xlsx")
+	flag.Parse()
+	if *path == "" {
+		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
+		os.Exit(1)
+	}
 
-// 	data, err := os.ReadFile(*path)
-// 	if err != nil {
-// 		fmt.Println("Erro ao ler o arquivo:", err)
-// 		os.Exit(1)
-// 	}
+	data, err := os.ReadFile(*path)
+	if err != nil {
+		fmt.Println("Erro ao ler o arquivo:", err)
+		os.Exit(1)
+	}
 
-// 	app := NewApp()
-// 	mapping, err := app.SuggestMapping(data, 5)
-// 	if err != nil {
-// 		fmt.Println("Erro ao sugerir mapeamento:", err)
-// 		os.Exit(1)
-// 	}
-// 	usuarios, err := app.BuildUsuariosWithMapping(mapping, 5)
-// 	if err != nil {
-// 		fmt.Println("Erro ao montar os usuários:", err)
-// 		os.Exit(1)
-// 	}
-// 	out1, _ := json.MarshalIndent(mapping, "", " ")
-// 	out, _ := json.MarshalIndent(usuarios, "", "  ")
-// 	fmt.Println(string(out1))
-// 	fmt.Println("\n")
-// 	fmt.Println(string(out))
-// }
+	app := NewApp()
+	mapping, err := app.SuggestMapping(data, 5)
+	if err != nil {
+		fmt.Println("Erro ao sugerir mapeamento:", err)
+		os.Exit(1)
+	}
+	mapping_json, err := ProcessMapping(mapping)
+	if err != nil {
+		fmt.Println("Erro ao converter para json:", err)
+		os.Exit(1)
+	}
+	mapping_json_string, err := json.Marshal(mapping_json)
+	if err != nil {
+		fmt.Println("Erro ao convertendo json para bytes:", err)
+		os.Exit(1)
+	}
+	usuarios, err := app.BuildUsuariosWithMapping(string(mapping_json_string))
+	if err != nil {
+		fmt.Println("Erro ao montar os usuários:", err)
+		os.Exit(1)
+	}
+	out1, _ := json.MarshalIndent(mapping, "", " ")
+	out, _ := json.MarshalIndent(usuarios, "", "  ")
+	fmt.Println(string(out1))
+	fmt.Println("\n")
+	fmt.Println(string(out))
+}
