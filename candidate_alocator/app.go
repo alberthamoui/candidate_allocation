@@ -3,18 +3,25 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
+
+	dbpkg "candidate_alocator/db"
 
 	"github.com/xuri/excelize/v2"
 )
 
 // App struct
 type App struct {
-	ctx context.Context
+	ctx       context.Context
+	excelData []byte
+	nOpcoes   int
 }
 
 // NewApp creates a new App application struct
@@ -81,7 +88,135 @@ func getUsuarioFields(quantidade_opcoes int) []string {
 	return fields
 }
 
+func processData(data []Usuario) []Usuario {
+	cpfVistos := map[string]bool{}
+	emailPessoalVistos := map[string]bool{}
+	emailInsperVistos := map[string]bool{}
+	dataLimpa := []Usuario{}
+	erros := []string{}
+	var why string
+
+	for _, entrada := range data {
+		entrada.CPF = strings.TrimSpace(entrada.CPF)
+		entrada.EmailInsper = strings.ToLower(strings.TrimSpace(entrada.EmailInsper))
+		entrada.EmailPessoal = strings.ToLower(strings.TrimSpace(entrada.EmailPessoal))
+		entrada.Numero = strings.TrimSpace(entrada.Numero)
+
+		// -=-=-=-=-=-=-=- Verifica duplicatas -=-=-=-=-=-=-=-=
+		if cpfVistos[entrada.CPF] || emailInsperVistos[entrada.EmailInsper] || emailPessoalVistos[entrada.EmailPessoal] {
+			var antiga *Usuario
+			for _, d := range dataLimpa {
+				if d.CPF == entrada.CPF || d.EmailInsper == entrada.EmailInsper || d.EmailPessoal == entrada.EmailPessoal {
+					antiga = &d
+					break
+				}
+			}
+
+			// Remove duplicata antiga
+			newDataLimpa := []Usuario{}
+			for _, d := range dataLimpa {
+				if d.CPF != entrada.CPF && d.EmailInsper != entrada.EmailInsper && d.EmailPessoal != entrada.EmailPessoal {
+					newDataLimpa = append(newDataLimpa, d)
+				}
+			}
+			dataLimpa = newDataLimpa
+
+			if entrada.CPF == antiga.CPF {
+				why = "CPF"
+			} else if entrada.EmailInsper == antiga.EmailInsper {
+				why = "Email Insper"
+			} else if entrada.EmailPessoal == antiga.EmailPessoal {
+				why = "Email Pessoal"
+			}
+			erros = append(erros, fmt.Sprintf("- Duplicate %+v \n\t- Usuario removida: %+v\n\t- Usuario mantida: %+v", why, entrada, antiga))
+			continue
+		}
+
+		// -=-=-=-=-=-=-=- Validações -=-=-=-=-=-=-=-=
+		if !regexp.MustCompile(`^[^@]+@[^@]+\.[^@]+$`).MatchString(entrada.EmailPessoal) {
+			erros = append(erros, fmt.Sprintf("Email pessoal inválido: %+v", entrada))
+		}
+		if !regexp.MustCompile(`^[^@]+@al\.insper\.edu\.br$`).MatchString(entrada.EmailInsper) {
+			erros = append(erros, fmt.Sprintf("Email Insper inválido: %+v", entrada))
+		}
+		if !regexp.MustCompile(`^\d{11}$`).MatchString(entrada.CPF) {
+			erros = append(erros, fmt.Sprintf("CPF inválido: %+v", entrada))
+		}
+		if !regexp.MustCompile(`^\d{9}$`).MatchString(entrada.Numero) {
+			erros = append(erros, fmt.Sprintf("Número inválido: %+v", entrada))
+		}
+		if !regexp.MustCompile(`^[1-8]$`).MatchString(entrada.Semestre) {
+			erros = append(erros, fmt.Sprintf("Semestre inválido: %+v", entrada))
+		}
+
+		// -=-=-=-=-=-=-=- Marca como visto e salva -=-=-=-=-=-=-=-=
+		cpfVistos[entrada.CPF] = true
+		emailInsperVistos[entrada.EmailInsper] = true
+		emailPessoalVistos[entrada.EmailPessoal] = true
+		dataLimpa = append(dataLimpa, entrada)
+	}
+
+	if len(erros) > 0 {
+		fmt.Println(strings.Repeat("----", 25))
+		fmt.Println("Erros encontrados:")
+		for _, err := range erros {
+			fmt.Println(err)
+			fmt.Println(strings.Repeat("----", 25))
+		}
+		return nil
+	}
+
+	return dataLimpa
+}
+
+func getHorarios(data []Usuario) []string {
+	horariosMap := make(map[string]bool)
+	for _, usuario := range data {
+		for _, opcao := range usuario.Opcoes {
+			horariosMap[opcao] = true
+		}
+	}
+
+	horariosUnicos := []string{}
+	for horario := range horariosMap {
+		horariosUnicos = append(horariosUnicos, horario)
+	}
+
+	return horariosUnicos
+}
+
+func fillDb(db *sql.DB, data []Usuario) {
+	// HORARIOS
+	idHorarios := map[string]int64{}
+	horarios := getHorarios(data)
+	for _, horario := range horarios {
+		base := strings.Split(horario, " - ")
+		hora := base[0]
+		date := base[1]
+		idHorario, _ := dbpkg.AddHorario(db, date, hora, "None")
+		idHorarios[horario] = idHorario
+	}
+	fmt.Println("Horários inseridos no banco de dados.")
+
+	// CANDIDATOS & DISPONIBILIDADES
+	for _, usuario := range data {
+		semestreInt, _ := strconv.Atoi(usuario.Semestre)
+		id, _ := dbpkg.AddPessoa(db, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
+		fmt.Printf("Adicionando usuário: %s (ID: %d)\n", usuario.Nome, id)
+		count := 0
+		for _, opcao := range usuario.Opcoes {
+			count++
+			fmt.Printf("Adicionando disponibilidade para usuário %s (ID: %d) - Horário: %s (ID HORARIO: %d)\n", usuario.Nome, id, opcao, idHorarios[opcao])
+			dbpkg.AddDisponibilidade(db, id, idHorarios[opcao], int64(count))
+
+		}
+	}
+
+}
+
 func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]string, error) {
+	a.excelData = data
+	a.nOpcoes = quantidade_opcoes
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
 	if err != nil {
@@ -91,6 +226,7 @@ func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]string, erro
 
 	sheet := file.GetSheetName(0)
 	rows, err := file.GetRows(sheet)
+
 	if err != nil {
 		return nil, err
 	}
@@ -120,17 +256,10 @@ func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]string, erro
 	return mappingList, nil
 }
 
-// BuildUsuariosWithMapping monta o slice de usuários utilizando a alocação informada.
-// O parâmetro mapping é uma lista de strings no formato:
-//
-//	[[ "Nome da Coluna", índice ], "campo_do_usuario"]
-//
-// Exemplo:
-//
-//	[["TimeStamp", 0], "timestamp"]
-//	[["Primeira Opção", 8], "opcao 1"]
-func (a *App) BuildUsuariosWithMapping(data []byte, mapping []string, nOpcoes int) ([]Usuario, error) {
+func (a *App) BuildUsuariosWithMapping(mappingJSON string) ([]Usuario, error) {
 	// Abre o arquivo Excel a partir dos dados em []byte
+	data := a.excelData
+	nOpcoes := a.nOpcoes
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
 	if err != nil {
@@ -149,46 +278,15 @@ func (a *App) BuildUsuariosWithMapping(data []byte, mapping []string, nOpcoes in
 
 	// Define uma struct auxiliar para armazenar o mapeamento
 	type MappingItem struct {
-		HeaderName string
-		ColIndex   int
-		UserField  string
+		NomeColuna string `json:"nomeColuna"`
+		Indice     int    `json:"indice"`
+		Variavel   string `json:"variavel"`
 	}
 
 	// Converte cada string do mapping para MappingItem usando unmarshal JSON
 	var mappingItems []MappingItem
-	for _, mStr := range mapping {
-		// O mapping deve ter o formato: [[ "Header", índice ], "userField"]
-		var item []interface{}
-		if err := json.Unmarshal([]byte(mStr), &item); err != nil {
-			return nil, fmt.Errorf("erro ao parsear mapping: %v", err)
-		}
-		if len(item) != 2 {
-			return nil, fmt.Errorf("formato de mapping inválido")
-		}
-		// O primeiro elemento deve ser um array: ["Header", índice]
-		headerPart, ok := item[0].([]interface{})
-		if !ok || len(headerPart) != 2 {
-			return nil, fmt.Errorf("formato de header inválido no mapping")
-		}
-		headerName, ok := headerPart[0].(string)
-		if !ok {
-			return nil, fmt.Errorf("header name inválido")
-		}
-		colIndexFloat, ok := headerPart[1].(float64)
-		if !ok {
-			return nil, fmt.Errorf("col index inválido")
-		}
-		colIndex := int(colIndexFloat)
-		// O segundo elemento é a variável do usuário
-		userField, ok := item[1].(string)
-		if !ok {
-			return nil, fmt.Errorf("user field inválido")
-		}
-		mappingItems = append(mappingItems, MappingItem{
-			HeaderName: headerName,
-			ColIndex:   colIndex,
-			UserField:  userField,
-		})
+	if err := json.Unmarshal([]byte(mappingJSON), &mappingItems); err != nil {
+		return nil, fmt.Errorf("erro ao parsear mapping JSON: %w", err)
 	}
 
 	var users []Usuario
@@ -199,11 +297,11 @@ func (a *App) BuildUsuariosWithMapping(data []byte, mapping []string, nOpcoes in
 		}
 		// Para cada mapping, pega o conteúdo da coluna correspondente e atribui
 		for _, mItem := range mappingItems {
-			if mItem.ColIndex >= len(row) {
+			if mItem.Indice >= len(row) {
 				continue
 			}
-			cell := row[mItem.ColIndex]
-			switch mItem.UserField {
+			cell := row[mItem.Indice]
+			switch mItem.Variavel {
 			case "timestamp":
 				u.Timestamp = cell
 			case "nome":
@@ -222,8 +320,8 @@ func (a *App) BuildUsuariosWithMapping(data []byte, mapping []string, nOpcoes in
 				u.EmailPessoal = cell
 			default:
 				// Se for uma opção, o mItem.UserField deve estar no formato "opcao X"
-				if strings.HasPrefix(mItem.UserField, "opcao") {
-					parts := strings.Split(mItem.UserField, " ")
+				if strings.HasPrefix(mItem.Variavel, "opcao") {
+					parts := strings.Split(mItem.Variavel, " ")
 					if len(parts) == 2 {
 						optionNum, err := strconv.Atoi(parts[1])
 						if err == nil && optionNum > 0 && optionNum <= nOpcoes {
@@ -235,7 +333,15 @@ func (a *App) BuildUsuariosWithMapping(data []byte, mapping []string, nOpcoes in
 		}
 		users = append(users, u)
 	}
-
+	users_limpo := processData(users)
+	conn, err := sql.Open("sqlite3", "./insper.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+	fmt.Println("Salvando dados no banco de dados...")
+	fillDb(conn, users_limpo)
+	fmt.Println("Dados salvos com sucesso!")
 	return users, nil
 }
 
@@ -259,7 +365,7 @@ func (a *App) BuildUsuariosWithMapping(data []byte, mapping []string, nOpcoes in
 // 		fmt.Println("Erro ao sugerir mapeamento:", err)
 // 		os.Exit(1)
 // 	}
-// 	usuarios, err := app.BuildUsuariosWithMapping(data, mapping, 5)
+// 	usuarios, err := app.BuildUsuariosWithMapping(mapping, 5)
 // 	if err != nil {
 // 		fmt.Println("Erro ao montar os usuários:", err)
 // 		os.Exit(1)

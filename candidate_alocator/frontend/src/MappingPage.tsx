@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react"; // adicionada a importação do useRef
 import { motion } from "framer-motion";
-
+import { BuildUsuariosWithMapping } from "../wailsjs/go/main/App";
 interface MappingItem {
 	nomeColuna: string;
 	indice: number;
@@ -145,10 +145,10 @@ export default function MappingPage() {
 		dragActiveRef.current = false;
 	}
 
-	function onConfirm() {
-		// Aqui você pode realizar o envio do novo mapeamento para o backend ou outra ação
-		console.log("Mapping confirmado:", mapping);
-		// Exemplo: volta para a página inicial
+	async function onConfirm() {
+		const json = JSON.stringify(mapping);
+		const usuarios = await BuildUsuariosWithMapping(json);
+		console.log("Usuários gerados:", usuarios);
 		navigate("/");
 	}
 
