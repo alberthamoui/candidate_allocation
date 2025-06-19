@@ -270,7 +270,7 @@ func (a *App) BuildUsuariosWithMapping(mappingJSON string) ([]Usuario, error) {
 	sheet := file.GetSheetName(0)
 	rows, err := file.GetRows(sheet)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("erro ao ler excel : %w", err)
 	}
 	if len(rows) < 2 {
 		return nil, fmt.Errorf("arquivo sem dados além do header")
@@ -342,7 +342,7 @@ func (a *App) BuildUsuariosWithMapping(mappingJSON string) ([]Usuario, error) {
 	fmt.Println("Salvando dados no banco de dados...")
 	fillDb(conn, users_limpo)
 	fmt.Println("Dados salvos com sucesso!")
-	return users, nil
+	return users_limpo, nil
 }
 
 // func main() {
