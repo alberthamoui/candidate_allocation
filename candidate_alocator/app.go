@@ -148,24 +148,30 @@ func ProcessMapping(items []string) ([]MappingItem, error) {
 
 	return result, nil
 }
-func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (map[int]ValidationResult, [][]int, error) {
+
+type UsuariosResponse struct {
+	Usuarios   map[int]ValidationResult `json:"usuarios"`
+	Duplicates [][]int                  `json:"duplicates"`
+}
+
+func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResponse, error) {
 	// Abre o arquivo Excel a partir dos dados em []byte
 	data := a.excelData
 	nOpcoes := a.nOpcoes
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
 	if err != nil {
-		return nil, nil, err
+		return UsuariosResponse{}, err
 	}
 	defer file.Close()
 
 	sheet := file.GetSheetName(0)
 	rows, err := file.GetRows(sheet)
 	if err != nil {
-		return nil, nil, fmt.Errorf("erro ao ler excel : %w", err)
+		return UsuariosResponse{}, fmt.Errorf("erro ao ler excel : %w", err)
 	}
 	if len(rows) < 2 {
-		return nil, nil, fmt.Errorf("arquivo sem dados além do header")
+		return UsuariosResponse{}, fmt.Errorf("arquivo sem dados além do header")
 	}
 
 	var users []Usuario
@@ -226,7 +232,7 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (map[int]Vali
 	// fmt.Println("Salvando dados no banco de dados...")
 	// fillDb(conn, users_limpo)
 	// fmt.Println("Dados salvos com sucesso!")
-	return users_limpo, duplicatedIndices, nil
+	return UsuariosResponse{Usuarios: users_limpo, Duplicates: duplicatedIndices}, nil
 }
 
 // func main() {
@@ -252,15 +258,7 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (map[int]Vali
 // 	fmt.Println("\n")
 // 	fmt.Println("mapping : ", mapping)
 // 	fmt.Println("\n")
-// 	mapping_json, err := ProcessMapping(mapping)
-// 	if err != nil {
-// 		fmt.Println("Erro ao converter para json:", err)
-// 		os.Exit(1)
-// 	}
-// 	fmt.Println("\n")
-// 	fmt.Println("mapping_json : ", mapping_json)
-// 	fmt.Println("\n")
-// 	usuarios, duplicatedIndices, err := app.BuildUsuariosWithMapping(mapping_json)
+// 	usuarios, duplicatedIndices, err := app.BuildUsuariosWithMapping(mapping)
 // 	if err != nil {
 // 		fmt.Println("Erro ao montar os usuários:", err)
 // 		os.Exit(1)
@@ -268,9 +266,9 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (map[int]Vali
 // 	// out1, _ := json.MarshalIndent(mapping, "", " ")
 // 	// out, _ := json.MarshalIndent(usuarios, "", "  ")
 // 	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
-// 	fmt.Println(usuarios)
+// 	fmt.Println("usuarios : ", usuarios)
 // 	fmt.Println("\n")
-// 	fmt.Println(duplicatedIndices)
+// 	fmt.Println("duplicados : ", duplicatedIndices)
 // 	fmt.Println("\n")
 // 	// fmt.Println(string(out2))
 

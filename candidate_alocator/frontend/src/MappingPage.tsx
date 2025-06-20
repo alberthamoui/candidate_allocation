@@ -106,21 +106,10 @@ export default function MappingPage({ mapping }: MappingPageProps) {
 	}
 
 	async function onConfirm() {
-		console.log(mapping, " : mapping");
-		const result = await BuildUsuariosWithMapping(items);
-		if (!result) {
-			console.error(
-				"BuildUsuariosWithMapping retornou null ou undefined",
-				result
-			);
-			return;
-		}
-		const usuarios = result;
-		const duplicated_indices = Object.keys(result).filter(
-			(key) => result[Number(key)].duplicated
-		);
+		console.log(items, " : mapping");
+		const { usuarios, duplicates } = await BuildUsuariosWithMapping(items);
 		console.log("Usuários gerados: ", usuarios);
-		console.log("indices Duplicados: ", duplicated_indices);
+		console.log("indices Duplicados: ", duplicates);
 		navigate("/");
 	}
 
