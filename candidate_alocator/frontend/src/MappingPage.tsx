@@ -9,8 +9,14 @@ interface MappingItem {
 }
 interface MappingPageProps {
 	mapping: MappingItem[] | null;
+	setUsers: (data: any) => void;
+	setDuplicatas: (data: any) => void;
 }
-export default function MappingPage({ mapping }: MappingPageProps) {
+export default function MappingPage({
+	mapping,
+	setUsers,
+	setDuplicatas,
+}: MappingPageProps) {
 	const navigate = useNavigate();
 	const dragActiveRef = useRef<boolean>(false);
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -108,9 +114,9 @@ export default function MappingPage({ mapping }: MappingPageProps) {
 	async function onConfirm() {
 		console.log(items, " : mapping");
 		const { usuarios, duplicates } = await BuildUsuariosWithMapping(items);
-		console.log("Usuários gerados: ", usuarios);
-		console.log("indices Duplicados: ", duplicates);
-		navigate("/");
+		setUsers(usuarios);
+		setDuplicatas(duplicates);
+		navigate("/verify");
 	}
 
 	return (

@@ -4,9 +4,12 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import App from "./App";
 import MappingPage from "./MappingPage";
 import "./index.css";
+import VerifyUserPage from "./VerifyUsers";
 
 function Root() {
 	const [mappingData, setMappingData] = useState<any>(null);
+	const [users, setUsers] = useState<any>(null);
+	const [duplicatas, setDuplicatas] = useState<any>(null);
 
 	return (
 		<React.StrictMode>
@@ -18,7 +21,22 @@ function Root() {
 					/>
 					<Route
 						path="/mapping"
-						element={<MappingPage mapping={mappingData} />}
+						element={
+							<MappingPage
+								mapping={mappingData}
+								setUsers={setUsers}
+								setDuplicatas={setDuplicatas}
+							/>
+						}
+					/>
+					<Route
+						path="/verify"
+						element={
+							<VerifyUserPage
+								usuarios={users}
+								duplicates={duplicatas}
+							/>
+						}
 					/>
 				</Routes>
 			</BrowserRouter>
