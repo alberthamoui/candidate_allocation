@@ -48,7 +48,7 @@ type ValidationResult struct {
 
 // limpa dados
 
-func processData(data []Usuario) map[int]ValidationResult {
+func processData(data []Usuario) (map[int]ValidationResult, [][]int) {
 	cpfDuplicados := false
 	emailPessoaDuplicado := false
 	emailInsperDuplicado := false
@@ -109,6 +109,7 @@ func processData(data []Usuario) map[int]ValidationResult {
 		// --- caso válido, marca como visto e (opcionalmente) salva num slice “clean” ---
 
 	}
+	duplicatedIndices := [][]int{}
 	if cpfDuplicados || emailInsperDuplicado || emailPessoaDuplicado {
 		// Map to track values and their indices
 		valueIndices := make(map[string][]int)
@@ -125,7 +126,7 @@ func processData(data []Usuario) map[int]ValidationResult {
 				valueIndices["email_pessoal:"+usr.EmailPessoal] = append(valueIndices["email_pessoal:"+usr.EmailPessoal], idx)
 			}
 		}
-		fmt.Println(valueIndices, "value indices")
+		// fmt.Println(valueIndices, "value indices")
 		// Prepare the list of lists of indices with duplicates
 		n := len(resultados)
 		parent := make([]int, n+1)
@@ -163,17 +164,13 @@ func processData(data []Usuario) map[int]ValidationResult {
 			groups[r] = append(groups[r], i)
 		}
 
-		duplicatedIndices := [][]int{}
 		for _, g := range groups {
 			if len(g) > 1 {
 				duplicatedIndices = append(duplicatedIndices, g)
 			}
 		}
-
-		fmt.Println("Duplicated indices:", duplicatedIndices)
 	}
-
-	return resultados
+	return resultados, duplicatedIndices
 }
 
 func getHorarios(data []Usuario) []string {

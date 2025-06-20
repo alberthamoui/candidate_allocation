@@ -4,7 +4,11 @@ import wailsLogo from "./assets/wails.png";
 import "./App.css";
 import { Greet, SuggestMapping } from "../wailsjs/go/main/App";
 
-function App() {
+interface AppProps {
+	setMapping: (data: any) => void;
+}
+
+function App({ setMapping }: AppProps) {
 	const [resultText, setResultText] = useState(
 		"Por favor, digite seu nome abaixo 👇"
 	);
@@ -38,9 +42,8 @@ function App() {
 					// Chama a nova função que aceita os dados do arquivo.
 					const result = await SuggestMapping(Array.from(data), 5);
 					console.log(result, "resultado");
-					// Navega para a nova página passando o mapeamento via state
-					navigate("/mapping", { state: { mapping: result } });
-					setFileResult(JSON.stringify(result, null, 2));
+					setMapping(result); // <-- joga pro pai
+					navigate("/mapping");
 				} catch (error) {
 					setFileResult("Erro ao processar o arquivo: " + error);
 				}

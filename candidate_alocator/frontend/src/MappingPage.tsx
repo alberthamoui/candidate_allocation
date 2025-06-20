@@ -7,64 +7,24 @@ interface MappingItem {
 	indice: number;
 	variavel: string;
 }
-
-export default function MappingPage() {
-	const location = useLocation();
+interface MappingPageProps {
+	mapping: MappingItem[] | null;
+}
+export default function MappingPage({ mapping }: MappingPageProps) {
 	const navigate = useNavigate();
-
-	// Referência para indicar se o drag está ativo
 	const dragActiveRef = useRef<boolean>(false);
-
-	// Processa o mapeamento recebido via state
-	const processMapping = () => {
-		if (location.state?.mapping && location.state.mapping.result) {
-			const resultArray = location.state.mapping.result;
-			return resultArray.map((item: string) => {
-				const parsedItem = JSON.parse(item);
-				const colunaInfo = parsedItem[0];
-				const variavel = parsedItem[1];
-
-				return {
-					nomeColuna: colunaInfo[0],
-					indice: colunaInfo[1],
-					variavel: variavel,
-				};
-			});
-		}
-
-		// Mapeamento padrão caso não venha nada
-		return [
-			{ nomeColuna: "E", indice: 0, variavel: "timestamp" },
-			{ nomeColuna: "Email Address", indice: 1, variavel: "nome" },
-			{ nomeColuna: "Nome", indice: 2, variavel: "cpf" },
-			{ nomeColuna: "CPF", indice: 3, variavel: "numero" },
-			{ nomeColuna: "Numero", indice: 4, variavel: "semestre" },
-			{ nomeColuna: "Email Insper", indice: 5, variavel: "curso" },
-			{
-				nomeColuna: "Email Pessoal",
-				indice: 6,
-				variavel: "email_insper",
-			},
-			{ nomeColuna: "Semestre", indice: 7, variavel: "email_pessoal" },
-			{ nomeColuna: "Curso", indice: 8, variavel: "opcao 1" },
-			{ nomeColuna: "Primeira Opção", indice: 9, variavel: "opcao 2" },
-			{ nomeColuna: "Segunda Opção", indice: 10, variavel: "opcao 3" },
-			{ nomeColuna: "Terceira Opção", indice: 11, variavel: "opcao 4" },
-			{ nomeColuna: "Quarta Opção", indice: 12, variavel: "opcao 5" },
-			{ nomeColuna: "Quinta Opção", indice: 13, variavel: "none" },
-		];
-	};
-
-	const [mapping, setMapping] = useState<MappingItem[]>([]);
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 	const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-	// Carrega o mapeamento ao inicializar o componente
+	const [items, setItems] = useState<MappingItem[]>([]);
 	useEffect(() => {
-		const initialMapping = processMapping();
-		setMapping(initialMapping);
-	}, [location.state]);
-
+		console.log("mapping : ", mapping);
+		if (mapping) {
+			setItems(mapping);
+		} else {
+			setItems([]);
+		}
+		console.log("items: ", items);
+	}, []);
 	// Listener global para autoscroll durante o drag
 	useEffect(() => {
 		const handleAutoScroll = (e: DragEvent) => {
@@ -89,7 +49,7 @@ export default function MappingPage() {
 		// Configura a imagem fantasma personalizada
 		const ghostElement = document.createElement("div");
 		ghostElement.classList.add("ghost-element");
-		ghostElement.textContent = mapping[index].nomeColuna;
+		ghostElement.textContent = items[index].nomeColuna;
 		ghostElement.style.width = "200px";
 		ghostElement.style.padding = "10px";
 		ghostElement.style.background = "rgba(59, 130, 246, 0.5)";
@@ -123,7 +83,7 @@ export default function MappingPage() {
 	function onDrop(e: React.DragEvent<HTMLDivElement>, dropIndex: number) {
 		e.preventDefault();
 		if (draggedIndex === null) return;
-		const newMapping = [...mapping];
+		const newMapping = [...items];
 		const temp = newMapping[draggedIndex].nomeColuna;
 		newMapping[draggedIndex].nomeColuna = newMapping[dropIndex].nomeColuna;
 		newMapping[dropIndex].nomeColuna = temp;
@@ -133,7 +93,7 @@ export default function MappingPage() {
 		newMapping[draggedIndex].indice = newMapping[dropIndex].indice;
 		newMapping[dropIndex].indice = tempIndice;
 
-		setMapping(newMapping);
+		setItems(newMapping);
 		setDraggedIndex(null);
 		setDragOverIndex(null);
 		dragActiveRef.current = false;
@@ -146,9 +106,21 @@ export default function MappingPage() {
 	}
 
 	async function onConfirm() {
-		const json = JSON.stringify(mapping);
-		const usuarios = await BuildUsuariosWithMapping(json);
-		console.log("Usuários gerados:", usuarios);
+		console.log(mapping, " : mapping");
+		const result = await BuildUsuariosWithMapping(items);
+		if (!result) {
+			console.error(
+				"BuildUsuariosWithMapping retornou null ou undefined",
+				result
+			);
+			return;
+		}
+		const usuarios = result;
+		const duplicated_indices = Object.keys(result).filter(
+			(key) => result[Number(key)].duplicated
+		);
+		console.log("Usuários gerados: ", usuarios);
+		console.log("indices Duplicados: ", duplicated_indices);
 		navigate("/");
 	}
 
@@ -176,7 +148,7 @@ export default function MappingPage() {
 							</tr>
 						</thead>
 						<tbody>
-							{mapping.map((item, index) => (
+							{items.map((item, index) => (
 								<tr
 									key={index}
 									className={`border-b border-gray-200 transition-colors ${
