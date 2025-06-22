@@ -112,7 +112,7 @@ function App({ setMapping }: AppProps) {
 					{fileResult && (
 						<div
 							id="fileResult"
-							className="text-base font-medium text-green-700 bg-green-100 rounded p-2 w-full text-center"
+							className="text-base font-medium text-red-700 bg-red-100 rounded p-2 w-full text-center"
 						>
 							{fileResult}
 						</div>

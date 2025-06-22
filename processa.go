@@ -102,6 +102,7 @@ func fazerAlocacao(horarios []*Horario, pessoaPreferencias map[int][]int) map[in
 
 		// Priorizar primeira opção
 		for pessoaID, preferencias := range pessoaPreferencias {
+			fmt.Printf("%d", pessoaID)
 			if pessoasAlocadas[pessoaID] {
 				continue
 			}
