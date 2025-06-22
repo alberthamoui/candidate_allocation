@@ -222,8 +222,11 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 		users = append(users, u)
 	}
 	users_limpo, duplicatedIndices := processData(users)
+	fmt.Println("\n")
+	fmt.Println("users limpo: ", users_limpo)
+	fmt.Println("Duplicated indices: ", duplicatedIndices)
+	fmt.Println("\n")
 
-	// fmt.Println(users_limpo)
 	// conn, err := sql.Open("sqlite3", "./insper.db")
 	// if err != nil {
 	// 	log.Fatal(err)
@@ -258,17 +261,11 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 // 	fmt.Println("\n")
 // 	fmt.Println("mapping : ", mapping)
 // 	fmt.Println("\n")
-// 	usuarios, duplicatedIndices, err := app.BuildUsuariosWithMapping(mapping)
-// 	if err != nil {
-// 		fmt.Println("Erro ao montar os usuários:", err)
-// 		os.Exit(1)
-// 	}
+// 	usuarios, err := app.BuildUsuariosWithMapping(mapping)
 // 	// out1, _ := json.MarshalIndent(mapping, "", " ")
 // 	// out, _ := json.MarshalIndent(usuarios, "", "  ")
 // 	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
 // 	fmt.Println("usuarios : ", usuarios)
-// 	fmt.Println("\n")
-// 	fmt.Println("duplicados : ", duplicatedIndices)
 // 	fmt.Println("\n")
 // 	// fmt.Println(string(out2))
 

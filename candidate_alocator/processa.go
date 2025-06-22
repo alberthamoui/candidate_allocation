@@ -49,11 +49,9 @@ type ValidationResult struct {
 // limpa dados
 
 func processData(data []Usuario) (map[int]ValidationResult, [][]int) {
-	cpfDuplicados := false
-	emailPessoaDuplicado := false
-	emailInsperDuplicado := false
 	resultados := make(map[int]ValidationResult)
 
+	// 1) validação e registro de TODAS as entradas (com ou sem erros)
 	for idx, entrada := range data {
 		var errs []ErrorEntry
 
@@ -83,91 +81,64 @@ func processData(data []Usuario) (map[int]ValidationResult, [][]int) {
 			entrada.EmailPessoal = ""
 		}
 
-		// --- duplicatas ---
-		if entrada.CPF != "" && !cpfDuplicados {
-			cpfDuplicados = true
+		// armazena o resultado independentemente de erros
+		resultados[idx+1] = ValidationResult{
+			Erros:   errs,
+			Usuario: entrada,
 		}
-
-		if entrada.EmailInsper != "" && emailInsperDuplicado {
-			errs = append(errs, ErrorEntry{0, "email_insper duplicado"})
-			emailInsperDuplicado = true
-		}
-		if entrada.EmailPessoal != "" && !emailPessoaDuplicado {
-			errs = append(errs, ErrorEntry{0, "email_pessoal duplicado"})
-			emailPessoaDuplicado = true
-		}
-
-		// --- se houver erros, registra no map e parte para a próxima entrada ---
-		if len(errs) > 0 {
-			resultados[idx+1] = ValidationResult{
-				Erros:   errs,
-				Usuario: entrada,
-			}
-			continue
-		}
-
-		// --- caso válido, marca como visto e (opcionalmente) salva num slice “clean” ---
-
 	}
-	duplicatedIndices := [][]int{}
-	if cpfDuplicados || emailInsperDuplicado || emailPessoaDuplicado {
-		// Map to track values and their indices
-		valueIndices := make(map[string][]int)
 
-		for idx, resultado := range resultados {
-			usr := resultado.Usuario
-			if usr.CPF != "" {
-				valueIndices["cpf:"+usr.CPF] = append(valueIndices["cpf:"+usr.CPF], idx)
-			}
-			if usr.EmailInsper != "" {
-				valueIndices["email_insper:"+usr.EmailInsper] = append(valueIndices["email_insper:"+usr.EmailInsper], idx)
-			}
-			if usr.EmailPessoal != "" {
-				valueIndices["email_pessoal:"+usr.EmailPessoal] = append(valueIndices["email_pessoal:"+usr.EmailPessoal], idx)
-			}
+	// 2) checa duplicatas sobre TODAS as entradas processadas
+	valueIndices := make(map[string][]int)
+	for idx, resultado := range resultados {
+		usr := resultado.Usuario
+		if usr.CPF != "" {
+			valueIndices["cpf:"+usr.CPF] = append(valueIndices["cpf:"+usr.CPF], idx)
 		}
-		// fmt.Println(valueIndices, "value indices")
-		// Prepare the list of lists of indices with duplicates
-		n := len(resultados)
-		parent := make([]int, n+1)
-		for i := 1; i <= n; i++ {
-			parent[i] = i
+		if usr.EmailInsper != "" {
+			valueIndices["email_insper:"+usr.EmailInsper] = append(valueIndices["email_insper:"+usr.EmailInsper], idx)
 		}
-		var find func(int) int
-		find = func(x int) int {
-			if parent[x] != x {
-				parent[x] = find(parent[x])
-			}
-			return parent[x]
+		if usr.EmailPessoal != "" {
+			valueIndices["email_pessoal:"+usr.EmailPessoal] = append(valueIndices["email_pessoal:"+usr.EmailPessoal], idx)
 		}
-		union := func(a, b int) {
-			ra, rb := find(a), find(b)
-			if ra != rb {
-				parent[rb] = ra
-			}
-		}
+	}
 
-		// une todos os índices que compartilham o mesmo valor
-		for _, indices := range valueIndices {
-			if len(indices) > 1 {
-				base := indices[0]
-				for _, i := range indices[1:] {
-					union(base, i)
-				}
+	// Union-Find para agrupar índices duplicados
+	n := len(resultados)
+	parent := make([]int, n+1)
+	for i := 1; i <= n; i++ {
+		parent[i] = i
+	}
+	var find func(int) int
+	find = func(x int) int {
+		if parent[x] != x {
+			parent[x] = find(parent[x])
+		}
+		return parent[x]
+	}
+	union := func(a, b int) {
+		ra, rb := find(a), find(b)
+		if ra != rb {
+			parent[rb] = ra
+		}
+	}
+	for _, indices := range valueIndices {
+		if len(indices) > 1 {
+			base := indices[0]
+			for _, i := range indices[1:] {
+				union(base, i)
 			}
 		}
+	}
+	groups := make(map[int][]int)
+	for i := 1; i <= n; i++ {
+		groups[find(i)] = append(groups[find(i)], i)
+	}
 
-		// agrupa por componente conectada
-		groups := make(map[int][]int)
-		for i := 1; i <= n; i++ {
-			r := find(i)
-			groups[r] = append(groups[r], i)
-		}
-
-		for _, g := range groups {
-			if len(g) > 1 {
-				duplicatedIndices = append(duplicatedIndices, g)
-			}
+	var duplicatedIndices [][]int
+	for _, g := range groups {
+		if len(g) > 1 {
+			duplicatedIndices = append(duplicatedIndices, g)
 		}
 	}
 	return resultados, duplicatedIndices
