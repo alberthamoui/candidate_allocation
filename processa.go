@@ -6,6 +6,8 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"time"
+	"math/big"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -20,6 +22,21 @@ type Horario struct {
 	Data       string
 	Hora       string
 	Candidatos []int
+}
+
+type ResultadoAlocacao struct {
+	Alocacao  map[int]int
+	Pontuacao int
+	Alocados  int
+}
+
+
+func fatorialBig(n int) *big.Int {
+	result := big.NewInt(1)
+	for i := 2; i <= n; i++ {
+		result.Mul(result, big.NewInt(int64(i)))
+	}
+	return result
 }
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -97,15 +114,15 @@ func sortHorariosPorCandidatos(horarios []*Horario) { // Ordena os horários par
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-func fazerAlocacao(horarios []*Horario, pessoaPreferencias map[int][]int) map[int]int {
+func fazerAlocacaoAvaliada(horarios []*Horario, pessoaPreferencias map[int][]int) ResultadoAlocacao {
 	alocacao := map[int]int{}
 	pessoasAlocadas := map[int]bool{}
+	pontuacao := 0
+	// totalAlocados := 0
 
 	for _, h := range horarios {
-		fmt.Printf("\nAlocando horário %d (%s %s)\n", h.ID, h.Data, h.Hora)
 		alocados := 0
 
-		// Rodada 1: alocar quem tem esse horário como 1ª opção
 		for pessoaID, preferencias := range pessoaPreferencias {
 			if pessoasAlocadas[pessoaID] || len(preferencias) == 0 {
 				continue
@@ -113,11 +130,9 @@ func fazerAlocacao(horarios []*Horario, pessoaPreferencias map[int][]int) map[in
 			if preferencias[0] == h.ID && alocados < MAX_PESSOAS_POR_HORARIO {
 				alocarPessoa(pessoaID, h.ID, alocacao, pessoasAlocadas)
 				alocados++
-				fmt.Printf(" -> Alocado pessoa %d na 1ª opção\n", pessoaID)
 			}
 		}
 
-		// Rodadas 2 a 5: tentar atingir o mínimo com 2ª a 5ª opção
 		for nivel := 1; nivel < 5 && alocados < MIN_PESSOAS_POR_HORARIO; nivel++ {
 			for pessoaID, preferencias := range pessoaPreferencias {
 				if pessoasAlocadas[pessoaID] || len(preferencias) <= nivel {
@@ -126,14 +141,11 @@ func fazerAlocacao(horarios []*Horario, pessoaPreferencias map[int][]int) map[in
 				if preferencias[nivel] == h.ID && alocados < MAX_PESSOAS_POR_HORARIO {
 					alocarPessoa(pessoaID, h.ID, alocacao, pessoasAlocadas)
 					alocados++
-					fmt.Printf(" -> Alocado pessoa %d na %dª opção\n", pessoaID, nivel+1)
 				}
 			}
 		}
 
-		// Se ainda assim não atingiu o mínimo, desfaz as alocações deste horário
 		if alocados < MIN_PESSOAS_POR_HORARIO {
-			fmt.Printf(" -> Horário %d NÃO atingiu mínimo (%d/%d). Desfazendo alocações.\n", h.ID, alocados, MIN_PESSOAS_POR_HORARIO)
 			for pessoaID, opcaoID := range alocacao {
 				if opcaoID == h.ID {
 					delete(alocacao, pessoaID)
@@ -143,8 +155,23 @@ func fazerAlocacao(horarios []*Horario, pessoaPreferencias map[int][]int) map[in
 		}
 	}
 
-	return alocacao
-} // Retorna um dic {pessoa_id:horario_id}
+	for pessoaID, horarioID := range alocacao {
+		preferencias := pessoaPreferencias[pessoaID]
+		for i, pref := range preferencias {
+			if pref == horarioID {
+				pontuacao += i
+				break
+			}
+		}
+	}
+
+	return ResultadoAlocacao{
+		Alocacao:  alocacao,
+		Pontuacao: pontuacao,
+		Alocados:  len(alocacao),
+	}
+}
+
 
 func alocarPessoa(pessoaID int, opcaoID int, alocacao map[int]int, pessoasAlocadas map[int]bool) {
 	alocacao[pessoaID] = opcaoID
@@ -201,6 +228,53 @@ func imprimirHorariosPreenchidos(horarios map[int]*Horario, alocacao map[int]int
 	}
 }
 
+func gerarPermutacoesLimitadas(horarios []*Horario, pessoaPreferencias map[int][]int, maxTestes int) ResultadoAlocacao {
+	var melhor ResultadoAlocacao
+	melhor.Pontuacao = 1 << 30
+	melhor.Alocados = -1
+
+	var gerar func([]*Horario, int, int)
+	testes := 0
+	inicioTotal := time.Now()
+
+	gerar = func(arr []*Horario, n int, nivel int) {
+		if testes >= maxTestes {
+			return
+		}
+		if n == 1 {
+			testes++
+			tmp := make([]*Horario, len(arr))
+			copy(tmp, arr)
+			inicio := time.Now()
+			result := fazerAlocacaoAvaliada(tmp, pessoaPreferencias)
+			duracao := time.Since(inicio)
+
+			fmt.Printf("Permutação #%d | Alocados: %d | Pontuação: %d | Tempo: %v\n", testes, result.Alocados, result.Pontuacao, duracao)
+
+			if result.Alocados > melhor.Alocados ||
+				(result.Alocados == melhor.Alocados && result.Pontuacao < melhor.Pontuacao) {
+				melhor = result
+			}
+			return
+		}
+		for i := 0; i < n; i++ {
+			gerar(arr, n-1, nivel+1)
+			if n%2 == 1 {
+				arr[0], arr[n-1] = arr[n-1], arr[0]
+			} else {
+				arr[i], arr[n-1] = arr[n-1], arr[i]
+			}
+		}
+	}
+
+	gerar(horarios, len(horarios), 0)
+
+	fmt.Printf("\nTotal de permutações executadas: %d\n", testes)
+	fmt.Printf("Tempo total de execução: %v\n", time.Since(inicioTotal))
+	return melhor
+}
+
+
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 func main() {
@@ -221,18 +295,22 @@ func main() {
 	
 	// -=-=-=-=-=-=-=-=-
 	sortHorariosPorCandidatos(validHorarios) // Ordena os horários por número de candidatos (do menor para o maior)
-	// fmt.Printf("\n---- HORÁRIOS VÁLIDOS ----\n")
-	// for _, h := range validHorarios {
-	// 	fmt.Printf("Horário %d (%s %s): %d candidatos\n", h.ID, h.Data, h.Hora, len(h.Candidatos))
-	// }
+	fmt.Printf("\n---- HORÁRIOS VÁLIDOS ----\n")
+	for _, h := range validHorarios {
+		fmt.Printf("Horário %d (%s %s): %d candidatos\n", h.ID, h.Data, h.Hora, len(h.Candidatos))
+	}
 	fmt.Printf("%s\n", strings.Repeat("---", 30))
 	// -=-=-=-=-=-=-=-=-
 	
 	// -=-=-=-=-=-=-=-=-
 	fmt.Printf("\n---- INICIANDO ALOCAÇÃO ----\n")
-	alocacao := fazerAlocacao(validHorarios, pessoaPreferencias)
-	qntTotal := imprimirAlocacao(alocacao, horarios)
-	// -=-=-=-=-=-=-=-=-
+	fmt.Printf("Total de permutações possíveis: %s\n", fatorialBig(len(validHorarios)).String())
 
-	imprimirHorariosPreenchidos(horarios, alocacao, qntTotal)
+
+	MAX_TESTES := 100000
+
+	
+	melhorResultado := gerarPermutacoesLimitadas(validHorarios, pessoaPreferencias, MAX_TESTES)
+	qntTotal := imprimirAlocacao(melhorResultado.Alocacao, horarios)
+	imprimirHorariosPreenchidos(horarios, melhorResultado.Alocacao, qntTotal)
 }
