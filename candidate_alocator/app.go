@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -238,35 +240,35 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 	return UsuariosResponse{Usuarios: users_limpo, Duplicates: duplicatedIndices}, nil
 }
 
-// func main() {
-// 	path := flag.String("file", "", "caminho para o arquivo .xlsx")
-// 	flag.Parse()
-// 	if *path == "" {
-// 		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
-// 		os.Exit(1)
-// 	}
+func main() {
+	path := flag.String("file", "", "caminho para o arquivo .xlsx")
+	flag.Parse()
+	if *path == "" {
+		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
+		os.Exit(1)
+	}
 
-// 	data, err := os.ReadFile(*path)
-// 	if err != nil {
-// 		fmt.Println("Erro ao ler o arquivo:", err)
-// 		os.Exit(1)
-// 	}
+	data, err := os.ReadFile(*path)
+	if err != nil {
+		fmt.Println("Erro ao ler o arquivo:", err)
+		os.Exit(1)
+	}
 
-// 	app := NewApp()
-// 	mapping, err := app.SuggestMapping(data, 5)
-// 	if err != nil {
-// 		fmt.Println("Erro ao sugerir mapeamento:", err)
-// 		os.Exit(1)
-// 	}
-// 	fmt.Println("\n")
-// 	fmt.Println("mapping : ", mapping)
-// 	fmt.Println("\n")
-// 	usuarios, err := app.BuildUsuariosWithMapping(mapping)
-// 	// out1, _ := json.MarshalIndent(mapping, "", " ")
-// 	// out, _ := json.MarshalIndent(usuarios, "", "  ")
-// 	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
-// 	fmt.Println("usuarios : ", usuarios)
-// 	fmt.Println("\n")
-// 	// fmt.Println(string(out2))
+	app := NewApp()
+	mapping, err := app.SuggestMapping(data, 5)
+	if err != nil {
+		fmt.Println("Erro ao sugerir mapeamento:", err)
+		os.Exit(1)
+	}
+	fmt.Println("\n")
+	fmt.Println("mapping : ", mapping)
+	fmt.Println("\n")
+	usuarios, err := app.BuildUsuariosWithMapping(mapping)
+	// out1, _ := json.MarshalIndent(mapping, "", " ")
+	// out, _ := json.MarshalIndent(usuarios, "", "  ")
+	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
+	fmt.Println("usuarios : ", usuarios)
+	fmt.Println("\n")
+	// fmt.Println(string(out2))
 
-// }
+}
