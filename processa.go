@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 	"math/big"
+    "runtime"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -28,6 +29,10 @@ type ResultadoAlocacao struct {
 	Alocacao  map[int]int
 	Pontuacao int
 	Alocados  int
+}
+type resultadoParcial struct {
+    Resultado ResultadoAlocacao
+    Tempo     time.Duration
 }
 
 
@@ -228,53 +233,67 @@ func imprimirHorariosPreenchidos(horarios map[int]*Horario, alocacao map[int]int
 	}
 }
 
-func gerarPermutacoesLimitadas(horarios []*Horario, pessoaPreferencias map[int][]int, maxTestes int) ResultadoAlocacao {
-	var melhor ResultadoAlocacao
-	melhor.Pontuacao = 1 << 30
-	melhor.Alocados = -1
+func gerarPermutacoesParalelo(horarios []*Horario, prefs map[int][]int, maxTestes, numWorkers int) ResultadoAlocacao {
+    permCh := make(chan []*Horario, numWorkers)
+    resCh  := make(chan resultadoParcial, maxTestes)
 
-	var gerar func([]*Horario, int, int)
-	testes := 0
-	inicioTotal := time.Now()
+    // workers
+    for w := 0; w < numWorkers; w++ {
+        go func() {
+            for perm := range permCh {
+                start := time.Now()
+                r := fazerAlocacaoAvaliada(perm, prefs)
+                resCh <- resultadoParcial{r, time.Since(start)}
+            }
+        }()
+    }
 
-	gerar = func(arr []*Horario, n int, nivel int) {
-		if testes >= maxTestes {
-			return
-		}
-		if n == 1 {
-			testes++
-			tmp := make([]*Horario, len(arr))
-			copy(tmp, arr)
-			inicio := time.Now()
-			result := fazerAlocacaoAvaliada(tmp, pessoaPreferencias)
-			duracao := time.Since(inicio)
+    // gerador + feeder
+    go func() {
+        testes := 0
+        var gerar func([]*Horario, int)
+        gerar = func(arr []*Horario, n int) {
+            if testes >= maxTestes { return }
+            if n == 1 {
+                tmp := make([]*Horario, len(arr))
+                copy(tmp, arr)
+                permCh <- tmp
+                testes++
+                return
+            }
+            for i := 0; i < n && testes < maxTestes; i++ {
+                gerar(arr, n-1)
+                if n%2 == 1 {
+                    arr[0], arr[n-1] = arr[n-1], arr[0]
+                } else {
+                    arr[i], arr[n-1] = arr[n-1], arr[i]
+                }
+            }
+        }
+        gerar(horarios, len(horarios))
+        close(permCh)
+    }()
 
-			fmt.Printf("Permutação #%d | Alocados: %d | Pontuação: %d | Tempo: %v\n", testes, result.Alocados, result.Pontuacao, duracao)
+    // coletar resultados
+    melhor := ResultadoAlocacao{Pontuacao: 1<<30, Alocados: -1}
+    // total := int(fatorialBig(len(horarios)).Int64())
+    // limites := maxTestes
+    // if total < limites { limites = total }
 
-			if result.Alocados > melhor.Alocados ||
-				(result.Alocados == melhor.Alocados && result.Pontuacao < melhor.Pontuacao) {
-				melhor = result
-			}
-			return
-		}
-		for i := 0; i < n; i++ {
-			gerar(arr, n-1, nivel+1)
-			if n%2 == 1 {
-				arr[0], arr[n-1] = arr[n-1], arr[0]
-			} else {
-				arr[i], arr[n-1] = arr[n-1], arr[i]
-			}
+	// não usamos mais total; só testamos maxTestes vezes
+	limites := maxTestes
+
+	for i := 0; i < limites; i++ {
+		p := <-resCh
+		fmt.Printf("Test #%d/%d – Alocados:%d Pontuação:%d Tempo:%v\n",
+			i+1, limites, p.Resultado.Alocados, p.Resultado.Pontuacao, p.Tempo)
+		if p.Resultado.Alocados > melhor.Alocados ||
+			(p.Resultado.Alocados == melhor.Alocados && p.Resultado.Pontuacao < melhor.Pontuacao) {
+			melhor = p.Resultado
 		}
 	}
-
-	gerar(horarios, len(horarios), 0)
-
-	fmt.Printf("\nTotal de permutações executadas: %d\n", testes)
-	fmt.Printf("Tempo total de execução: %v\n", time.Since(inicioTotal))
 	return melhor
 }
-
-
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 func main() {
@@ -307,10 +326,14 @@ func main() {
 	fmt.Printf("Total de permutações possíveis: %s\n", fatorialBig(len(validHorarios)).String())
 
 
-	MAX_TESTES := 100000
+	MAX_TESTES := 1_000_000
 
 	
-	melhorResultado := gerarPermutacoesLimitadas(validHorarios, pessoaPreferencias, MAX_TESTES)
+	NUM_WORKERS := runtime.NumCPU()
+	start := time.Now()
+	melhorResultado := gerarPermutacoesParalelo(validHorarios, pessoaPreferencias, MAX_TESTES, NUM_WORKERS)
+	
 	qntTotal := imprimirAlocacao(melhorResultado.Alocacao, horarios)
 	imprimirHorariosPreenchidos(horarios, melhorResultado.Alocacao, qntTotal)
+	fmt.Printf("\n\nTempo total de execução: %v\n", time.Since(start))
 }
