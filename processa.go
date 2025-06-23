@@ -15,7 +15,9 @@ import (
 
 const (
 	MIN_PESSOAS_POR_HORARIO = 5
-	MAX_PESSOAS_POR_HORARIO = 60
+	MAX_PESSOAS_POR_HORARIO = 8
+	MAX_TESTES = 100_000
+	MELHOR_CASO = 50
 )
 
 type Horario struct {
@@ -253,7 +255,9 @@ func gerarPermutacoesParalelo(horarios []*Horario, prefs map[int][]int, maxTeste
         testes := 0
         var gerar func([]*Horario, int)
         gerar = func(arr []*Horario, n int) {
-            if testes >= maxTestes { return }
+            if testes >= maxTestes {
+                return
+            }
             if n == 1 {
                 tmp := make([]*Horario, len(arr))
                 copy(tmp, arr)
@@ -274,26 +278,31 @@ func gerarPermutacoesParalelo(horarios []*Horario, prefs map[int][]int, maxTeste
         close(permCh)
     }()
 
-    // coletar resultados
-    melhor := ResultadoAlocacao{Pontuacao: 1<<30, Alocados: -1}
-    // total := int(fatorialBig(len(horarios)).Int64())
-    // limites := maxTestes
-    // if total < limites { limites = total }
+    // coleta resultados e interrompe se atingir MELHOR_CASO
+    best := ResultadoAlocacao{Pontuacao: 1<<30, Alocados: -1}
+    for i := 0; i < maxTestes; i++ {
+        p := <-resCh
+        fmt.Printf("Test #%d/%d – Alocados:%d Pontuação:%d Tempo:%v\n",
+            i+1, maxTestes, p.Resultado.Alocados, p.Resultado.Pontuacao, p.Tempo)
 
-	// não usamos mais total; só testamos maxTestes vezes
-	limites := maxTestes
+        // atualiza melhor
+        if p.Resultado.Alocados > best.Alocados ||
+            (p.Resultado.Alocados == best.Alocados && p.Resultado.Pontuacao < best.Pontuacao) {
+            best = p.Resultado
+        }
 
-	for i := 0; i < limites; i++ {
-		p := <-resCh
-		fmt.Printf("Test #%d/%d – Alocados:%d Pontuação:%d Tempo:%v\n",
-			i+1, limites, p.Resultado.Alocados, p.Resultado.Pontuacao, p.Tempo)
-		if p.Resultado.Alocados > melhor.Alocados ||
-			(p.Resultado.Alocados == melhor.Alocados && p.Resultado.Pontuacao < melhor.Pontuacao) {
-			melhor = p.Resultado
-		}
-	}
-	return melhor
+        // se atingiu o caso ótimo, para tudo e retorna
+        if p.Resultado.Alocados >= MELHOR_CASO {
+            fmt.Printf("→ MELHOR_CASO %d alocados atingido na permutação #%d, interrompendo.\n",
+                MELHOR_CASO, i+1)
+            return p.Resultado
+        }
+    }
+
+    return best
 }
+
+
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 func main() {
@@ -326,7 +335,7 @@ func main() {
 	fmt.Printf("Total de permutações possíveis: %s\n", fatorialBig(len(validHorarios)).String())
 
 
-	MAX_TESTES := 1_000_000
+
 
 	
 	NUM_WORKERS := runtime.NumCPU()
