@@ -1,5 +1,10 @@
 package main
 
+
+// ==================================================
+// ============== IMPORTS E CONSTANTES ==============
+// ==================================================
+
 import (
 	"database/sql"
 	"fmt"
@@ -20,6 +25,11 @@ const (
 	MELHOR_CASO = 50
 )
 
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// ==================================================
+// ==================== STRUCTS =====================
+// ==================================================
+
 type Horario struct {
 	ID         int
 	Data       string
@@ -37,6 +47,10 @@ type resultadoParcial struct {
     Tempo     time.Duration
 }
 
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// ==================================================
+// =============== FUNÇÕES UTILITÁRIAS ==============
+// ==================================================
 
 func fatorialBig(n int) *big.Int {
 	result := big.NewInt(1)
@@ -46,7 +60,10 @@ func fatorialBig(n int) *big.Int {
 	return result
 }
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// ==================================================
+// =========== CARREGAMENTO DE DADOS DB =============
+// ==================================================
 
 func carregarHorarios(db *sql.DB) map[int]*Horario { // Lê todos os horários disponíveis e monta a estrutura de dados.
 	horarios := map[int]*Horario{}
@@ -90,8 +107,10 @@ func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]i
 
 	return pessoaPreferencias
 }
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// ==================================================
+// ========= PRÉ-PROCESSAMENTO DE HORÁRIOS ==========
+// ==================================================
 
 func filtrarHorariosValidos(horarios map[int]*Horario) []*Horario { // Tira horarios com menos gente que o minimo
 	validHorarios := []*Horario{}
@@ -107,7 +126,6 @@ func filtrarHorariosValidos(horarios map[int]*Horario) []*Horario { // Tira hora
 	return validHorarios
 } // Retorna uma lista com os horários válidos
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 func sortHorariosPorCandidatos(horarios []*Horario) { // Ordena os horários para que os com menos candidatos
 	sort.SliceStable(horarios, func(i, j int) bool {
@@ -119,7 +137,10 @@ func sortHorariosPorCandidatos(horarios []*Horario) { // Ordena os horários par
 	})
 }
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// ==================================================
+// ============== ALOCAÇÃO DE PESSOAS ===============
+// ==================================================
 
 func fazerAlocacaoAvaliada(horarios []*Horario, pessoaPreferencias map[int][]int) ResultadoAlocacao {
 	alocacao := map[int]int{}
@@ -185,6 +206,12 @@ func alocarPessoa(pessoaID int, opcaoID int, alocacao map[int]int, pessoasAlocad
 	pessoasAlocadas[pessoaID] = true
 } // Marca que uma pessoa foi alocada
 
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// ==================================================
+// ============= IMPRESSÃO DOS RESULTADOS ===========
+// ==================================================
+
 func imprimirAlocacao(alocacao map[int]int, horarios map[int]*Horario) int { // Imprime quem foi alocado em qual horário.
 	fmt.Printf("\n---- ALOCAÇÃO FINAL ----\n")
 	alocados := map[int]bool{}
@@ -231,9 +258,13 @@ func imprimirHorariosPreenchidos(horarios map[int]*Horario, alocacao map[int]int
 	for _, h := range horarios {
 		pessoas := horarioToPessoas[h.ID]
 		fmt.Printf("Horário %d (%s %s): %d pessoas - %v\n", h.ID, h.Data, h.Hora, len(pessoas), pessoas)
-		// fmt.Printf("Horário %d (%s %s): %d pessoas\n", h.ID, h.Data, h.Hora, len(pessoas))
 	}
 }
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// ==================================================
+// ===== GERADOR DE PERMUTAÇÕES (PARALELIZADO) ======
+// ==================================================
 
 func gerarPermutacoesParalelo(horarios []*Horario, prefs map[int][]int, maxTestes, numWorkers int) ResultadoAlocacao {
     permCh := make(chan []*Horario, numWorkers)
@@ -303,7 +334,10 @@ func gerarPermutacoesParalelo(horarios []*Horario, prefs map[int][]int, maxTeste
 }
 
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+// ==================================================
+// =================== FUNÇÃO MAIN ==================
+// ==================================================
 
 func main() {
 	db, err := sql.Open("sqlite3", "./insper.db")
