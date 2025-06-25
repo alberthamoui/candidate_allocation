@@ -10,6 +10,10 @@ export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }
 
+export function Save(arg1) {
+  return window['go']['main']['App']['Save'](arg1);
+}
+
 export function SuggestMapping(arg1, arg2) {
   return window['go']['main']['App']['SuggestMapping'](arg1, arg2);
 }

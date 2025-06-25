@@ -3,10 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"os"
+	"log"
 	"strconv"
 	"strings"
 
@@ -85,7 +85,7 @@ func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]MappingItem,
 		return nil, fmt.Errorf("arquivo sem dados")
 	}
 	header := rows[0]
-	fmt.Println("header : ", header)
+	// fmt.Println("header : ", header)
 
 	// Lista de possíveis variáveis da struct Usuario (em minúsculo)
 	variaveisUsuario := getUsuarioFields(quantidade_opcoes)
@@ -105,6 +105,9 @@ func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]MappingItem,
 		mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", colName, i, usuarioVar)
 	}
 	mapping_json, err := ProcessMapping(mappingList)
+	if err != nil {
+		return nil, err
+	}
 	return mapping_json, nil
 }
 
@@ -177,9 +180,9 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 	}
 
 	var users []Usuario
-	fmt.Println("\n")
-	fmt.Println("mapping Items : ", mappingItems)
-	fmt.Println("\n")
+	// fmt.Println("\n")
+	// fmt.Println("mapping Items : ", mappingItems)
+	// fmt.Println("\n")
 	// Processa as linhas do Excel, ignorando o header (linha 0)
 	for _, row := range rows[1:] {
 		u := Usuario{
@@ -224,10 +227,10 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 		users = append(users, u)
 	}
 	users_limpo, duplicatedIndices := processData(users)
-	fmt.Println("\n")
-	fmt.Println("users limpo: ", users_limpo)
-	fmt.Println("Duplicated indices: ", duplicatedIndices)
-	fmt.Println("\n")
+	// fmt.Println("\n")
+	// fmt.Println("users limpo: ", users_limpo)
+	// fmt.Println("Duplicated indices: ", duplicatedIndices)
+	// fmt.Println("\n")
 
 	// conn, err := sql.Open("sqlite3", "./insper.db")
 	// if err != nil {
@@ -239,36 +242,45 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 	// fmt.Println("Dados salvos com sucesso!")
 	return UsuariosResponse{Usuarios: users_limpo, Duplicates: duplicatedIndices}, nil
 }
-
-func main() {
-	path := flag.String("file", "", "caminho para o arquivo .xlsx")
-	flag.Parse()
-	if *path == "" {
-		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
-		os.Exit(1)
-	}
-
-	data, err := os.ReadFile(*path)
+func (a *App) Save(usuarios_tratados []Usuario) {
+	conn, err := sql.Open("sqlite3", "./insper.db")
 	if err != nil {
-		fmt.Println("Erro ao ler o arquivo:", err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
+	defer conn.Close()
 
-	app := NewApp()
-	mapping, err := app.SuggestMapping(data, 5)
-	if err != nil {
-		fmt.Println("Erro ao sugerir mapeamento:", err)
-		os.Exit(1)
-	}
-	fmt.Println("\n")
-	fmt.Println("mapping : ", mapping)
-	fmt.Println("\n")
-	usuarios, err := app.BuildUsuariosWithMapping(mapping)
-	// out1, _ := json.MarshalIndent(mapping, "", " ")
-	// out, _ := json.MarshalIndent(usuarios, "", "  ")
-	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
-	fmt.Println("usuarios : ", usuarios)
-	fmt.Println("\n")
-	// fmt.Println(string(out2))
-
+	fillDb(conn, usuarios_tratados)
 }
+
+// func main() {
+// 	path := flag.String("file", "", "caminho para o arquivo .xlsx")
+// 	flag.Parse()
+// 	if *path == "" {
+// 		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
+// 		os.Exit(1)
+// 	}
+
+// 	data, err := os.ReadFile(*path)
+// 	if err != nil {
+// 		fmt.Println("Erro ao ler o arquivo:", err)
+// 		os.Exit(1)
+// 	}
+
+// 	app := NewApp()
+// 	mapping, err := app.SuggestMapping(data, 5)
+// 	if err != nil {
+// 		fmt.Println("Erro ao sugerir mapeamento:", err)
+// 		os.Exit(1)
+// 	}
+// 	fmt.Println("\n")
+// 	fmt.Println("mapping : ", mapping)
+// 	fmt.Println("\n")
+// 	usuarios, err := app.BuildUsuariosWithMapping(mapping)
+// 	// out1, _ := json.MarshalIndent(mapping, "", " ")
+// 	// out, _ := json.MarshalIndent(usuarios, "", "  ")
+// 	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
+// 	fmt.Println("usuarios : ", usuarios)
+// 	fmt.Println("\n")
+// 	// fmt.Println(string(out2))
+
+// }

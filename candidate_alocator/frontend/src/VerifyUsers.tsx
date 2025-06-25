@@ -7,6 +7,8 @@ import {
 	XMarkIcon,
 	TrashIcon,
 } from "@heroicons/react/24/outline";
+import { UserCard } from "./UserCard";
+import { Save } from "../wailsjs/go/main/App";
 
 interface ErrorItem {
 	field: string;
@@ -133,125 +135,46 @@ export default function VerifyUserPage({
 	}
 
 	function saveCandidates() {
-		console.log("salvei");
-		// Here you can add the actual save logic
+		// Check if there are still duplicates
+		if (dupGroups.length > 0) {
+			setErrorMsg(
+				"Não é possível salvar enquanto houver usuários duplicados. Resolva todos os conflitos primeiro."
+			);
+			return;
+		}
+
+		// Convert editedUsers to the format expected by backend
+		const usuariosParaSalvar = Object.entries(editedUsers).map(
+			([id, user]) => ({
+				timestamp: user.timestamp || "",
+				nome: user.nome || "",
+				cpf: user.cpf || "",
+				numero: user.numero || "",
+				semestre: user.semestre || "",
+				curso: user.curso || "",
+				email_insper: user.emailinsper || "",
+				email_pessoal: user.emailpessoal || "",
+				opcoes: user.opcoes || [],
+			})
+		);
+
+		console.log("Usuários para salvar:", usuariosParaSalvar);
+		Save(usuariosParaSalvar);
 	}
 
 	const renderUserCard = (userId: number, extraBtn?: React.ReactNode) => {
 		const user = editedUsers[userId];
 		const errors = usuarios[userId]?.erros ?? [];
-		const hasErrors = errors.length > 0;
 
 		return (
-			<motion.div
-				key={userId}
-				initial={{ opacity: 0, y: 20 }}
-				animate={{ opacity: 1, y: 0 }}
-				className={`relative border-2 rounded-xl shadow-lg p-4 w-80 flex-shrink-0 transition-all duration-200 ${
-					hasErrors
-						? "border-red-300 bg-red-50 shadow-red-100"
-						: "border-gray-200 bg-white hover:shadow-xl hover:border-blue-300"
-				}`}
-			>
-				{/* Header with ID, error indicator, and delete button */}
-				<div className="flex items-center justify-between mb-3">
-					<div className="flex items-center space-x-2">
-						<span className="text-sm font-bold text-gray-600">
-							ID: {userId}
-						</span>
-						{hasErrors && (
-							<div className="flex items-center space-x-1 bg-red-100 px-2 py-1 rounded-full">
-								<ExclamationTriangleIcon className="w-4 h-4 text-red-600" />
-								<span className="text-xs font-semibold text-red-600">
-									{errors.length} erro
-									{errors.length > 1 ? "s" : ""}
-								</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<div className="flex items-center space-x-1 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-							<PencilIcon className="w-3 h-3" />
-							<span>Editável</span>
-						</div>
-						<button
-							onClick={() => deleteUser(userId)}
-							className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full transition-colors"
-							title="Deletar usuário"
-						>
-							<TrashIcon className="w-4 h-4" />
-						</button>
-					</div>
-				</div>
-
-				{/* Error summary - Show errors at the top */}
-				{hasErrors && (
-					<div className="mb-3 p-2 bg-red-100 border border-red-200 rounded-lg">
-						<div className="text-xs font-semibold text-red-700 mb-1">
-							Erros encontrados:
-						</div>
-						<div className="space-y-1">
-							{errors.map((error, idx) => (
-								<div key={idx} className="text-xs text-red-600">
-									<span className="font-medium">
-										{error.field}:
-									</span>{" "}
-									{error.msg}
-								</div>
-							))}
-						</div>
-					</div>
-				)}
-
-				{/* User fields - Reduced spacing */}
-				<div className="space-y-2">
-					{Object.entries(user).map(([field, val]) => {
-						const fieldError = errors.find(
-							(e) => e.field === field
-						);
-						const hasFieldError = !!fieldError;
-
-						return (
-							<div
-								key={field}
-								className={`p-2 rounded-lg border transition-all duration-200 ${
-									hasFieldError
-										? "border-red-300 bg-red-50"
-										: "border-gray-200 bg-gray-50 hover:bg-gray-100"
-								}`}
-							>
-								<div className="flex items-center justify-between mb-1">
-									<span className="text-xs font-semibold text-gray-700 capitalize">
-										{field
-											.replace(/([A-Z])/g, " $1")
-											.replace(/^./, (str) =>
-												str.toUpperCase()
-											)}
-									</span>
-									{hasFieldError && (
-										<ExclamationTriangleIcon className="w-3 h-3 text-red-500" />
-									)}
-								</div>
-
-								<EditableCell
-									value={val}
-									onChange={(v) =>
-										handleCellChange(userId, field, v)
-									}
-									hasError={hasFieldError}
-								/>
-							</div>
-						);
-					})}
-				</div>
-
-				{/* Action button */}
-				{extraBtn && (
-					<div className="mt-4 pt-3 border-t border-gray-200">
-						{extraBtn}
-					</div>
-				)}
-			</motion.div>
+			<UserCard
+				userId={userId}
+				user={user}
+				errors={errors}
+				onDelete={deleteUser}
+				onCellChange={handleCellChange}
+				extraBtn={extraBtn}
+			/>
 		);
 	};
 
@@ -432,77 +355,26 @@ export default function VerifyUserPage({
 				{/* Save button at the bottom */}
 				<div className="flex justify-center pt-8">
 					<motion.button
-						whileHover={{ scale: 1.02 }}
-						whileTap={{ scale: 0.98 }}
+						whileHover={{
+							scale: dupGroups.length === 0 ? 1.02 : 1,
+						}}
+						whileTap={{ scale: dupGroups.length === 0 ? 0.98 : 1 }}
 						onClick={saveCandidates}
-						className="bg-gradient-to-r from-green-600 to-green-700 text-white px-12 py-4 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl transition-all"
+						disabled={dupGroups.length > 0}
+						className={`px-12 py-4 rounded-xl font-bold text-lg shadow-xl transition-all ${
+							dupGroups.length > 0
+								? "bg-gray-400 text-gray-200 cursor-not-allowed"
+								: "bg-gradient-to-r from-green-600 to-green-700 text-white hover:shadow-2xl cursor-pointer"
+						}`}
 					>
 						<CheckCircleIcon className="w-6 h-6 inline mr-3" />
-						Salvar Candidatos
+						{dupGroups.length > 0
+							? `Resolva ${dupGroups.length} grupo${
+									dupGroups.length > 1 ? "s" : ""
+							  } duplicado${dupGroups.length > 1 ? "s" : ""}`
+							: "Salvar Candidatos"}
 					</motion.button>
 				</div>
-			</div>
-		</div>
-	);
-}
-
-/* Enhanced EditableCell Component */
-interface EditableCellProps {
-	value: string | number;
-	onChange: (v: string) => void;
-	hasError?: boolean;
-}
-/* Enhanced EditableCell Component - Reduced padding */
-function EditableCell({
-	value,
-	onChange,
-	hasError = false,
-}: EditableCellProps) {
-	const [editing, setEditing] = useState(false);
-	const [temp, setTemp] = useState(String(value));
-
-	function commit() {
-		onChange(temp);
-		setEditing(false);
-	}
-
-	if (editing) {
-		return (
-			<div className="relative">
-				<input
-					className={`w-full border-2 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 transition-all ${
-						hasError
-							? "border-red-300 focus:border-red-500 focus:ring-red-200"
-							: "border-blue-300 focus:border-blue-500 focus:ring-blue-200"
-					}`}
-					value={temp}
-					onChange={(e) => setTemp(e.target.value)}
-					onBlur={commit}
-					onKeyDown={(e) => e.key === "Enter" && commit()}
-					autoFocus
-				/>
-			</div>
-		);
-	}
-
-	return (
-		<div
-			className={`group cursor-pointer p-1 rounded-lg border-2 border-dashed transition-all hover:border-solid ${
-				hasError
-					? "border-red-300 hover:border-red-400 hover:bg-red-50"
-					: "border-gray-300 hover:border-blue-400 hover:bg-blue-50"
-			}`}
-			onClick={() => setEditing(true)}
-		>
-			<div className="flex items-center justify-between">
-				<span
-					className={`text-sm ${
-						value === "" ? "text-gray-400 italic" : "text-gray-800"
-					}`}
-				>
-					{value === "" ? "Clique para adicionar..." : String(value)}
-				</span>
-				<PencilIcon className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
 			</div>
 		</div>
 	);
