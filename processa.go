@@ -313,7 +313,7 @@ func gerarPermutacoesParalelo(horarios []*Horario, prefs map[int][]int, maxTeste
     best := ResultadoAlocacao{Pontuacao: 1<<30, Alocados: -1}
     for i := 0; i < maxTestes; i++ {
         p := <-resCh
-        fmt.Printf("Test #%d/%d – Alocados:%d Pontuação:%d Tempo:%v\n",
+        fmt.Printf("Test #%d/%d - Alocados:%d Pontuação:%d Tempo:%v\n",
             i+1, maxTestes, p.Resultado.Alocados, p.Resultado.Pontuacao, p.Tempo)
 
         // atualiza melhor
@@ -329,7 +329,7 @@ func gerarPermutacoesParalelo(horarios []*Horario, prefs map[int][]int, maxTeste
             return p.Resultado
         }
     }
-
+	fmt.Printf("\n\nMelhor alocação encontrada: %d alocados, pontuação %d\n", best.Alocados, best.Pontuacao)
     return best
 }
 
