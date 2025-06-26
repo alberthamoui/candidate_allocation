@@ -5,11 +5,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -252,35 +255,41 @@ func (a *App) Save(usuarios_tratados []Usuario) {
 	fillDb(conn, usuarios_tratados)
 }
 
-// func main() {
-// 	path := flag.String("file", "", "caminho para o arquivo .xlsx")
-// 	flag.Parse()
-// 	if *path == "" {
-// 		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
-// 		os.Exit(1)
-// 	}
+func main() {
+	path := flag.String("file", "", "caminho para o arquivo .xlsx")
+	flag.Parse()
+	if *path == "" {
+		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
+		os.Exit(1)
+	}
 
-// 	data, err := os.ReadFile(*path)
-// 	if err != nil {
-// 		fmt.Println("Erro ao ler o arquivo:", err)
-// 		os.Exit(1)
-// 	}
+	data, err := os.ReadFile(*path)
+	if err != nil {
+		fmt.Println("Erro ao ler o arquivo:", err)
+		os.Exit(1)
+	}
 
-// 	app := NewApp()
-// 	mapping, err := app.SuggestMapping(data, 5)
-// 	if err != nil {
-// 		fmt.Println("Erro ao sugerir mapeamento:", err)
-// 		os.Exit(1)
-// 	}
-// 	fmt.Println("\n")
-// 	fmt.Println("mapping : ", mapping)
-// 	fmt.Println("\n")
-// 	usuarios, err := app.BuildUsuariosWithMapping(mapping)
-// 	// out1, _ := json.MarshalIndent(mapping, "", " ")
-// 	// out, _ := json.MarshalIndent(usuarios, "", "  ")
-// 	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
-// 	fmt.Println("usuarios : ", usuarios)
-// 	fmt.Println("\n")
-// 	// fmt.Println(string(out2))
+	app := NewApp()
+	mapping, err := app.SuggestMapping(data, 5)
+	if err != nil {
+		fmt.Println("Erro ao sugerir mapeamento:", err)
+		os.Exit(1)
+	}
+	fmt.Println("\n")
+	fmt.Println("mapping : ", mapping)
+	fmt.Println("\n")
+	usuarios, err := app.BuildUsuariosWithMapping(mapping)
+	if err != nil {
+		fmt.Println("Erro ao ler o arquivo:", err)
+		os.Exit(1)
+	}
+	usuarios_filtrados := FilterUniqueUsers(usuarios)
+	app.Save(usuarios_filtrados)
+	// out1, _ := json.MarshalIndent(mapping, "", " ")
+	// out, _ := json.MarshalIndent(usuarios_filtrados, "", "  ")
+	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
+	fmt.Println("usuarios : ", usuarios_filtrados)
+	fmt.Println("\n")
+	// fmt.Println(string(out2))
 
-// }
+}
