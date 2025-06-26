@@ -183,10 +183,7 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 	}
 
 	var users []Usuario
-	// fmt.Println("\n")
-	// fmt.Println("mapping Items : ", mappingItems)
-	// fmt.Println("\n")
-	// Processa as linhas do Excel, ignorando o header (linha 0)
+
 	for _, row := range rows[1:] {
 		u := Usuario{
 			Opcoes: make([]string, nOpcoes),
@@ -230,19 +227,7 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 		users = append(users, u)
 	}
 	users_limpo, duplicatedIndices := processData(users)
-	// fmt.Println("\n")
-	// fmt.Println("users limpo: ", users_limpo)
-	// fmt.Println("Duplicated indices: ", duplicatedIndices)
-	// fmt.Println("\n")
 
-	// conn, err := sql.Open("sqlite3", "./insper.db")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer conn.Close()
-	// fmt.Println("Salvando dados no banco de dados...")
-	// fillDb(conn, users_limpo)
-	// fmt.Println("Dados salvos com sucesso!")
 	return UsuariosResponse{Usuarios: users_limpo, Duplicates: duplicatedIndices}, nil
 }
 func (a *App) Save(usuarios_tratados []Usuario) {
