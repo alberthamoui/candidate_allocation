@@ -1,401 +1,209 @@
 package main
 
-// ==================================================
-// ============== IMPORTS E CONSTANTES ==============
-// ==================================================
-
 import (
-	"context"
+	dbpkg "candidate_alocator/db"
 	"database/sql"
 	"fmt"
-	"log"
-	"math/big"
-	"runtime"
-	"sort"
+	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
-	"sync"
-	// "sync/atomic"
-	"time"
-
-	_ "github.com/mattn/go-sqlite3"
-	"golang.org/x/sync/errgroup"
 )
 
-const (
-    MIN_PESSOAS_POR_HORARIO = 5
-    MAX_PESSOAS_POR_HORARIO = 8
-    MAX_TESTES              = 1_000_000
-    MELHOR_CASO             = 50
+var (
+	reEmailPessoal = regexp.MustCompile(`^[^@]+@[^@]+\.[^@]+$`)
+	reEmailInsper  = regexp.MustCompile(`^[^@]+@al\.insper\.edu\.br$`)
+	reCPF          = regexp.MustCompile(`^\d{11}$`)
+	reNumero       = regexp.MustCompile(`^\d{9}$`)
+	reSemestre     = regexp.MustCompile(`^([1-9]|10)$`)
 )
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// ==================================================
-// ==================== STRUCTS =====================
-// ==================================================
-
-type Horario struct {
-    ID         int
-    Data       string
-    Hora       string
-    Candidatos []int
+func getUsuarioFields(quantidade_opcoes int) []string {
+	t := reflect.TypeOf(Usuario{})
+	var fields []string
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		tag := field.Tag.Get("json")
+		if tag != "" && tag != "-" {
+			if tag == "opcoes" {
+				for j := 1; j <= quantidade_opcoes; j++ {
+					fields = append(fields, fmt.Sprintf("opcao %d", j))
+				}
+			} else {
+				fields = append(fields, tag)
+			}
+		}
+	}
+	return fields
 }
 
-type ResultadoAlocacao struct {
-    Alocacao  map[int]int // pessoaID -> horarioID
-    Pontuacao int
-    Alocados  int
+type ErrorEntry struct {
+	Field int    `json:"field"`
+	Msg   string `json:"msg"`
+}
+type ValidationResult struct {
+	Erros   []ErrorEntry `json:"erros"`
+	Usuario Usuario      `json:"usuario"`
 }
 
-type horarioComAlocados struct {
-    H       *Horario
-    Pessoas []int
+// limpa dados
+
+func processData(data []Usuario) (map[int]ValidationResult, [][]int) {
+	resultados := make(map[int]ValidationResult)
+
+	// 1) validação e registro de TODAS as entradas (com ou sem erros)
+	for idx, entrada := range data {
+		var errs []ErrorEntry
+
+		// --- trims básicos ---
+		entrada.CPF = strings.TrimSpace(entrada.CPF)
+		entrada.EmailInsper = strings.ToLower(strings.TrimSpace(entrada.EmailInsper))
+		entrada.EmailPessoal = strings.ToLower(strings.TrimSpace(entrada.EmailPessoal))
+		entrada.Numero = strings.TrimSpace(entrada.Numero)
+
+		// --- validações por regex (e zera o campo quando inválido) ---
+		if !reCPF.MatchString(entrada.CPF) {
+			errs = append(errs, ErrorEntry{3, "cpf inválido"})
+		}
+		if !reNumero.MatchString(entrada.Numero) {
+			errs = append(errs, ErrorEntry{4, "numero inválido"})
+		}
+		if !reSemestre.MatchString(entrada.Semestre) {
+			errs = append(errs, ErrorEntry{5, "semestre inválido"})
+			entrada.Semestre = ""
+		}
+		if !reEmailInsper.MatchString(entrada.EmailInsper) {
+			errs = append(errs, ErrorEntry{7, "email_insper inválido"})
+			entrada.EmailInsper = ""
+		}
+		if !reEmailPessoal.MatchString(entrada.EmailPessoal) {
+			errs = append(errs, ErrorEntry{8, "email_pessoal inválido"})
+			entrada.EmailPessoal = ""
+		}
+
+		// armazena o resultado independentemente de erros
+		resultados[idx+1] = ValidationResult{
+			Erros:   errs,
+			Usuario: entrada,
+		}
+	}
+
+	// 2) checa duplicatas sobre TODAS as entradas processadas
+	valueIndices := make(map[string][]int)
+	for idx, resultado := range resultados {
+		usr := resultado.Usuario
+		if usr.CPF != "" {
+			valueIndices["cpf:"+usr.CPF] = append(valueIndices["cpf:"+usr.CPF], idx)
+		}
+		if usr.EmailInsper != "" {
+			valueIndices["email_insper:"+usr.EmailInsper] = append(valueIndices["email_insper:"+usr.EmailInsper], idx)
+		}
+		if usr.EmailPessoal != "" {
+			valueIndices["email_pessoal:"+usr.EmailPessoal] = append(valueIndices["email_pessoal:"+usr.EmailPessoal], idx)
+		}
+	}
+
+	// Union-Find para agrupar índices duplicados
+	n := len(resultados)
+	parent := make([]int, n+1)
+	for i := 1; i <= n; i++ {
+		parent[i] = i
+	}
+	var find func(int) int
+	find = func(x int) int {
+		if parent[x] != x {
+			parent[x] = find(parent[x])
+		}
+		return parent[x]
+	}
+	union := func(a, b int) {
+		ra, rb := find(a), find(b)
+		if ra != rb {
+			parent[rb] = ra
+		}
+	}
+	for _, indices := range valueIndices {
+		if len(indices) > 1 {
+			base := indices[0]
+			for _, i := range indices[1:] {
+				union(base, i)
+			}
+		}
+	}
+	groups := make(map[int][]int)
+	for i := 1; i <= n; i++ {
+		groups[find(i)] = append(groups[find(i)], i)
+	}
+
+	var duplicatedIndices [][]int
+	for _, g := range groups {
+		if len(g) > 1 {
+			duplicatedIndices = append(duplicatedIndices, g)
+		}
+	}
+	return resultados, duplicatedIndices
 }
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// ==================================================
-// =============== FUNÇÕES UTILITÁRIAS ==============
-// ==================================================
+func getHorarios(data []Usuario) []string {
+	horariosMap := make(map[string]bool)
+	for _, usuario := range data {
+		for _, opcao := range usuario.Opcoes {
+			horariosMap[opcao] = true
+		}
+	}
 
-func fatorialBig(n int) *big.Int {
-    result := big.NewInt(1)
-    for i := 2; i <= n; i++ {
-        result.Mul(result, big.NewInt(int64(i)))
-    }
-    return result
+	horariosUnicos := []string{}
+	for horario := range horariosMap {
+		horariosUnicos = append(horariosUnicos, horario)
+	}
+
+	return horariosUnicos
 }
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// ==================================================
-// =========== CARREGAMENTO DE DADOS DB =============
-// ==================================================
-
-func carregarHorarios(db *sql.DB) map[int]*Horario {
-    horarios := map[int]*Horario{}
-
-    rows, err := db.Query(`SELECT id, data, hora FROM opcoes_horario`)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer rows.Close()
-
-    for rows.Next() {
-        var h Horario
-        if err := rows.Scan(&h.ID, &h.Data, &h.Hora); err != nil {
-            log.Fatal(err)
-        }
-        h.Candidatos = []int{}
-        horarios[h.ID] = &h
-    }
-    return horarios
+func FilterUniqueUsers(resp UsuariosResponse) []Usuario {
+	// marca todos os índices duplicados, exceto o primeiro de cada grupo
+	skip := make(map[int]struct{})
+	for _, grp := range resp.Duplicates {
+		for i, idx := range grp {
+			if i > 0 {
+				skip[idx] = struct{}{}
+			}
+		}
+	}
+	// coleta os usuários mantendo a ordem arbitrária do map
+	var out []Usuario
+	for idx, vr := range resp.Usuarios {
+		if _, isDup := skip[idx]; isDup {
+			continue
+		}
+		out = append(out, vr.Usuario)
+	}
+	return out
 }
+func fillDb(db *sql.DB, data []Usuario) {
+	// HORARIOS
+	idHorarios := map[string]int64{}
+	horarios := getHorarios(data)
+	for _, horario := range horarios {
+		base := strings.Split(horario, " - ")
+		hora := base[0]
+		date := base[1]
+		idHorario, _ := dbpkg.AddHorario(db, date, hora, "None")
+		idHorarios[horario] = idHorario
+	}
+	fmt.Println("Horários inseridos no banco de dados.")
 
-func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]int {
-    pessoaPreferencias := map[int][]int{}
+	// CANDIDATOS & DISPONIBILIDADES
+	for _, usuario := range data {
+		semestreInt, _ := strconv.Atoi(usuario.Semestre)
+		id, _ := dbpkg.AddPessoa(db, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
+		fmt.Printf("Adicionando usuário: %s (ID: %d)\n", usuario.Nome, id)
+		count := 0
+		for _, opcao := range usuario.Opcoes {
+			count++
+			fmt.Printf("Adicionando disponibilidade para usuário %s (ID: %d) - Horário: %s (ID HORARIO: %d)\n", usuario.Nome, id, opcao, idHorarios[opcao])
+			dbpkg.AddDisponibilidade(db, id, idHorarios[opcao], int64(count))
 
-    rows, err := db.Query(`SELECT pessoa_id, horario_id FROM disponibilidade`)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer rows.Close()
+		}
+	}
 
-    for rows.Next() {
-        var pessoaID, opcaoID int
-        if err := rows.Scan(&pessoaID, &opcaoID); err != nil {
-            log.Fatal(err)
-        }
-        horarios[opcaoID].Candidatos = append(horarios[opcaoID].Candidatos, pessoaID)
-        pessoaPreferencias[pessoaID] = append(pessoaPreferencias[pessoaID], opcaoID)
-    }
-    return pessoaPreferencias
-}
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// ==================================================
-// ========= PRÉ-PROCESSAMENTO DE HORÁRIOS ==========
-// ==================================================
-
-func filtrarHorariosValidos(horarios map[int]*Horario) []*Horario {
-    valid := []*Horario{}
-    for _, h := range horarios {
-        if len(h.Candidatos) >= MIN_PESSOAS_POR_HORARIO {
-            valid = append(valid, h)
-        } else {
-            fmt.Printf("Cortando horário %d (%s %s) - candidatos insuficientes (%d)\n", h.ID, h.Data, h.Hora, len(h.Candidatos))
-        }
-    }
-    return valid
-}
-
-func sortHorariosPorCandidatos(horarios []*Horario) {
-    sort.SliceStable(horarios, func(i, j int) bool {
-        a, b := horarios[i], horarios[j]
-        if len(a.Candidatos) == len(b.Candidatos) {
-            return a.ID < b.ID
-        }
-        return len(a.Candidatos) < len(b.Candidatos)
-    })
-}
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// ==================================================
-// ============== ALOCAÇÃO DE PESSOAS ===============
-// ==================================================
-
-func alocarPessoa(pessoaID, horarioID int, alocacao map[int]int, pessoasAlocadas map[int]bool) {
-    alocacao[pessoaID] = horarioID
-    pessoasAlocadas[pessoaID] = true
-}
-
-func fazerAlocacaoAvaliada(horarios []*Horario, pessoaPreferencias map[int][]int) ResultadoAlocacao {
-    alocacao := map[int]int{}
-    pessoasAlocadas := map[int]bool{}
-    pontuacao := 0
-
-    for _, h := range horarios {
-        alocados := 0
-
-        // 1ª preferência
-        for pessoaID, prefs := range pessoaPreferencias {
-            if pessoasAlocadas[pessoaID] || len(prefs) == 0 {
-                continue
-            }
-            if prefs[0] == h.ID && alocados < MAX_PESSOAS_POR_HORARIO {
-                alocarPessoa(pessoaID, h.ID, alocacao, pessoasAlocadas)
-                alocados++
-            }
-        }
-
-        // preferências 2..4 enquanto não bate mínimo
-        for nivel := 1; nivel < 5 && alocados < MIN_PESSOAS_POR_HORARIO; nivel++ {
-            for pessoaID, prefs := range pessoaPreferencias {
-                if pessoasAlocadas[pessoaID] || len(prefs) <= nivel {
-                    continue
-                }
-                if prefs[nivel] == h.ID && alocados < MAX_PESSOAS_POR_HORARIO {
-                    alocarPessoa(pessoaID, h.ID, alocacao, pessoasAlocadas)
-                    alocados++
-                }
-            }
-        }
-
-        // se ainda insuficiente, desfaz alocações deste horário
-        if alocados < MIN_PESSOAS_POR_HORARIO {
-            for pessoaID, horarioEscolhido := range alocacao {
-                if horarioEscolhido == h.ID {
-                    delete(alocacao, pessoaID)
-                    pessoasAlocadas[pessoaID] = false
-                }
-            }
-        }
-    }
-
-    // calcula pontuação
-    for pessoaID, horarioID := range alocacao {
-        prefs := pessoaPreferencias[pessoaID]
-        for i, pref := range prefs {
-            if pref == horarioID {
-                pontuacao += i
-                break
-            }
-        }
-    }
-
-    return ResultadoAlocacao{
-        Alocacao:  alocacao,
-        Pontuacao: pontuacao,
-        Alocados:  len(alocacao),
-    }
-}
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// ==================================================
-// ============= IMPRESSÃO DOS RESULTADOS ===========
-// ==================================================
-
-func imprimirAlocacao(alocacao map[int]int, horarios map[int]*Horario) int {
-    fmt.Printf("\n---- ALOCAÇÃO FINAL ----\n")
-    alocadosSet := map[int]bool{}
-    naoAlocados := []int{}
-
-    for pessoaID, horarioID := range alocacao {
-        h := horarios[horarioID]
-        fmt.Printf("Pessoa %d -> %s %s (Horario ID %d)\n", pessoaID, h.Data, h.Hora, h.ID)
-        alocadosSet[pessoaID] = true
-    }
-
-    // descobrir todas as pessoas possíveis
-    todasPessoas := map[int]bool{}
-    for _, h := range horarios {
-        for _, p := range h.Candidatos {
-            todasPessoas[p] = true
-        }
-    }
-    for pid := range todasPessoas {
-        if !alocadosSet[pid] {
-            naoAlocados = append(naoAlocados, pid)
-        }
-    }
-
-    fmt.Printf("\n---- NÃO ALOCADOS (%d) ----\n%v\n", len(naoAlocados), naoAlocados)
-    return len(alocacao) + len(naoAlocados)
-}
-
-func imprimirHorariosPreenchidos(horarios map[int]*Horario, alocacao map[int]int, total int) {
-    fmt.Printf("\n---- HORÁRIOS PREENCHIDOS ----\nCandidatos totais: %d\n\n", total)
-
-    horarioToPessoas := map[int][]int{}
-    for pessoaID, horarioID := range alocacao {
-        horarioToPessoas[horarioID] = append(horarioToPessoas[horarioID], pessoaID)
-    }
-
-    // cria slice apenas com horários com pessoas
-    type horarioInfo struct {
-        H       *Horario
-        Pessoas []int
-    }
-    var preenchidos []horarioInfo
-    for _, h := range horarios {
-        pessoas := horarioToPessoas[h.ID]
-        if len(pessoas) > 0 {
-            preenchidos = append(preenchidos, horarioInfo{h, pessoas})
-        }
-    }
-
-    // ordena por quantidade de pessoas (decrescente)
-    sort.Slice(preenchidos, func(i, j int) bool {
-        return len(preenchidos[i].Pessoas) > len(preenchidos[j].Pessoas)
-    })
-
-    // imprime
-    for _, info := range preenchidos {
-        fmt.Printf("Horário %d (%s %s): %d pessoas - %v\n",
-            info.H.ID, info.H.Data, info.H.Hora, len(info.Pessoas), info.Pessoas)
-    }
-}
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// ==================================================
-// ===== GERADOR DE PERMUTAÇÕES (PARALELIZADO) ======
-// ==================================================
-
-func gerarPermutacoesParalelo(parentCtx context.Context, horarios []*Horario, prefs map[int][]int, maxTestes, numWorkers int) (ResultadoAlocacao, error) {
-    // contexto cancelável
-    ctx, cancel := context.WithCancel(parentCtx)
-    defer cancel()
-
-    g, ctx := errgroup.WithContext(ctx)
-
-    permCh := make(chan []*Horario, numWorkers) // back-pressure = numWorkers
-
-    // estado compartilhado
-    var bestMu sync.Mutex
-    best := ResultadoAlocacao{Pontuacao: 1 << 30, Alocados: -1}
-    // var counter uint64
-
-    // === workers ===
-    for w := 0; w < numWorkers; w++ {
-        g.Go(func() error {
-            for perm := range permCh {
-                if ctx.Err() != nil {
-                    return ctx.Err()
-                }
-
-                // start := time.Now()
-                resultado := fazerAlocacaoAvaliada(perm, prefs)
-                // n := atomic.AddUint64(&counter, 1)
-                // fmt.Printf("Test #%d - Alocados:%d Pontuação:%d Tempo:%v\n", n, resultado.Alocados, resultado.Pontuacao, time.Since(start))
-
-                bestMu.Lock()
-                if resultado.Alocados > best.Alocados || (resultado.Alocados == best.Alocados && resultado.Pontuacao < best.Pontuacao) {
-                    best = resultado
-                    if best.Alocados >= MELHOR_CASO {
-                        cancel() // atingiu alvo ótimo
-                    }
-                }
-                bestMu.Unlock()
-            }
-            return nil
-        })
-    }
-
-    // === gerador de permutações (Heap) ===
-    g.Go(func() error {
-        defer close(permCh)
-        testes := 0
-        var heap func([]*Horario, int)
-        heap = func(arr []*Horario, n int) {
-            if ctx.Err() != nil || testes >= maxTestes {
-                return
-            }
-            if n == 1 {
-                tmp := make([]*Horario, len(arr))
-                copy(tmp, arr)
-                permCh <- tmp
-                testes++
-                return
-            }
-            for i := 0; i < n; i++ {
-                heap(arr, n-1)
-                if n%2 == 1 {
-                    arr[0], arr[n-1] = arr[n-1], arr[0]
-                } else {
-                    arr[i], arr[n-1] = arr[n-1], arr[i]
-                }
-                if ctx.Err() != nil || testes >= maxTestes {
-                    return
-                }
-            }
-        }
-        heap(horarios, len(horarios))
-        return nil
-    })
-
-    // === espera tudo terminar ===
-    if err := g.Wait(); err != nil && err != context.Canceled {
-        return best, err
-    }
-    return best, nil
-}
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// ==================================================
-// =================== FUNÇÃO MAIN ==================
-// ==================================================
-
-func main() {
-    db, err := sql.Open("sqlite3", "./insper.db")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer db.Close()
-
-    // 1. carrega dados
-    horarios := carregarHorarios(db)
-    pessoaPreferencias := carregarDisponibilidades(db, horarios)
-
-    // 2. pré-processa horários
-    validHorarios := filtrarHorariosValidos(horarios)
-    sortHorariosPorCandidatos(validHorarios)
-
-    fmt.Printf("\n---- HORÁRIOS VÁLIDOS ----\n")
-    for _, h := range validHorarios {
-        fmt.Printf("Horário %d (%s %s): %d candidatos\n", h.ID, h.Data, h.Hora, len(h.Candidatos))
-    }
-    fmt.Println(strings.Repeat("-", 60))
-
-    // 3. informa espaço de busca
-    fmt.Printf("\n---- INICIANDO ALOCAÇÃO ----\n")
-    fmt.Printf("Total de permutações possíveis: %s\n", fatorialBig(len(validHorarios)).String())
-
-    // 4. paraleliza busca
-    start := time.Now()
-    melhorResultado, err := gerarPermutacoesParalelo(context.Background(), validHorarios, pessoaPreferencias, MAX_TESTES, runtime.NumCPU())
-    if err != nil && err != context.Canceled {
-        log.Fatalf("erro ao gerar permutações: %v", err)
-    }
-
-    // 5. imprime saída
-    total := imprimirAlocacao(melhorResultado.Alocacao, horarios)
-    imprimirHorariosPreenchidos(horarios, melhorResultado.Alocacao, total)
-    fmt.Printf("\nTempo total de execução: %v\n", time.Since(start))
 }

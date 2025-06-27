@@ -27,45 +27,31 @@ Este projeto lê um arquivo Excel (`.xlsx`) e interativamente mapeia cada coluna
 
 ## Como rodar
 
-No diretório do projeto, execute:
+## About
 
-```bash
-go run receiveexel.go -file path/para/arquivo.xlsx
+Wails template which includes: Vite, React, TS, TailwindCSS out of the box.
+
+Build with `Wails CLI v2.0.0`.
+
+To use this [template](https://wails.io/docs/community/templates):
+
+```shell
+wails init -n "Your Project Name" -t https://github.com/hotafrika/wails-vite-react-ts-tailwind-template
+cd frontend/src
+npm install
 ```
 
-Exemplo:
+[Here](scripts) you can find useful scripts for building on different platforms and Wails CLI installation.
 
-```bash
-go run receiveexel.go -file Base.xlsx
-```
+## Live Development
 
-O programa irá:
+To run in live development mode, run `wails dev` in the project directory. In another terminal, go into the `frontend`
+directory and run `npm run dev`. The frontend dev server will run on <http://localhost:34115>. Connect to this in your
+browser and connect to your application.
 
-1. Perguntar quantas opções de alocação existem (nOpcoes).  
-2. Listar os tipos válidos: timestamp, nome, cpf, numero, semestre, curso, email_insper, email_pessoal, opcao, none
-3. Para cada coluna do seu Excel, solicitar que você escolha um dos tipos acima.  
-4. Se você escolher `opcao`, perguntar também qual índice (1…nOpcoes).  
-5. Ao final, imprimir na tela um JSON com todos os usuários mapeados.
+## Building
 
-## Known issue / Próxima melhoria
-
-Hoje, **se você atribuir o mesmo campo a mais de uma coluna**, o programa não avisa que já há um mapeamento pré-existente.  
-**O comportamento desejado** seria:
-
-1. Detectar que aquele tipo de campo já foi atribuído a outra coluna.  
-2. Perguntar se você quer **substituir** o mapeamento anterior.  
-3. Caso sim, perguntar para qual outro campo deseja remapear a coluna antiga.  
-4. Atualizar o mapeamento de forma consistente.
-
-> **Exemplo de fluxo ideal**  
->
-> - Você atribui `nome` à coluna 2.  
-> - Mais adiante, tenta atribuir `nome` à coluna 5.  
-> - O sistema diz: “O campo `nome` já está usado na coluna 2. Deseja substituir? (s/N)”  
->   - Se “s”: pergunta “Para qual tipo deseja remapear a coluna 2?” e então prossegue.  
->   - Se “N”: mantém o mapeamento original e solicita outro tipo para a coluna 5.
-
-Você pode implementar essa lógica dentro do loop de perguntas em `ParseExcelInteractive`, armazenando um mapa `field -> colunaIndex` e, ao detectar conflito, reaproveitar o laço interativo para resolver a substituição.
+To build a redistributable, production mode package, use `wails build`.
 
 ---
 
