@@ -5,8 +5,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 
@@ -66,6 +68,7 @@ type Usuario struct {
 	Opcoes       []string `json:"opcoes"`
 }
 
+
 func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]MappingItem, error) {
 	a.excelData = data
 	a.nOpcoes = quantidade_opcoes
@@ -111,6 +114,47 @@ func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]MappingItem,
 	}
 	return mapping_json, nil
 }
+
+func (a *App) SuggestMappingAvaliador() ([]MappingItem, error) {
+	readerData := bytes.NewReader(a.excelData)
+	file, err := excelize.OpenReader(readerData)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	sheet := file.GetSheetName(1) // Avaliador
+	rows, err := file.GetRows(sheet)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) < 1 {
+		return nil, fmt.Errorf("arquivo sem dados")
+	}
+	header := rows[0]
+
+	// Lista de possíveis variáveis para avaliador (ajuste conforme necessário)
+	variaveisAvaliador := []string{"Avaliador", "Email", "Sigla"}
+	mappingList := make([]string, len(header))
+	variaveisAvaliadorIdx := 0
+	for i, colName := range header {
+		var avaliadorVar string
+		if variaveisAvaliadorIdx < len(variaveisAvaliador) {
+			avaliadorVar = variaveisAvaliador[variaveisAvaliadorIdx]
+			variaveisAvaliadorIdx++
+		} else {
+			avaliadorVar = "none"
+		}
+		mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", colName, i, avaliadorVar)
+	}
+	mapping_json, err := ProcessMapping(mappingList)
+	if err != nil {
+		return nil, err
+	}
+	return mapping_json, nil
+}
+
+
 
 type MappingItem struct {
 	NomeColuna string `json:"nomeColuna"`
@@ -163,6 +207,8 @@ type UsuariosResponse struct {
 func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResponse, error) {
 	// Abre o arquivo Excel a partir dos dados em []byte
 	data := a.excelData
+
+
 	nOpcoes := a.nOpcoes
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
@@ -228,52 +274,71 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 
 	return UsuariosResponse{Usuarios: users_limpo, Duplicates: duplicatedIndices}, nil
 }
-func (a *App) Save(usuarios_tratados []Usuario) {
+
+
+func (a *App) Save(conn *sql.DB, usuarios_tratados []Usuario) {
+	fillDb(conn, usuarios_tratados)
+}
+
+func main() {
+	path := flag.String("file", "", "caminho para o arquivo .xlsx")
+	flag.Parse()
+	if *path == "" {
+		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
+		os.Exit(1)
+	}
+
+	data, err := os.ReadFile(*path)
+	if err != nil {
+		fmt.Println("Erro ao ler o arquivo:", err)
+		os.Exit(1)
+	}
+
 	conn, err := sql.Open("sqlite3", "./insper.db")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer conn.Close()
 
-	fillDb(conn, usuarios_tratados)
+
+
+
+	app := NewApp()
+	mapping, err := app.SuggestMapping(data, 5)
+	if err != nil {
+		fmt.Println("Erro ao sugerir mapeamento:", err)
+		os.Exit(1)
+	}
+
+	mappingAvaliador, err := app.SuggestMappingAvaliador()
+
+	fmt.Println("\n")
+	fmt.Println("mapping candidatos : ", mapping)
+	fmt.Println("\n\n\n")
+	fmt.Println("mapping avaliadores : ", mappingAvaliador)
+
+
+	usuarios, err := app.BuildUsuariosWithMapping(mapping)
+	if err != nil {
+		fmt.Println("Erro ao ler o arquivo:", err)
+		os.Exit(1)
+	}
+	usuarios_filtrados := FilterUniqueUsers(usuarios)
+
+	fmt.Println("\n")
+	fmt.Println("usuarios : ", usuarios)
+
+	app.Save(conn, usuarios_filtrados)
+
+	// Alocacao
+	// Alocar(conn)
+
+
+	// out1, _ := json.MarshalIndent(mapping, "", " ")
+	// out, _ := json.MarshalIndent(usuarios_filtrados, "", "  ")
+	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
+	fmt.Println("usuarios : ", usuarios_filtrados)
+	fmt.Println("\n")
+	// fmt.Println(string(out2))
+
 }
-
-// func main() {
-// 	path := flag.String("file", "", "caminho para o arquivo .xlsx")
-// 	flag.Parse()
-// 	if *path == "" {
-// 		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
-// 		os.Exit(1)
-// 	}
-
-// 	data, err := os.ReadFile(*path)
-// 	if err != nil {
-// 		fmt.Println("Erro ao ler o arquivo:", err)
-// 		os.Exit(1)
-// 	}
-
-// 	app := NewApp()
-// 	mapping, err := app.SuggestMapping(data, 5)
-// 	if err != nil {
-// 		fmt.Println("Erro ao sugerir mapeamento:", err)
-// 		os.Exit(1)
-// 	}
-// 	fmt.Println("\n")
-// 	fmt.Println("mapping : ", mapping)
-// 	fmt.Println("\n")
-// 	usuarios, err := app.BuildUsuariosWithMapping(mapping)
-// 	if err != nil {
-// 		fmt.Println("Erro ao ler o arquivo:", err)
-// 		os.Exit(1)
-// 	}
-// 	usuarios_filtrados := FilterUniqueUsers(usuarios)
-// 	app.Save(usuarios_filtrados)
-
-// 	// out1, _ := json.MarshalIndent(mapping, "", " ")
-// 	// out, _ := json.MarshalIndent(usuarios_filtrados, "", "  ")
-// 	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
-// 	fmt.Println("usuarios : ", usuarios_filtrados)
-// 	fmt.Println("\n")
-// 	// fmt.Println(string(out2))
-
-// }
