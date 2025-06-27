@@ -99,21 +99,18 @@ func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]MappingItem,
 
 	// Lista de possíveis variáveis da struct Usuario (em minúsculo)
 	variaveisUsuario := getUsuarioFields(quantidade_opcoes)
+	fmt.Println("variaveis usuario: ", variaveisUsuario)
 
 	// Alocação aleatória das variáveis para cada coluna
-	mappingList := make([]string, len(header))
-	variaveisUsuarioIdx := 0
-	for i, colName := range header {
-		var usuarioVar string
-		if variaveisUsuarioIdx < len(variaveisUsuario) {
-			usuarioVar = variaveisUsuario[variaveisUsuarioIdx]
-			variaveisUsuarioIdx++
+	mappingList := make([]string, len(variaveisUsuario))
+	for i, usuarioVar := range variaveisUsuario {
+		if i < len(header) {
+			mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", header[i], i, usuarioVar)
 		} else {
-			usuarioVar = "none"
+			mappingList[i] = fmt.Sprintf("[[null, %d], %q]", i, usuarioVar)
 		}
-		// Formato: [[nome na row, indice da row], variavel do usuario escolhida]
-		mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", colName, i, usuarioVar)
 	}
+	fmt.Println(mappingList)
 	mapping_json, err := ProcessMapping(mappingList)
 	if err != nil {
 		return nil, err
@@ -188,10 +185,18 @@ func ProcessMapping(items []string) ([]MappingItem, error) {
 		if !ok || len(info) != 2 {
 			continue
 		}
-		nomeColuna, ok1 := info[0].(string)
+		var nomeColuna string
+		if info[0] != nil {
+			s, ok := info[0].(string)
+			if !ok {
+				continue
+			}
+			nomeColuna = s
+		}
+
 		indiceF, ok2 := info[1].(float64)
 		variavel, ok3 := arr[1].(string)
-		if !ok1 || !ok2 || !ok3 {
+		if !ok2 || !ok3 {
 			continue
 		}
 
