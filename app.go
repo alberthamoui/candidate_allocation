@@ -346,7 +346,14 @@ func (a *App) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Avaliad
 
 
 
-func (a *App) Save(conn *sql.DB, data interface{}) {
+func (a *App) Save(data interface{}) {
+	conn, err := sql.Open("sqlite3", "./insper.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+
 	switch v := data.(type) {
 	case []Usuario:
 		fillDb(conn, data)
@@ -372,11 +379,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	conn, err := sql.Open("sqlite3", "./insper.db")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
 
 	app := NewApp()
 	mapping, err := app.SuggestMapping(data, 5)
@@ -407,9 +409,9 @@ func main() {
 	fmt.Println("\n\n\n")
 	fmt.Println("avaliadores: ", avaliadores)
 
-	app.Save(conn, usuarios_filtrados)
+	app.Save(usuarios_filtrados)
 
-	app.Save(conn, avaliadores)
+	app.Save(avaliadores)
 
 	// Alocacao
 	// Alocar(conn)
