@@ -7,11 +7,11 @@ import (
 // --- removido var Conn *sql.DB e Configure ---
 
 // AddHorario insere um novo registro em opcoes_horario
-func AddHorario(db *sql.DB, data, hora, local string) (int64, error) {
+func AddHorario(db *sql.DB, opcao string) (int64, error) {
 	res, err := db.Exec(`
-        INSERT INTO opcoes_horario (data, hora, local)
-        VALUES (?, ?, ?)
-    `, data, hora, local)
+        INSERT INTO opcoes_horario (opcao)
+        VALUES (?)
+    `, opcao)
 	if err != nil {
 		return 0, err
 	}
@@ -36,6 +36,17 @@ func AddDisponibilidade(db *sql.DB, pessoaID, horarioID, preferencia int64) (int
         INSERT INTO disponibilidade (pessoa_id, horario_id, preferencia)
         VALUES (?, ?, ?)
     `, pessoaID, horarioID, preferencia)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func AddAvaliador(db *sql.DB, nome, email string) (int64, error) {
+	res, err := db.Exec(`
+		INSERT INTO avaliador (nome, email)
+		VALUES (?, ?)
+	`, nome, email)
 	if err != nil {
 		return 0, err
 	}
