@@ -159,6 +159,7 @@ func getHorarios(data []Usuario) []string {
 
 	return horariosUnicos
 }
+
 func FilterUniqueUsers(resp UsuariosResponse) []Usuario {
 	// marca todos os índices duplicados, exceto o primeiro de cada grupo
 	skip := make(map[int]struct{})
@@ -179,17 +180,17 @@ func FilterUniqueUsers(resp UsuariosResponse) []Usuario {
 	}
 	return out
 }
+
 func fillDb(db *sql.DB, data []Usuario) {
 	// HORARIOS
 	idHorarios := map[string]int64{}
 	horarios := getHorarios(data)
 	for _, horario := range horarios {
-		base := strings.Split(horario, " - ")
-		hora := base[0]
-		date := base[1]
-		idHorario, _ := dbpkg.AddHorario(db, date, hora, "None")
+		opcao := horario
+		idHorario, _ := dbpkg.AddHorario(db, opcao)
 		idHorarios[horario] = idHorario
 	}
+
 	fmt.Println("Horários inseridos no banco de dados.")
 
 	// CANDIDATOS & DISPONIBILIDADES
@@ -206,4 +207,13 @@ func fillDb(db *sql.DB, data []Usuario) {
 		}
 	}
 
+	// // AVALIADORES
+	// for _, a := range avaliadores {
+	// 	id, err := dbpkg.AddAvaliador(db, a.Nome, a.Email)
+	// 	if err != nil {
+	// 		fmt.Printf("Erro ao adicionar avaliador %s: %v\n", a.Nome, err)
+	// 	} else {
+	// 		fmt.Printf("Avaliador %s adicionado com ID %d\n", a.Nome, id)
+	// 	}
+	// }
 }
