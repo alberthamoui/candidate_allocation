@@ -47,9 +47,9 @@ type ResultadoAlocacao struct {
 }
 
 type Avaliador struct {
-	ID    int
-	Nome  string
-	Email string
+	ID    int		`json:"id"`
+	Nome  string	`json:"nome"`
+	Email string	`json:"email"`
 }
 
 type Horario struct {
@@ -452,48 +452,39 @@ func imprimirMesasPreenchidas(mesas []*Mesa, aloc map[int]int, total int) {
 // ===================== MAIN =======================
 // ==================================================
 
-// func main() {
-// 	if len(os.Args) < 2 {
-// 		log.Fatalf("uso: %s <caminho_banco.db>", os.Args[0])
-// 	}
-// 	dbPath := os.Args[1]
+func Alocar(db *sql.DB) {
+	fmt.Println("---- INICIANDO ALOCAÇÃO ----")
+	// --- carrega dados do banco --------------------------------------------
+	avals := carregarAvaliadores(db)
+	restr := carregarRestricoes(db)
+	horarios := carregarHorarios(db)
+	prefs := carregarDisponibilidades(db, horarios)
 
-// 	// --- abre SQLite --------------------------------------------------------
-// 	db, err := sql.Open("sqlite3", dbPath)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer db.Close()
+	fmt.Println("---- DADOS CARREGADOS ----")
 
-// 	// --- carrega dados do banco --------------------------------------------
-// 	avals := carregarAvaliadores(db)
-// 	restr := carregarRestricoes(db)
-// 	horarios := carregarHorarios(db)
-// 	prefs := carregarDisponibilidades(db, horarios)
 
-// 	// --- gera MESAS (painéis) p/ cada dia ----------------------------------
-// 	mesas, porDia := gerarMesas(horarios, avals)
+	// --- gera MESAS (painéis) p/ cada dia ----------------------------------
+	mesas, porDia := gerarMesas(horarios, avals)
+	fmt.Println("\n---- MESAS GERADAS ----")
+	for _, m := range mesas {
+		fmt.Printf("Mesa %d → %s | Avaliadores: %v\n",
+			m.ID, m.Descricao, m.Avaliadores)
+	}
+	fmt.Println(strings.Repeat("-", 60))
 
-// 	fmt.Println("\n---- MESAS GERADAS ----")
-// 	for _, m := range mesas {
-// 		fmt.Printf("Mesa %d → %s | Avaliadores: %v\n",
-// 			m.ID, m.Descricao, m.Avaliadores)
-// 	}
-// 	fmt.Println(strings.Repeat("-", 60))
+	// --- alocação -----------------------------------------------------------
+	start := time.Now()
+	res := fazerAlocacaoMesas(mesas, porDia, prefs, restr)
 
-// 	// --- alocação -----------------------------------------------------------
-// 	start := time.Now()
-// 	res := fazerAlocacaoMesas(mesas, porDia, prefs, restr)
+	// índice mesaID -> *Mesa  (facilita buscas na impressão)
+	mapMesa := make(map[int]*Mesa, len(mesas))
+	for _, m := range mesas {
+		mapMesa[m.ID] = m
+	}
 
-// 	// índice mesaID -> *Mesa  (facilita buscas na impressão)
-// 	mapMesa := make(map[int]*Mesa, len(mesas))
-// 	for _, m := range mesas {
-// 		mapMesa[m.ID] = m
-// 	}
+	// --- impressão de resultados -------------------------------------------
+	total := imprimirAlocacaoMesas(res.Alocacao, mapMesa, prefs)
+	imprimirMesasPreenchidas(mesas, res.Alocacao, total)
 
-// 	// --- impressão de resultados -------------------------------------------
-// 	total := imprimirAlocacaoMesas(res.Alocacao, mapMesa, prefs)
-// 	imprimirMesasPreenchidas(mesas, res.Alocacao, total)
-
-// 	fmt.Printf("\nTempo total de execução: %v\n", time.Since(start))
-// }
+	fmt.Printf("\nTempo total de execução: %v\n", time.Since(start))
+}
