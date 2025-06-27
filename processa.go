@@ -135,7 +135,8 @@ func processData(data []Usuario) (map[int]ValidationResult, [][]int) {
 		groups[find(i)] = append(groups[find(i)], i)
 	}
 
-	var duplicatedIndices [][]int
+	duplicatedIndices := make([][]int, 0)
+
 	for _, g := range groups {
 		if len(g) > 1 {
 			duplicatedIndices = append(duplicatedIndices, g)
