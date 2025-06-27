@@ -68,6 +68,12 @@ type Usuario struct {
 	Opcoes       []string `json:"opcoes"`
 }
 
+type AvaliadorInfo struct {
+	Nome  string `json:"nome"`
+	Email string `json:"email"`
+	Sigla string `json:"sigla"`
+}
+
 
 func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]MappingItem, error) {
 	a.excelData = data
@@ -275,10 +281,70 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 	return UsuariosResponse{Usuarios: users_limpo, Duplicates: duplicatedIndices}, nil
 }
 
+func (a *App) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]AvaliadorInfo, error) {
+	if a.excelData == nil {
+		return nil, fmt.Errorf("dados do Excel ainda não carregados")
+	}
+
+	// abre planilha a partir do []byte salvo em a.excelData
+	reader := bytes.NewReader(a.excelData)
+	file, err := excelize.OpenReader(reader)
+	if err != nil {
+		return nil, fmt.Errorf("erro abrindo excel: %w", err)
+	}
+	defer file.Close()
+
+	// 2ª aba (índice 1) onde estão os avaliadores
+	sheet := file.GetSheetName(1)
+	if sheet == "" {
+		return nil, fmt.Errorf("arquivo não possui uma segunda aba com avaliadores")
+	}
+
+	rows, err := file.GetRows(sheet)
+	if err != nil {
+		return nil, fmt.Errorf("erro lendo aba de avaliadores: %w", err)
+	}
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("aba de avaliadores não contém dados além do cabeçalho")
+	}
+
+	var avaliadores []AvaliadorInfo
+
+	// percorre linhas (ignorando cabeçalho)
+	for _, row := range rows[1:] {
+		av := AvaliadorInfo{}
+		for _, m := range mappingItems {
+			if m.Indice >= len(row) {
+				continue // coluna vazia nesta linha
+			}
+			val := strings.TrimSpace(row[m.Indice])
+
+			switch strings.ToLower(m.Variavel) {
+			case "avaliador":
+				av.Nome = val
+			case "email":
+				av.Email = val
+			case "sigla":
+				av.Sigla = val
+			}
+		}
+
+		// ignora linhas totalmente vazias
+		if av.Nome == "" && av.Email == "" && av.Sigla == "" {
+			continue
+		}
+		avaliadores = append(avaliadores, av)
+	}
+
+	return avaliadores, nil
+}
+
+
 
 func (a *App) Save(conn *sql.DB, usuarios_tratados []Usuario) {
 	fillDb(conn, usuarios_tratados)
 }
+
 
 func main() {
 	path := flag.String("file", "", "caminho para o arquivo .xlsx")
@@ -299,9 +365,6 @@ func main() {
 		log.Fatal(err)
 	}
 	defer conn.Close()
-
-
-
 
 	app := NewApp()
 	mapping, err := app.SuggestMapping(data, 5)
@@ -325,10 +388,17 @@ func main() {
 	}
 	usuarios_filtrados := FilterUniqueUsers(usuarios)
 
+	avaliadores, err := app.BuildAvaliadoresWithMapping(mappingAvaliador)
+
+
 	fmt.Println("\n")
 	fmt.Println("usuarios : ", usuarios)
+	fmt.Println("\n\n\n")
+	fmt.Println("avaliadores : ", avaliadores)
 
 	app.Save(conn, usuarios_filtrados)
+
+	// app.Save(conn, avaliadores)
 
 	// Alocacao
 	// Alocar(conn)
@@ -337,7 +407,7 @@ func main() {
 	// out1, _ := json.MarshalIndent(mapping, "", " ")
 	// out, _ := json.MarshalIndent(usuarios_filtrados, "", "  ")
 	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
-	fmt.Println("usuarios : ", usuarios_filtrados)
+	// fmt.Println("usuarios : ", usuarios_filtrados)
 	fmt.Println("\n")
 	// fmt.Println(string(out2))
 
