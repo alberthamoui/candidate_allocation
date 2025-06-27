@@ -159,7 +159,6 @@ func getHorarios(data []Usuario) []string {
 
 	return horariosUnicos
 }
-
 func FilterUniqueUsers(resp UsuariosResponse) []Usuario {
 	// marca todos os índices duplicados, exceto o primeiro de cada grupo
 	skip := make(map[int]struct{})
@@ -181,39 +180,42 @@ func FilterUniqueUsers(resp UsuariosResponse) []Usuario {
 	return out
 }
 
-func fillDb(db *sql.DB, data []Usuario) {
-	// HORARIOS
-	idHorarios := map[string]int64{}
-	horarios := getHorarios(data)
-	for _, horario := range horarios {
-		opcao := horario
-		idHorario, _ := dbpkg.AddHorario(db, opcao)
-		idHorarios[horario] = idHorario
-	}
-
-	fmt.Println("Horários inseridos no banco de dados.")
-
-	// CANDIDATOS & DISPONIBILIDADES
-	for _, usuario := range data {
-		semestreInt, _ := strconv.Atoi(usuario.Semestre)
-		id, _ := dbpkg.AddPessoa(db, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
-		fmt.Printf("Adicionando usuário: %s (ID: %d)\n", usuario.Nome, id)
-		count := 0
-		for _, opcao := range usuario.Opcoes {
-			count++
-			fmt.Printf("Adicionando disponibilidade para usuário %s (ID: %d) - Horário: %s (ID HORARIO: %d)\n", usuario.Nome, id, opcao, idHorarios[opcao])
-			dbpkg.AddDisponibilidade(db, id, idHorarios[opcao], int64(count))
-
+func fillDb(db *sql.DB, data interface{}) {
+	switch v := data.(type) {
+	case []Usuario:
+		// HORARIOS
+		idHorarios := map[string]int64{}
+		horarios := getHorarios(v)
+		for _, horario := range horarios {
+			opcao := horario
+			idHorario, _ := dbpkg.AddHorario(db, opcao)
+			idHorarios[horario] = idHorario
 		}
-	}
 
-	// // AVALIADORES
-	// for _, a := range avaliadores {
-	// 	id, err := dbpkg.AddAvaliador(db, a.Nome, a.Email)
-	// 	if err != nil {
-	// 		fmt.Printf("Erro ao adicionar avaliador %s: %v\n", a.Nome, err)
-	// 	} else {
-	// 		fmt.Printf("Avaliador %s adicionado com ID %d\n", a.Nome, id)
-	// 	}
-	// }
+		fmt.Println("Horários inseridos no banco de dados.")
+
+		// CANDIDATOS & DISPONIBILIDADES
+		for _, usuario := range v {
+			semestreInt, _ := strconv.Atoi(usuario.Semestre)
+			id, _ := dbpkg.AddPessoa(db, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
+			fmt.Printf("Adicionando usuário: %s (ID: %d)\n", usuario.Nome, id)
+			count := 0
+			for _, opcao := range usuario.Opcoes {
+				count++
+				fmt.Printf("Adicionando disponibilidade para usuário %s (ID: %d) - Horário: %s (ID HORARIO: %d)\n", usuario.Nome, id, opcao, idHorarios[opcao])
+				dbpkg.AddDisponibilidade(db, id, idHorarios[opcao], int64(count))
+			}
+		}
+	case []AvaliadorInfo:
+		for _, a := range v {
+			id, err := dbpkg.AddAvaliador(db, a.Nome, a.Email, a.Sigla)
+			if err != nil {
+				fmt.Printf("Erro ao adicionar avaliador %s: %v\n", a.Nome, err)
+			} else {
+				fmt.Printf("Avaliador %s adicionado com ID %d\n", a.Nome, id)
+			}
+		}
+	default:
+		fmt.Println("Tipo de dado não suportado em fillDb")
+	}
 }

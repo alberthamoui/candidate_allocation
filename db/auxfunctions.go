@@ -42,11 +42,13 @@ func AddDisponibilidade(db *sql.DB, pessoaID, horarioID, preferencia int64) (int
 	return res.LastInsertId()
 }
 
-func AddAvaliador(db *sql.DB, nome, email string) (int64, error) {
+
+
+func AddAvaliador(db *sql.DB, nome, email, sigla string) (int64, error) {
 	res, err := db.Exec(`
-		INSERT INTO avaliador (nome, email)
-		VALUES (?, ?)
-	`, nome, email)
+		INSERT INTO avaliador (nome, email, sigla)
+		VALUES (?, ?, ?)
+	`, nome, email, sigla)
 	if err != nil {
 		return 0, err
 	}

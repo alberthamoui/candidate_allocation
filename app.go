@@ -341,8 +341,15 @@ func (a *App) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Avaliad
 
 
 
-func (a *App) Save(conn *sql.DB, usuarios_tratados []Usuario) {
-	fillDb(conn, usuarios_tratados)
+func (a *App) Save(conn *sql.DB, data interface{}) {
+	switch v := data.(type) {
+	case []Usuario:
+		fillDb(conn, data)
+	case []AvaliadorInfo:
+		fillDb(conn, data)
+	default:
+		fmt.Println("Tipo de dado não suportado em fillDb", v)
+	}
 }
 
 
@@ -377,7 +384,7 @@ func main() {
 
 	fmt.Println("\n")
 	fmt.Println("mapping candidatos : ", mapping)
-	fmt.Println("\n\n\n")
+	fmt.Println("\n")
 	fmt.Println("mapping avaliadores : ", mappingAvaliador)
 
 
@@ -390,15 +397,14 @@ func main() {
 
 	avaliadores, err := app.BuildAvaliadoresWithMapping(mappingAvaliador)
 
-
 	fmt.Println("\n")
-	fmt.Println("usuarios : ", usuarios)
+	fmt.Println("usuarios: ", usuarios)
 	fmt.Println("\n\n\n")
-	fmt.Println("avaliadores : ", avaliadores)
+	fmt.Println("avaliadores: ", avaliadores)
 
 	app.Save(conn, usuarios_filtrados)
 
-	// app.Save(conn, avaliadores)
+	app.Save(conn, avaliadores)
 
 	// Alocacao
 	// Alocar(conn)

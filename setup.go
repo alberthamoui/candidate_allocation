@@ -24,6 +24,7 @@ func main() {
 			"id" INTEGER NOT NULL UNIQUE,
 			"nome" TEXT NOT NULL UNIQUE,
 			"email" TEXT NOT NULL UNIQUE,
+			"sigla" TEXT NOT NULL UNIQUE,
 			PRIMARY KEY("id" AUTOINCREMENT)
 			);`,
 
