@@ -181,6 +181,11 @@ func FilterUniqueUsers(resp UsuariosResponse) []Usuario {
 	return out
 }
 
+func normalizaOpcao(op string) string {
+	return strings.TrimSpace(strings.ToLower(op))
+}
+
+
 func fillDb(db *sql.DB, data interface{}) {
 	switch v := data.(type) {
 	case []Usuario:
@@ -188,9 +193,12 @@ func fillDb(db *sql.DB, data interface{}) {
 		idHorarios := map[string]int64{}
 		horarios := getHorarios(v)
 		for _, horario := range horarios {
-			opcao := horario
+			opcao := normalizaOpcao(horario)
+			if opcao == "" {
+				continue // não grava lixo
+			}
 			idHorario, _ := dbpkg.AddHorario(db, opcao)
-			idHorarios[horario] = idHorario
+			idHorarios[opcao] = idHorario
 		}
 
 		fmt.Println("Horários inseridos no banco de dados.")

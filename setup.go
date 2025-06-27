@@ -59,6 +59,8 @@ func main() {
 			PRIMARY KEY("id" AUTOINCREMENT),
 			FOREIGN KEY("horario_id") REFERENCES "opcoes_horario"("id"),
 			FOREIGN KEY("pessoa_id") REFERENCES "pessoa"("id")
+			UNIQUE("pessoa_id", "horario_id", "preferencia")
+
 			);`,
 		// ------------------------------------------------------------------
 		`DROP TABLE IF EXISTS restricoes;`,
