@@ -421,6 +421,8 @@ func (a *App) Save(data interface{}) {
 		fillDb(conn, data)
 	case []AvaliadorInfo:
 		fillDb(conn, data)
+	case []Restricao:
+		fillDb(conn, data)
 	default:
 		fmt.Println("Tipo de dado não suportado em fillDb", v)
 	}
@@ -464,7 +466,7 @@ func main() {
 		fmt.Println("Erro ao ler o arquivo:", err)
 		os.Exit(1)
 	}
-	// usuarios_filtrados := FilterUniqueUsers(usuarios)
+	usuarios_filtrados := FilterUniqueUsers(usuarios)
 
 	avaliadores, err := app.BuildAvaliadoresWithMapping(mappingAvaliador)
 	if err != nil {
@@ -484,9 +486,10 @@ func main() {
 	fmt.Println("REstricao: ", restricao)
 	fmt.Println("\n")
 
-	// app.Save(usuarios_filtrados)
+	app.Save(usuarios_filtrados)
 
-	// app.Save(avaliadores)
+	app.Save(avaliadores)
+	app.Save(restricao)
 
 	// Alocacao
 	// Alocar(conn)

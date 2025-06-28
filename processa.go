@@ -210,7 +210,6 @@ func normalizaOpcao(op string) string {
 	return strings.TrimSpace(strings.ToLower(op))
 }
 
-
 func fillDb(db *sql.DB, data interface{}) {
 	switch v := data.(type) {
 	case []Usuario:
@@ -249,6 +248,20 @@ func fillDb(db *sql.DB, data interface{}) {
 				fmt.Printf("Avaliador %s adicionado com ID %d\n", a.Nome, id)
 			}
 		}
+	case []Restricao:
+		for _, restricao := range v {
+			CandidatoId, err := dbpkg.GetPessoaIDByName(db, restricao.Candidato)
+			if err != nil {
+				fmt.Printf("Erro ao  pegar o id do candidato %s: %v\n", restricao.Candidato, err)
+			}
+			id, err := dbpkg.AddRestricao(db, CandidatoId, restricao.NaoPosso, restricao.PrefiroNao)
+			if err != nil {
+				fmt.Printf("Erro ao adicionar restrição para candidato %d: %v\n", CandidatoId, err)
+			} else {
+				fmt.Printf("Restrição adicionada para candidato %d com ID %d\n", CandidatoId, id)
+			}
+		}
+
 	default:
 		fmt.Println("Tipo de dado não suportado em fillDb")
 	}

@@ -12,10 +12,14 @@ func AddHorario(db *sql.DB, opcao string) (int64, error) {
 	opcao = strings.TrimSpace(strings.ToLower(opcao))
 	res, err := db.Exec(`
 		INSERT OR IGNORE INTO opcoes_horario (opcao) VALUES (?)	`, opcao)
-	if err != nil { return 0, err }
+	if err != nil {
+		return 0, err
+	}
 
 	id, _ := res.LastInsertId()
-	if id != 0 { return id, nil } // inseriu agora
+	if id != 0 {
+		return id, nil
+	} // inseriu agora
 
 	var existing int64
 	err = db.QueryRow(`SELECT id FROM opcoes_horario WHERE opcao = ?`, opcao).Scan(&existing)
@@ -46,7 +50,6 @@ func AddDisponibilidade(db *sql.DB, pessoaID, horarioID, preferencia int64) (int
 	return res.LastInsertId()
 }
 
-
 func AddAvaliador(db *sql.DB, nome, email, sigla string) (int64, error) {
 	res, err := db.Exec(`
 		INSERT OR IGNORE INTO avaliador (nome, email, sigla)
@@ -63,5 +66,25 @@ func AddAvaliador(db *sql.DB, nome, email, sigla string) (int64, error) {
 
 	// reaproveita avaliador existente (usa sigla, que é única)
 	err = db.QueryRow(`SELECT id FROM avaliador WHERE sigla = ?`, sigla).Scan(&id)
+	return id, err
+}
+
+func AddRestricao(db *sql.DB, candidatoID int64, naoPosso, prefiroNao string) (int64, error) {
+	res, err := db.Exec(`
+        INSERT INTO restricoes (candidato_id, naoPosso, prefiroNao)
+        VALUES (?, ?, ?)
+    `, candidatoID, naoPosso, prefiroNao)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func GetPessoaIDByName(db *sql.DB, nome string) (int64, error) {
+	var id int64
+	err := db.QueryRow(
+		`SELECT id FROM pessoa WHERE nome = ?`,
+		nome,
+	).Scan(&id)
 	return id, err
 }
