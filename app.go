@@ -370,6 +370,45 @@ func (a *App) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Avaliad
 	return avaliadores, nil
 }
 
+func (a *App) BuildRestricoesWithMapping(mappingItems []MappingItem) ([]Restricao, error) {
+	readerData := bytes.NewReader(a.excelData)
+	file, err := excelize.OpenReader(readerData)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	sheet := file.GetSheetName(2) // aba de restrição
+	rows, err := file.GetRows(sheet)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao ler excel: %w", err)
+	}
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("arquivo sem dados além do header")
+	}
+
+	var restricoes []Restricao
+	for _, row := range rows[1:] {
+		r := Restricao{}
+		for _, m := range mappingItems {
+			if m.Indice >= len(row) {
+				continue
+			}
+			cell := row[m.Indice]
+			switch m.Variavel {
+			case "candidato":
+				r.Candidato = cell
+			case "naoPosso":
+				r.NaoPosso = cell
+			case "prefiroNao":
+				r.PrefiroNao = cell
+			}
+		}
+		restricoes = append(restricoes, r)
+	}
+	return restricoes, nil
+}
+
 func (a *App) Save(data interface{}) {
 	conn, err := sql.Open("sqlite3", "./insper.db")
 	if err != nil {
@@ -410,16 +449,21 @@ func main() {
 
 	mappingAvaliador, err := app.SuggestMappingAvaliador()
 
+	mappingRestricao, err := app.SuggestMappingRestricao()
+
 	fmt.Println("\n")
 	fmt.Println("mapping candidatos : ", mapping)
 	fmt.Println("\n")
 	fmt.Println("mapping avaliadores : ", mappingAvaliador)
+	fmt.Println("\n")
+	fmt.Println("mapping restricao : ", mappingRestricao)
+	fmt.Println("\n")
 
-	// usuarios, err := app.BuildUsuariosWithMapping(mapping)
-	// if err != nil {
-	// 	fmt.Println("Erro ao ler o arquivo:", err)
-	// 	os.Exit(1)
-	// }
+	usuarios, err := app.BuildUsuariosWithMapping(mapping)
+	if err != nil {
+		fmt.Println("Erro ao ler o arquivo:", err)
+		os.Exit(1)
+	}
 	// usuarios_filtrados := FilterUniqueUsers(usuarios)
 
 	avaliadores, err := app.BuildAvaliadoresWithMapping(mappingAvaliador)
@@ -427,10 +471,17 @@ func main() {
 		fmt.Println("Erro ao ler o arquivo:", err)
 		os.Exit(1)
 	}
+	restricao, err := app.BuildRestricoesWithMapping(mappingRestricao)
+	if err != nil {
+		fmt.Println("Erro ao ler o arquivo:", err)
+		os.Exit(1)
+	}
 	fmt.Println("\n")
-	// fmt.Println("usuarios: ", usuarios)
+	fmt.Println("usuarios: ", usuarios)
 	fmt.Println("\n\n\n")
 	fmt.Println("avaliadores: ", avaliadores)
+	fmt.Println("\n")
+	fmt.Println("REstricao: ", restricao)
 	fmt.Println("\n")
 
 	// app.Save(usuarios_filtrados)
