@@ -37,6 +37,31 @@ func getUsuarioFields(quantidade_opcoes int) []string {
 	return fields
 }
 
+func getAvaliadorFields() []string {
+	t := reflect.TypeOf(AvaliadorInfo{})
+	var fields []string
+	for i := 0; i < t.NumField(); i++ {
+		tag := t.Field(i).Tag.Get("json")
+		if tag != "" && tag != "-" {
+			fields = append(fields, tag)
+		}
+	}
+	// preenche com "none" ou trunca para chegar em quantidade_opcoes
+	return fields
+}
+
+func getRestricaoFields() []string {
+	t := reflect.TypeOf(Restricao{})
+	var fields []string
+	for i := 0; i < t.NumField(); i++ {
+		tag := t.Field(i).Tag.Get("json")
+		if tag != "" && tag != "-" {
+			fields = append(fields, tag)
+		}
+	}
+	return fields
+}
+
 type ErrorEntry struct {
 	Field int    `json:"field"`
 	Msg   string `json:"msg"`
