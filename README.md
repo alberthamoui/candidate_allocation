@@ -53,6 +53,10 @@ browser and connect to your application.
 
 To build a redistributable, production mode package, use `wails build`.
 
+## Usando JJ
+
+como jj é legal, realmente legal
+
 ---
 
 Bom trabalho e bons alocamentos! 🚀
