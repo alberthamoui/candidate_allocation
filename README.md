@@ -58,6 +58,7 @@ To build a redistributable, production mode package, use `wails build`.
 O jj é top, gostei disso de branchless flow
 como jj é legal, realmente legal, muito legal mesmo
 Vou mandar isso por uma branch para ver como funciona
+mais informações mesmo no readme
 ---
 
 Bom trabalho e bons alocamentos! 🚀
