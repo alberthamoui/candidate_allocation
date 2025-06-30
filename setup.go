@@ -7,7 +7,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func main() {
+func SetUp() {
 	db, err := sql.Open("sqlite3", "./insper.db")
 	if err != nil {
 		log.Fatal(err)
@@ -16,10 +16,19 @@ func main() {
 
 	statements := []string{
 
+
+		`PRAGMA foreign_keys = OFF;`,
+		`DROP TABLE IF EXISTS disponibilidade;`,
+		`DROP TABLE IF EXISTS restricoes;`,
+		`DROP TABLE IF EXISTS opcoes_horario;`,
+		`DROP TABLE IF EXISTS pessoa;`,
+		`DROP TABLE IF EXISTS avaliador;`,
+
+
+
 		`PRAGMA foreign_keys = ON;`,
 
 		// ------------------------------------------------------------------
-		`DROP TABLE IF EXISTS avaliador;`,
 		`CREATE TABLE "avaliador" (
 			"id" INTEGER NOT NULL UNIQUE,
 			"nome" TEXT NOT NULL UNIQUE,
@@ -29,7 +38,6 @@ func main() {
 			);`,
 
 // ------------------------------------------------------------------
-		`DROP TABLE IF EXISTS pessoa;`,
 		`CREATE TABLE "pessoa" (
 			"id" INTEGER,
 			"nome" TEXT NOT NULL,
@@ -43,14 +51,12 @@ func main() {
 			);`,
 
 		// ------------------------------------------------------------------
-		`DROP TABLE IF EXISTS opcoes_horario;`,
 		`CREATE TABLE "opcoes_horario" (
 		"id" INTEGER PRIMARY KEY AUTOINCREMENT,
 		"opcao" TEXT NOT NULL
 		);`,
 
 		// ------------------------------------------------------------------
-		`DROP TABLE IF EXISTS disponibilidade;`,
 		`CREATE TABLE "disponibilidade" (
 			"id" INTEGER,
 			"pessoa_id" INTEGER NOT NULL,
@@ -63,7 +69,6 @@ func main() {
 
 			);`,
 		// ------------------------------------------------------------------
-		`DROP TABLE IF EXISTS restricoes;`,
 		`CREATE TABLE "restricoes" (
 			"id" INTEGER NOT NULL UNIQUE PRIMARY KEY AUTOINCREMENT,
 			"candidato_id" INTEGER NOT NULL,

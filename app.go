@@ -430,6 +430,8 @@ func (a *App) Save(data interface{}) {
 }
 
 func main() {
+	SetUp()
+
 	path := flag.String("file", "", "caminho para o arquivo .xlsx")
 	flag.Parse()
 	if *path == "" {
