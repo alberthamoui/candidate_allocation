@@ -495,7 +495,8 @@ func main() {
 	app.Save(restricao)
 
 	// Alocacao
-	// Alocar(conn)
+	conn, err := sql.Open("sqlite3", "./insper.db")
+	Alocar(conn)
 
 	// out1, _ := json.MarshalIndent(mapping, "", " ")
 	// out, _ := json.MarshalIndent(usuarios_filtrados, "", "  ")

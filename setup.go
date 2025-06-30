@@ -16,15 +16,12 @@ func SetUp() {
 
 	statements := []string{
 
-
 		`PRAGMA foreign_keys = OFF;`,
 		`DROP TABLE IF EXISTS disponibilidade;`,
 		`DROP TABLE IF EXISTS restricoes;`,
 		`DROP TABLE IF EXISTS opcoes_horario;`,
 		`DROP TABLE IF EXISTS pessoa;`,
 		`DROP TABLE IF EXISTS avaliador;`,
-
-
 
 		`PRAGMA foreign_keys = ON;`,
 
@@ -37,7 +34,7 @@ func SetUp() {
 			PRIMARY KEY("id" AUTOINCREMENT)
 			);`,
 
-// ------------------------------------------------------------------
+		// ------------------------------------------------------------------
 		`CREATE TABLE "pessoa" (
 			"id" INTEGER,
 			"nome" TEXT NOT NULL,
@@ -72,8 +69,8 @@ func SetUp() {
 		`CREATE TABLE "restricoes" (
 			"id" INTEGER NOT NULL UNIQUE PRIMARY KEY AUTOINCREMENT,
 			"candidato_id" INTEGER NOT NULL,
-			"naoPosso" TEXT ,
-			"prefiroNao" TEXT ,
+			"naoPosso" TEXT,
+			"prefiroNao" TEXT,
 			FOREIGN KEY("candidato_id") REFERENCES "pessoa"("id") ON DELETE CASCADE);`,
 	}
 

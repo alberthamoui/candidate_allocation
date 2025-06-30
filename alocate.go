@@ -108,7 +108,14 @@ func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]i
 		if err := rows.Scan(&pid, &hid, &pref); err != nil {
 			log.Fatal(err)
 		}
-		h := horarios[hid]
+
+		h, ok := horarios[hid]
+		if !ok {
+			log.Printf("[WARN] horario_id %d não encontrado na tabela de horários. Ignorando.", hid)
+			continue
+		}
+		
+		
 		h.Candidatos = append(h.Candidatos, pid)
 		prefs[pid] = append(prefs[pid], hid)
 	}
@@ -434,11 +441,51 @@ func imprimirAlocacaoMesas(aloc map[int]int, mesas map[int]*Mesa, prefs map[int]
 func imprimirMesasPreenchidas(mesas []*Mesa, aloc map[int]int, total int) {
 	fmt.Printf("\n---- MESAS PREENCHIDAS ----\nPessoas únicas com disponibilidade: %d\n\n", total)
 
-	// ordena mesas pela quantidade de candidatos
+	// Mapa de prioridade dos dias
+	dias := map[string]int{
+		"segunda": 1,
+		"terca":   2,
+		"quarta":  3,
+		"quinta":  4,
+		"sexta":   5,
+	}
+
+	// Função para extrair o dia e número da mesa
+	getDiaEMesa := func(desc string) (int, int) {
+		partes := strings.Split(desc, "–")
+		if len(partes) < 2 {
+			return 999, 999
+		}
+		dia := strings.TrimSpace(partes[0])
+		numMesa := 999
+
+		if strings.Contains(partes[1], "mesa") {
+			p := strings.Split(strings.TrimSpace(partes[1]), " ")
+			if len(p) >= 2 {
+				n, err := strconv.Atoi(p[1])
+				if err == nil {
+					numMesa = n
+				}
+			}
+		}
+		prioridade, ok := dias[strings.ToLower(dia)]
+		if !ok {
+			prioridade = 999
+		}
+		return prioridade, numMesa
+	}
+
+	// Ordena as mesas por dia e número
 	sort.Slice(mesas, func(i, j int) bool {
-		return len(mesas[i].Candidatos) > len(mesas[j].Candidatos)
+		dia1, mesa1 := getDiaEMesa(mesas[i].Descricao)
+		dia2, mesa2 := getDiaEMesa(mesas[j].Descricao)
+		if dia1 == dia2 {
+			return mesa1 < mesa2
+		}
+		return dia1 < dia2
 	})
 
+	// Imprime as mesas
 	for _, m := range mesas {
 		if len(m.Candidatos) == 0 {
 			continue
