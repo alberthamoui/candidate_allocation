@@ -53,8 +53,9 @@ browser and connect to your application.
 
 To build a redistributable, production mode package, use `wails build`.
 
-## Usando JJ
+## JJ
 
+O jj é top, gostei disso de branchless flow
 como jj é legal, realmente legal
 
 ---
