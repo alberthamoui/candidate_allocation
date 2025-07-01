@@ -2,13 +2,24 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import wailsLogo from "./assets/wails.png";
 import "./App.css";
-import { Greet, SuggestMapping } from "../wailsjs/go/main/App";
+import {
+	Greet,
+	SuggestMapping,
+	SuggestMappingAvaliador,
+	SuggestMappingRestricao,
+} from "../wailsjs/go/main/App";
 
 interface AppProps {
 	setMapping: (data: any) => void;
+	setMappingAvaliadores: (data: any) => void;
+	setMappingRestricoes: (data: any) => void;
 }
 
-function App({ setMapping }: AppProps) {
+function App({
+	setMapping,
+	setMappingAvaliadores,
+	setMappingRestricoes,
+}: AppProps) {
 	const [resultText, setResultText] = useState(
 		"Por favor, digite seu nome abaixo 👇"
 	);
@@ -43,6 +54,11 @@ function App({ setMapping }: AppProps) {
 					const result = await SuggestMapping(Array.from(data), 5);
 					console.log(result, "resultado");
 					setMapping(result); // <-- joga pro pai
+
+					const mappingAvaliadores = await SuggestMappingAvaliador();
+					setMappingAvaliadores(mappingAvaliadores);
+					const mappingRestricoes = await SuggestMappingRestricao();
+					setMappingRestricoes(mappingRestricoes);
 					navigate("/mapping");
 				} catch (error) {
 					setFileResult("Erro ao processar o arquivo: " + error);

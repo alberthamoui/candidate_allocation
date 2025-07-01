@@ -540,9 +540,7 @@ func getSliceFromMap(m map[string]interface{}, key string) []string {
 // 	fmt.Println("\n")
 // 	fmt.Println("REstricao: ", restricao)
 // 	fmt.Println("\n")
-
 // 	save(usuarios_filtrados)
-
 // 	save(avaliadores)
 // 	save(restricao)
 

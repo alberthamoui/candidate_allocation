@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react"; // adicionada a importação do useRef
 import { motion } from "framer-motion";
-import { BuildUsuariosWithMapping } from "../wailsjs/go/main/App";
+import { BuildAvaliadoresWithMapping } from "../wailsjs/go/main/App";
 interface MappingItem {
 	nomeColuna: string;
 	indice: number;
@@ -9,13 +9,11 @@ interface MappingItem {
 }
 interface MappingPageProps {
 	mapping: MappingItem[] | null;
-	setUsers: (data: any) => void;
-	setDuplicatas: (data: any) => void;
+	setAvaliadores: (data: any) => void;
 }
-export default function MappingPage({
+export default function MappingAvaliadoresPage({
 	mapping,
-	setUsers,
-	setDuplicatas,
+	setAvaliadores,
 }: MappingPageProps) {
 	const navigate = useNavigate();
 	const dragActiveRef = useRef<boolean>(false);
@@ -113,17 +111,17 @@ export default function MappingPage({
 
 	async function onConfirm() {
 		console.log(items, " : mapping");
-		const { usuarios, duplicates } = await BuildUsuariosWithMapping(items);
-		setUsers(usuarios);
-		setDuplicatas(duplicates);
-		navigate("/mappingAvaliadores");
+
+		const avaliadores = await BuildAvaliadoresWithMapping(items);
+		setAvaliadores(avaliadores);
+		navigate("/mappingrestricoes");
 	}
 
 	return (
 		<div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-100 flex flex-col items-center py-12 px-4">
 			<div className="max-w-4xl w-full bg-white rounded-xl shadow-lg p-8 mb-8">
 				<h1 className="text-3xl font-bold mb-2 text-center text-gray-800">
-					Reordenar Mapeamento
+					Reordenar Mapeamento Avaliadores
 				</h1>
 				<p className="mb-6 text-gray-600 text-center">
 					Arraste as células da coluna direita para reordenar o
