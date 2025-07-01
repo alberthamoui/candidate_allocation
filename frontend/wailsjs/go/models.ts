@@ -1,5 +1,49 @@
 export namespace main {
 	
+	export class AvaliadorInfo {
+	    nome: string;
+	    email: string;
+	    sigla: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AvaliadorInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.nome = source["nome"];
+	        this.email = source["email"];
+	        this.sigla = source["sigla"];
+	    }
+	}
+	export class Candidato {
+	    timestamp: string;
+	    nome: string;
+	    cpf: string;
+	    numero: string;
+	    semestre: string;
+	    curso: string;
+	    email_insper: string;
+	    email_pessoal: string;
+	    opcoes: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Candidato(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.timestamp = source["timestamp"];
+	        this.nome = source["nome"];
+	        this.cpf = source["cpf"];
+	        this.numero = source["numero"];
+	        this.semestre = source["semestre"];
+	        this.curso = source["curso"];
+	        this.email_insper = source["email_insper"];
+	        this.email_pessoal = source["email_pessoal"];
+	        this.opcoes = source["opcoes"];
+	    }
+	}
 	export class ErrorEntry {
 	    field: number;
 	    msg: string;
@@ -30,37 +74,25 @@ export namespace main {
 	        this.variavel = source["variavel"];
 	    }
 	}
-	export class Usuario {
-	    timestamp: string;
-	    nome: string;
-	    cpf: string;
-	    numero: string;
-	    semestre: string;
-	    curso: string;
-	    email_insper: string;
-	    email_pessoal: string;
-	    opcoes: string[];
+	export class Restricao {
+	    candidato: string;
+	    naoPosso: string;
+	    prefiroNao: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new Usuario(source);
+	        return new Restricao(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.timestamp = source["timestamp"];
-	        this.nome = source["nome"];
-	        this.cpf = source["cpf"];
-	        this.numero = source["numero"];
-	        this.semestre = source["semestre"];
-	        this.curso = source["curso"];
-	        this.email_insper = source["email_insper"];
-	        this.email_pessoal = source["email_pessoal"];
-	        this.opcoes = source["opcoes"];
+	        this.candidato = source["candidato"];
+	        this.naoPosso = source["naoPosso"];
+	        this.prefiroNao = source["prefiroNao"];
 	    }
 	}
 	export class ValidationResult {
 	    erros: ErrorEntry[];
-	    usuario: Usuario;
+	    usuario: Candidato;
 	
 	    static createFrom(source: any = {}) {
 	        return new ValidationResult(source);
@@ -69,7 +101,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.erros = this.convertValues(source["erros"], ErrorEntry);
-	        this.usuario = this.convertValues(source["usuario"], Usuario);
+	        this.usuario = this.convertValues(source["usuario"], Candidato);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

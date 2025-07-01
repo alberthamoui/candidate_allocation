@@ -64,7 +64,7 @@ func TestSuggestMapping(t *testing.T) {
 	}
 
 	// Verifica se o número de mapeamentos está correto
-	expected := reflect.TypeOf(Usuario{}).NumField()
+	expected := reflect.TypeOf(Candidato{}).NumField()
 	if len(mappings) != expected {
 		t.Errorf("Esperado %d mapeamentos, mas obteve %d", expected, len(mappings))
 	}

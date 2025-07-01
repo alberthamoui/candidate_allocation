@@ -5,10 +5,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 
@@ -33,6 +31,7 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	// Perform your setup here
 	a.ctx = ctx
+	SetUp()
 }
 
 // domReady is called after front-end resources have been loaded
@@ -57,7 +56,7 @@ func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
 }
 
-type Usuario struct {
+type Candidato struct {
 	Timestamp    string   `json:"timestamp"`
 	Nome         string   `json:"nome"`
 	CPF          string   `json:"cpf"`
@@ -85,6 +84,14 @@ type MappingItem struct {
 	NomeColuna string `json:"nomeColuna"`
 	Indice     int    `json:"indice"`
 	Variavel   string `json:"variavel"`
+}
+type NaoAlocados struct {
+	Candidatos  []Candidato `json:"candidatos"`
+	Avaliadores []Avaliador `json:"avaliadores"`
+}
+type Allocation struct {
+	Horarios    []Horario   `json:"horarios"`
+	NaoAlocados NaoAlocados `json:"naoAlocados"`
 }
 
 func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]MappingItem, error) {
@@ -264,10 +271,10 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 		return UsuariosResponse{}, fmt.Errorf("arquivo sem dados além do header")
 	}
 
-	var users []Usuario
+	var users []Candidato
 
 	for _, row := range rows[1:] {
-		u := Usuario{
+		u := Candidato{
 			Opcoes: make([]string, nOpcoes),
 		}
 		// Para cada mapping, pega o conteúdo da coluna correspondente e atribui
@@ -410,7 +417,7 @@ func (a *App) BuildRestricoesWithMapping(mappingItems []MappingItem) ([]Restrica
 	return restricoes, nil
 }
 
-func (a *App) Save(data interface{}) {
+func save(data interface{}) {
 	conn, err := sql.Open("sqlite3", "./insper.db")
 	if err != nil {
 		log.Fatal(err)
@@ -418,7 +425,7 @@ func (a *App) Save(data interface{}) {
 	defer conn.Close()
 
 	switch v := data.(type) {
-	case []Usuario:
+	case []Candidato:
 		fillDb(conn, data)
 	case []AvaliadorInfo:
 		fillDb(conn, data)
@@ -428,81 +435,130 @@ func (a *App) Save(data interface{}) {
 		fmt.Println("Tipo de dado não suportado em fillDb", v)
 	}
 }
+func (a *App) SaveUsuariosFromMaps(candidatoMaps []map[string]interface{}) error {
+	var candidatos []Candidato
 
-func main() {
-	SetUp()
-
-	path := flag.String("file", "", "caminho para o arquivo .xlsx")
-	flag.Parse()
-	if *path == "" {
-		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
-		os.Exit(1)
+	for _, userMap := range candidatoMaps {
+		usuario := Candidato{
+			Timestamp:    getStringFromMap(userMap, "timestamp"),
+			Nome:         getStringFromMap(userMap, "nome"),
+			CPF:          getStringFromMap(userMap, "cpf"),
+			Numero:       getStringFromMap(userMap, "numero"),
+			Semestre:     getStringFromMap(userMap, "semestre"),
+			Curso:        getStringFromMap(userMap, "curso"),
+			EmailInsper:  getStringFromMap(userMap, "email_insper"),
+			EmailPessoal: getStringFromMap(userMap, "email_pessoal"),
+			Opcoes:       getSliceFromMap(userMap, "opcoes"),
+		}
+		candidatos = append(candidatos, usuario)
 	}
-
-	data, err := os.ReadFile(*path)
-	if err != nil {
-		fmt.Println("Erro ao ler o arquivo:", err)
-		os.Exit(1)
-	}
-
-	app := NewApp()
-	mapping, err := app.SuggestMapping(data, 5)
-	if err != nil {
-		fmt.Println("Erro ao sugerir mapeamento:", err)
-		os.Exit(1)
-	}
-
-	mappingAvaliador, err := app.SuggestMappingAvaliador()
-
-	mappingRestricao, err := app.SuggestMappingRestricao()
-
-	fmt.Println("\n")
-	fmt.Println("mapping candidatos : ", mapping)
-	fmt.Println("\n")
-	fmt.Println("mapping avaliadores : ", mappingAvaliador)
-	fmt.Println("\n")
-	fmt.Println("mapping restricao : ", mappingRestricao)
-	fmt.Println("\n")
-
-	usuarios, err := app.BuildUsuariosWithMapping(mapping)
-	if err != nil {
-		fmt.Println("Erro ao ler o arquivo:", err)
-		os.Exit(1)
-	}
-	usuarios_filtrados := FilterUniqueUsers(usuarios)
-
-	avaliadores, err := app.BuildAvaliadoresWithMapping(mappingAvaliador)
-	if err != nil {
-		fmt.Println("Erro ao ler o arquivo:", err)
-		os.Exit(1)
-	}
-	restricao, err := app.BuildRestricoesWithMapping(mappingRestricao)
-	if err != nil {
-		fmt.Println("Erro ao ler o arquivo:", err)
-		os.Exit(1)
-	}
-	fmt.Println("\n")
-	fmt.Println("usuarios: ", usuarios)
-	fmt.Println("\n\n\n")
-	fmt.Println("avaliadores: ", avaliadores)
-	fmt.Println("\n")
-	fmt.Println("REstricao: ", restricao)
-	fmt.Println("\n")
-
-	app.Save(usuarios_filtrados)
-
-	app.Save(avaliadores)
-	app.Save(restricao)
-
-	// Alocacao
-	conn, err := sql.Open("sqlite3", "./insper.db")
-	Alocar(conn)
-
-	// out1, _ := json.MarshalIndent(mapping, "", " ")
-	// out, _ := json.MarshalIndent(usuarios_filtrados, "", "  ")
-	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
-	// fmt.Println("usuarios : ", usuarios_filtrados)
-	fmt.Println("\n")
-	// fmt.Println(string(out2))
-
+	save(candidatos)
+	return nil
 }
+
+// Funções auxiliares para conversão segura
+func getStringFromMap(m map[string]interface{}, key string) string {
+	if val, ok := m[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return ""
+}
+
+func getSliceFromMap(m map[string]interface{}, key string) []string {
+	if val, ok := m[key]; ok {
+		if slice, ok := val.([]interface{}); ok {
+			var result []string
+			for _, item := range slice {
+				if str, ok := item.(string); ok {
+					result = append(result, str)
+				}
+			}
+			return result
+		}
+	}
+	return []string{}
+}
+
+// func main() {
+// 	SetUp()
+
+// 	path := flag.String("file", "", "caminho para o arquivo .xlsx")
+// 	flag.Parse()
+// 	if *path == "" {
+// 		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
+// 		os.Exit(1)
+// 	}
+
+// 	data, err := os.ReadFile(*path)
+// 	if err != nil {
+// 		fmt.Println("Erro ao ler o arquivo:", err)
+// 		os.Exit(1)
+// 	}
+
+// 	app := NewApp()
+// 	mapping, err := app.SuggestMapping(data, 5)
+// 	if err != nil {
+// 		fmt.Println("Erro ao sugerir mapeamento:", err)
+// 		os.Exit(1)
+// 	}
+
+// 	mappingAvaliador, err := app.SuggestMappingAvaliador()
+
+// 	mappingRestricao, err := app.SuggestMappingRestricao()
+
+// 	fmt.Println("\n")
+// 	fmt.Println("mapping candidatos : ", mapping)
+// 	fmt.Println("\n")
+// 	fmt.Println("mapping avaliadores : ", mappingAvaliador)
+// 	fmt.Println("\n")
+// 	fmt.Println("mapping restricao : ", mappingRestricao)
+// 	fmt.Println("\n")
+
+// 	usuarios, err := app.BuildUsuariosWithMapping(mapping)
+// 	if err != nil {
+// 		fmt.Println("Erro ao ler o arquivo:", err)
+// 		os.Exit(1)
+// 	}
+// 	usuarios_filtrados := FilterUniqueUsers(usuarios)
+
+// 	avaliadores, err := app.BuildAvaliadoresWithMapping(mappingAvaliador)
+// 	if err != nil {
+// 		fmt.Println("Erro ao ler o arquivo:", err)
+// 		os.Exit(1)
+// 	}
+// 	restricao, err := app.BuildRestricoesWithMapping(mappingRestricao)
+// 	if err != nil {
+// 		fmt.Println("Erro ao ler o arquivo:", err)
+// 		os.Exit(1)
+// 	}
+// 	fmt.Println("\n")
+// 	fmt.Println("usuarios: ", usuarios)
+// 	fmt.Println("\n\n\n")
+// 	fmt.Println("avaliadores: ", avaliadores)
+// 	fmt.Println("\n")
+// 	fmt.Println("REstricao: ", restricao)
+// 	fmt.Println("\n")
+
+// 	save(usuarios_filtrados)
+
+// 	save(avaliadores)
+// 	save(restricao)
+
+// 	// Alocacao
+// 	conn, err := sql.Open("sqlite3", "./insper.db")
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	defer conn.Close()
+// 	Alocar(conn)
+
+// 	// out1, _ := json.MarshalIndent(mapping, "", " ")
+// 	// out, _ := json.MarshalIndent(usuarios_filtrados, "", "  ")
+// 	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
+// 	// fmt.Println("usuarios : ", usuarios_filtrados)
+// 	fmt.Println("\n")
+// 	// fmt.Println(string(out2))
+
+// }

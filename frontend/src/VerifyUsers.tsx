@@ -8,7 +8,8 @@ import {
 	TrashIcon,
 } from "@heroicons/react/24/outline";
 import { UserCard } from "./UserCard";
-import { Save } from "../wailsjs/go/main/App";
+
+import { SaveUsuariosFromMaps } from "../wailsjs/go/main/App";
 
 interface ErrorItem {
 	field: string;
@@ -159,7 +160,7 @@ export default function VerifyUserPage({
 		);
 
 		console.log("Usuários para salvar:", usuariosParaSalvar);
-		Save(usuariosParaSalvar);
+		SaveUsuariosFromMaps(usuariosParaSalvar);
 	}
 
 	const renderUserCard = (userId: number, extraBtn?: React.ReactNode) => {

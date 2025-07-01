@@ -47,9 +47,9 @@ type ResultadoAlocacao struct {
 }
 
 type Avaliador struct {
-	ID    int		`json:"id"`
-	Nome  string	`json:"nome"`
-	Email string	`json:"email"`
+	ID    int    `json:"id"`
+	Nome  string `json:"nome"`
+	Email string `json:"email"`
 }
 
 type Horario struct {
@@ -114,8 +114,7 @@ func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]i
 			log.Printf("[WARN] horario_id %d não encontrado na tabela de horários. Ignorando.", hid)
 			continue
 		}
-		
-		
+
 		h.Candidatos = append(h.Candidatos, pid)
 		prefs[pid] = append(prefs[pid], hid)
 	}
@@ -141,34 +140,48 @@ func carregarAvaliadores(db *sql.DB) []*Avaliador {
 }
 
 func carregarRestricoes(db *sql.DB) map[int]map[int]bool {
-	rows, err := db.Query(`SELECT candidato_id, naoPosso FROM restricoes`)
+	restr := make(map[int]map[int]bool)
+
+	// 1) NaoPosso
+	rows, err := db.Query(`
+        SELECT avaliador_id, candidato_id 
+        FROM restricoesNposso
+    `)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer rows.Close()
-
-	restr := make(map[int]map[int]bool)
 	for rows.Next() {
-		var cid int
-		var raw sql.NullString
-		if err := rows.Scan(&cid, &raw); err != nil {
+		var aid, cid int
+		if err := rows.Scan(&aid, &cid); err != nil {
 			log.Fatal(err)
 		}
-		if !raw.Valid || strings.TrimSpace(raw.String) == "" {
-			continue
+		if restr[aid] == nil {
+			restr[aid] = make(map[int]bool)
 		}
-		for _, sig := range strings.Split(raw.String, ",") {
-			sig = strings.TrimSpace(strings.TrimPrefix(sig, "A"))
-			aid, err := strconv.Atoi(sig)
-			if err != nil {
-				continue
-			}
-			if restr[aid] == nil {
-				restr[aid] = make(map[int]bool)
-			}
-			restr[aid][cid] = true
-		}
+		restr[aid][cid] = true
 	}
+
+	// 2) PrefiroNao
+	rows2, err := db.Query(`
+        SELECT avaliador_id, candidato_id 
+        FROM restricoesPrefiroN
+    `)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows2.Close()
+	for rows2.Next() {
+		var aid, cid int
+		if err := rows2.Scan(&aid, &cid); err != nil {
+			log.Fatal(err)
+		}
+		if restr[aid] == nil {
+			restr[aid] = make(map[int]bool)
+		}
+		restr[aid][cid] = true
+	}
+
 	return restr
 }
 
@@ -508,7 +521,6 @@ func Alocar(db *sql.DB) {
 	prefs := carregarDisponibilidades(db, horarios)
 
 	fmt.Println("---- DADOS CARREGADOS ----")
-
 
 	// --- gera MESAS (painéis) p/ cada dia ----------------------------------
 	mesas, porDia := gerarMesas(horarios, avals)
