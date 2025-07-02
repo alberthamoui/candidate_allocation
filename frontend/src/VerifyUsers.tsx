@@ -9,7 +9,10 @@ import {
 } from "@heroicons/react/24/outline";
 import { UserCard } from "./UserCard";
 
-import { SaveUsuariosFromMaps } from "../wailsjs/go/main/App";
+import {
+	SaveUsuariosFromMaps,
+	SaveRestricoesFromMaps,
+} from "../wailsjs/go/main/App";
 
 interface ErrorItem {
 	field: string;
@@ -27,11 +30,13 @@ interface UserWrapper {
 
 interface VerifyUserPageProps {
 	usuarios: Record<number, UserWrapper>;
+	restricoes: any;
 	duplicates: number[][];
 }
 
 export default function VerifyUserPage({
 	usuarios,
+	restricoes,
 	duplicates,
 }: VerifyUserPageProps) {
 	const makeEditableCopy = () =>
@@ -143,7 +148,7 @@ export default function VerifyUserPage({
 			);
 			return;
 		}
-
+		console.log("edited users -> ", editedUsers);
 		// Convert editedUsers to the format expected by backend
 		const usuariosParaSalvar = Object.entries(editedUsers).map(
 			([id, user]) => ({
@@ -153,14 +158,21 @@ export default function VerifyUserPage({
 				numero: user.numero || "",
 				semestre: user.semestre || "",
 				curso: user.curso || "",
-				email_insper: user.emailinsper || "",
-				email_pessoal: user.emailpessoal || "",
+				email_insper: user.email_insper || "",
+				email_pessoal: user.email_pessoal || "",
 				opcoes: user.opcoes || [],
 			})
 		);
 
 		console.log("Usuários para salvar:", usuariosParaSalvar);
-		SaveUsuariosFromMaps(usuariosParaSalvar);
+		(async () => {
+			try {
+				await SaveUsuariosFromMaps(usuariosParaSalvar);
+				await SaveRestricoesFromMaps(restricoes);
+			} catch (err) {
+				setErrorMsg("Erro ao salvar dados: " + (err as Error).message);
+			}
+		})();
 	}
 
 	const renderUserCard = (userId: number, extraBtn?: React.ReactNode) => {

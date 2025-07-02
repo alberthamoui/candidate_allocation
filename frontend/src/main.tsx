@@ -65,6 +65,7 @@ function Root() {
 						element={
 							<VerifyUserPage
 								usuarios={users}
+								restricoes={restricoes}
 								duplicates={duplicatas}
 							/>
 						}

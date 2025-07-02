@@ -18,6 +18,10 @@ export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }
 
+export function SaveRestricoesFromMaps(arg1) {
+  return window['go']['main']['App']['SaveRestricoesFromMaps'](arg1);
+}
+
 export function SaveUsuariosFromMaps(arg1) {
   return window['go']['main']['App']['SaveUsuariosFromMaps'](arg1);
 }

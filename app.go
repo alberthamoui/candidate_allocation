@@ -374,7 +374,7 @@ func (a *App) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Avaliad
 		}
 		avaliadores = append(avaliadores, av)
 	}
-
+	save(avaliadores)
 	return avaliadores, nil
 }
 
@@ -435,6 +435,20 @@ func save(data interface{}) {
 		fmt.Println("Tipo de dado não suportado em fillDb", v)
 	}
 }
+func (a *App) SaveRestricoesFromMaps(restricaoMaps []map[string]interface{}) error {
+	var restricoes []Restricao
+	for _, m := range restricaoMaps {
+		r := Restricao{
+			Candidato:  getStringFromMap(m, "candidato"),
+			NaoPosso:   getStringFromMap(m, "naoPosso"),
+			PrefiroNao: getStringFromMap(m, "prefiroNao"),
+		}
+		restricoes = append(restricoes, r)
+	}
+	save(restricoes)
+	return nil
+}
+
 func (a *App) SaveUsuariosFromMaps(candidatoMaps []map[string]interface{}) error {
 	var candidatos []Candidato
 

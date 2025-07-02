@@ -10,6 +10,8 @@ export function BuildUsuariosWithMapping(arg1:Array<main.MappingItem>):Promise<m
 
 export function Greet(arg1:string):Promise<string>;
 
+export function SaveRestricoesFromMaps(arg1:Array<Record<string, any>>):Promise<void>;
+
 export function SaveUsuariosFromMaps(arg1:Array<Record<string, any>>):Promise<void>;
 
 export function SuggestMapping(arg1:Array<number>,arg2:number):Promise<Array<main.MappingItem>>;
