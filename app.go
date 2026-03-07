@@ -518,59 +518,60 @@ func getSliceFromMap(m map[string]interface{}, key string) []string {
 // 		os.Exit(1)
 // 	}
 
-// 	mappingAvaliador, err := app.SuggestMappingAvaliador()
-
-// 	mappingRestricao, err := app.SuggestMappingRestricao()
-
 // 	fmt.Println("\n")
 // 	fmt.Println("mapping candidatos : ", mapping)
 // 	fmt.Println("\n")
-// 	fmt.Println("mapping avaliadores : ", mappingAvaliador)
-// 	fmt.Println("\n")
-// 	fmt.Println("mapping restricao : ", mappingRestricao)
-// 	fmt.Println("\n")
 
-// 	usuarios, err := app.BuildUsuariosWithMapping(mapping)
-// 	if err != nil {
-// 		fmt.Println("Erro ao ler o arquivo:", err)
-// 		os.Exit(1)
-// 	}
-// 	usuarios_filtrados := FilterUniqueUsers(usuarios)
+// mappingAvaliador, err := app.SuggestMappingAvaliador()
 
-// 	avaliadores, err := app.BuildAvaliadoresWithMapping(mappingAvaliador)
-// 	if err != nil {
-// 		fmt.Println("Erro ao ler o arquivo:", err)
-// 		os.Exit(1)
-// 	}
-// 	restricao, err := app.BuildRestricoesWithMapping(mappingRestricao)
-// 	if err != nil {
-// 		fmt.Println("Erro ao ler o arquivo:", err)
-// 		os.Exit(1)
-// 	}
-// 	fmt.Println("\n")
-// 	fmt.Println("usuarios: ", usuarios)
-// 	fmt.Println("\n\n\n")
-// 	fmt.Println("avaliadores: ", avaliadores)
-// 	fmt.Println("\n")
-// 	fmt.Println("REstricao: ", restricao)
-// 	fmt.Println("\n")
-// 	save(usuarios_filtrados)
-// 	save(avaliadores)
-// 	save(restricao)
+// mappingRestricao, err := app.SuggestMappingRestricao()
 
-// 	// Alocacao
-// 	conn, err := sql.Open("sqlite3", "./insper.db")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer conn.Close()
-// 	Alocar(conn)
+// fmt.Println("mapping avaliadores : ", mappingAvaliador)
+// fmt.Println("\n")
+// fmt.Println("mapping restricao : ", mappingRestricao)
+// fmt.Println("\n")
 
-// 	// out1, _ := json.MarshalIndent(mapping, "", " ")
-// 	// out, _ := json.MarshalIndent(usuarios_filtrados, "", "  ")
-// 	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
-// 	// fmt.Println("usuarios : ", usuarios_filtrados)
-// 	fmt.Println("\n")
-// 	// fmt.Println(string(out2))
+// usuarios, err := app.BuildUsuariosWithMapping(mapping)
+// if err != nil {
+// 	fmt.Println("Erro ao ler o arquivo:", err)
+// 	os.Exit(1)
+// }
+// usuarios_filtrados := FilterUniqueUsers(usuarios)
+
+// avaliadores, err := app.BuildAvaliadoresWithMapping(mappingAvaliador)
+// if err != nil {
+// 	fmt.Println("Erro ao ler o arquivo:", err)
+// 	os.Exit(1)
+// }
+// restricao, err := app.BuildRestricoesWithMapping(mappingRestricao)
+// if err != nil {
+// 	fmt.Println("Erro ao ler o arquivo:", err)
+// 	os.Exit(1)
+// }
+// fmt.Println("\n")
+// fmt.Println("usuarios: ", usuarios)
+// fmt.Println("\n\n\n")
+// fmt.Println("avaliadores: ", avaliadores)
+// fmt.Println("\n")
+// fmt.Println("REstricao: ", restricao)
+// fmt.Println("\n")
+// save(usuarios_filtrados)
+// save(avaliadores)
+// save(restricao)
+
+// // Alocacao
+// conn, err := sql.Open("sqlite3", "./insper.db")
+// if err != nil {
+// 	log.Fatal(err)
+// }
+// defer conn.Close()
+// Alocar(conn)
+
+// // out1, _ := json.MarshalIndent(mapping, "", " ")
+// // out, _ := json.MarshalIndent(usuarios_filtrados, "", "  ")
+// // out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
+// // fmt.Println("usuarios : ", usuarios_filtrados)
+// fmt.Println("\n")
+// // fmt.Println(string(out2))
 
 // }
