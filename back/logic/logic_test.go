@@ -2,6 +2,7 @@ package logic
 
 import (
 	"bytes"
+	dbpkg "candidate_alocator/back/db"
 	types "candidate_alocator/back/type"
 	"database/sql"
 	"os"
@@ -90,49 +91,8 @@ func createTestDB(t *testing.T, tmpDir string) *sql.DB {
 		t.Fatalf("failed to open sqlite db: %v", err)
 	}
 
-	statements := []string{
-		`CREATE TABLE avaliador (
-			id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-			nome TEXT NOT NULL UNIQUE,
-			email TEXT NOT NULL UNIQUE,
-			sigla TEXT NOT NULL UNIQUE
-		);`,
-		`CREATE TABLE pessoa (
-			id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-			nome TEXT NOT NULL,
-			cpf TEXT NOT NULL UNIQUE,
-			numero TEXT NOT NULL,
-			email_insper TEXT NOT NULL,
-			email_pessoal TEXT NOT NULL,
-			semestre INTEGER NOT NULL,
-			curso TEXT NOT NULL
-		);`,
-		`CREATE TABLE opcoes_horario (
-			id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-			opcao TEXT NOT NULL
-		);`,
-		`CREATE TABLE disponibilidade (
-			id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-			pessoa_id INTEGER NOT NULL,
-			horario_id INTEGER NOT NULL,
-			preferencia INTEGER NOT NULL
-		);`,
-		`CREATE TABLE restricoesNposso (
-			id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-			avaliador_id INTEGER NOT NULL,
-			candidato_id INTEGER NOT NULL
-		);`,
-		`CREATE TABLE restricoesPrefiroN (
-			id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-			avaliador_id INTEGER NOT NULL,
-			candidato_id INTEGER NOT NULL
-		);`,
-	}
-
-	for _, stmt := range statements {
-		if _, err := db.Exec(stmt); err != nil {
-			t.Fatalf("failed to exec schema statement %q: %v", stmt, err)
-		}
+	if err := dbpkg.EnsureAppSchema(db); err != nil {
+		t.Fatalf("failed to sync schema: %v", err)
 	}
 
 	t.Cleanup(func() {
@@ -266,6 +226,33 @@ func TestSuggestMappingRestricao(t *testing.T) {
 
 	if !reflect.DeepEqual(mappings, expected) {
 		t.Fatalf("unexpected mappings: %#v", mappings)
+	}
+}
+
+func TestSuggestMappingForSheet(t *testing.T) {
+	workbook := createWorkbook(t,
+		testSheet{name: "Candidatos", rows: [][]interface{}{{"A"}}},
+		testSheet{
+			name: "Avaliadores",
+			rows: [][]interface{}{
+				{"Nome", "Email"},
+				{"Ana", "ana@insper.edu.br"},
+			},
+		},
+	)
+
+	got, err := suggestMappingForSheet(workbook, 1, []string{"nome", "email", "sigla"})
+	if err != nil {
+		t.Fatalf("suggestMappingForSheet returned error: %v", err)
+	}
+
+	expected := []types.MappingItem{
+		{NomeColuna: "Nome", Indice: 0, Variavel: "nome"},
+		{NomeColuna: "Email", Indice: 1, Variavel: "email"},
+		{NomeColuna: "", Indice: 2, Variavel: "sigla"},
+	}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected mapping items: %#v", got)
 	}
 }
 
@@ -507,35 +494,270 @@ func TestSaveRestricoesFromMaps(t *testing.T) {
 	})
 }
 
-func TestFilterUniqueUsers(t *testing.T) {
-	resp := UsuariosResponse{
-		Usuarios: map[int]ValidationResult{
-			1: {Usuario: types.Candidato{Nome: "Maria"}},
-			2: {Usuario: types.Candidato{Nome: "Ana"}},
-			3: {Usuario: types.Candidato{Nome: "Bruno"}},
-		},
-		Duplicates: [][]int{{1, 3}},
+func TestGetRowsFromSheet(t *testing.T) {
+	workbook := createWorkbook(t,
+		testSheet{name: "Candidatos", rows: [][]interface{}{{"Nome"}, {"Maria"}}},
+		testSheet{name: "Avaliadores", rows: [][]interface{}{{"Nome"}, {"Ana"}}},
+	)
+
+	rows, err := getRowsFromSheet(workbook, 1)
+	if err != nil {
+		t.Fatalf("getRowsFromSheet returned error: %v", err)
 	}
 
-	got := FilterUniqueUsers(resp)
-	if len(got) != 2 {
-		t.Fatalf("expected 2 unique users, got %d", len(got))
-	}
-
-	names := []string{got[0].Nome, got[1].Nome}
-	slices.Sort(names)
-	if !reflect.DeepEqual(names, []string{"Ana", "Maria"}) {
-		t.Fatalf("unexpected users after filtering: %#v", names)
+	expected := [][]string{{"Nome"}, {"Ana"}}
+	if !reflect.DeepEqual(rows, expected) {
+		t.Fatalf("unexpected rows: %#v", rows)
 	}
 }
 
-func TestGetSliceFromMap(t *testing.T) {
-	result := getSliceFromMap(map[string]interface{}{
-		"opcoes": []interface{}{"A", "B", 3},
-	}, "opcoes")
+func TestGetAvaliadorFields(t *testing.T) {
+	got := getAvaliadorFields()
+	expected := []string{"nome", "email", "sigla"}
 
-	if !reflect.DeepEqual(result, []string{"A", "B"}) {
-		t.Fatalf("unexpected slice conversion result: %#v", result)
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected avaliador fields: %#v", got)
+	}
+}
+
+func TestGetRestricaoFields(t *testing.T) {
+	got := getRestricaoFields()
+	expected := []string{"candidato", "naoPosso", "prefiroNao"}
+
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected restricao fields: %#v", got)
+	}
+}
+
+func TestProcessData(t *testing.T) {
+	users := []types.Candidato{
+		{
+			Nome:         "Maria",
+			CPF:          "12345678901",
+			Numero:       "123456789",
+			Semestre:     "2",
+			EmailInsper:  "MARIA@AL.INSPER.EDU.BR",
+			EmailPessoal: "maria@gmail.com",
+		},
+		{
+			Nome:         "Ana",
+			CPF:          "12345678901",
+			Numero:       "abc",
+			Semestre:     "12",
+			EmailInsper:  "ana@al.insper.edu.br",
+			EmailPessoal: "invalido",
+		},
+	}
+
+	resultados, duplicados := processData(users)
+	if len(resultados) != 2 {
+		t.Fatalf("expected 2 validation results, got %d", len(resultados))
+	}
+
+	first := resultados[1].Usuario
+	if first.EmailInsper != "maria@al.insper.edu.br" {
+		t.Fatalf("expected normalized insper email, got %q", first.EmailInsper)
+	}
+
+	second := resultados[2]
+	if second.Usuario.Semestre != "" {
+		t.Fatalf("expected invalid semestre to be cleared, got %q", second.Usuario.Semestre)
+	}
+	if second.Usuario.EmailPessoal != "" {
+		t.Fatalf("expected invalid personal email to be cleared, got %q", second.Usuario.EmailPessoal)
+	}
+	if !containsErrorMessage(second.Erros, "numero inválido") {
+		t.Fatalf("expected numero inválido error, got %#v", second.Erros)
+	}
+	if len(duplicados) != 1 {
+		t.Fatalf("expected one duplicate group, got %#v", duplicados)
+	}
+}
+
+func TestGetHorarios(t *testing.T) {
+	got := getHorarios([]types.Candidato{
+		{Opcoes: []string{"Seg 10h", "Ter 10h"}},
+		{Opcoes: []string{"Ter 10h", "Qua 10h"}},
+	})
+
+	slices.Sort(got)
+	expected := []string{"Qua 10h", "Seg 10h", "Ter 10h"}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected horarios: %#v", got)
+	}
+}
+
+func TestNormalizaOpcao(t *testing.T) {
+	got := normalizaOpcao("  Seg 10H  ")
+	if got != "seg 10h" {
+		t.Fatalf("unexpected normalized option: %q", got)
+	}
+}
+
+func TestFillDb(t *testing.T) {
+	t.Run("candidatos", func(t *testing.T) {
+		withTempWorkingDir(t, func(tmpDir string) {
+			db := createTestDB(t, tmpDir)
+
+			fillDb(db, []types.Candidato{
+				{
+					Timestamp:    "2026-01-01",
+					Nome:         "Maria",
+					CPF:          "12345678901",
+					Numero:       "123456789",
+					Semestre:     "2",
+					Curso:        "ADM",
+					EmailInsper:  "maria@al.insper.edu.br",
+					EmailPessoal: "maria@gmail.com",
+					Opcoes:       []string{"Seg 10h", "Ter 14h"},
+				},
+			})
+
+			if count := fetchCount(t, db, `SELECT COUNT(*) FROM pessoa`); count != 1 {
+				t.Fatalf("expected 1 pessoa, got %d", count)
+			}
+			if count := fetchCount(t, db, `SELECT COUNT(*) FROM disponibilidade`); count != 2 {
+				t.Fatalf("expected 2 disponibilidades, got %d", count)
+			}
+		})
+	})
+
+	t.Run("avaliadores", func(t *testing.T) {
+		withTempWorkingDir(t, func(tmpDir string) {
+			db := createTestDB(t, tmpDir)
+
+			fillDb(db, []types.AvaliadorInfo{
+				{Nome: "Ana", Email: "ana@insper.edu.br", Sigla: "AN"},
+			})
+
+			if count := fetchCount(t, db, `SELECT COUNT(*) FROM avaliador`); count != 1 {
+				t.Fatalf("expected 1 avaliador, got %d", count)
+			}
+		})
+	})
+
+	t.Run("restricoes", func(t *testing.T) {
+		withTempWorkingDir(t, func(tmpDir string) {
+			db := createTestDB(t, tmpDir)
+
+			seedStatements := []string{
+				`INSERT INTO pessoa (timestamp, nome, cpf, numero, email_insper, email_pessoal, semestre, curso)
+				 VALUES ('2026-01-01', 'Maria', '12345678901', '123456789', 'maria@al.insper.edu.br', 'maria@gmail.com', 2, 'ADM');`,
+				`INSERT INTO avaliador (nome, email, sigla) VALUES ('Ana', 'ana@insper.edu.br', 'AN');`,
+				`INSERT INTO avaliador (nome, email, sigla) VALUES ('Bruno', 'bruno@insper.edu.br', 'BR');`,
+			}
+			for _, stmt := range seedStatements {
+				if _, err := db.Exec(stmt); err != nil {
+					t.Fatalf("failed to seed test data: %v", err)
+				}
+			}
+
+			fillDb(db, []types.Restricao{
+				{Candidato: "Maria", NaoPosso: "AN, BR", PrefiroNao: "BR"},
+			})
+
+			if count := fetchCount(t, db, `SELECT COUNT(*) FROM restricoesNposso`); count != 2 {
+				t.Fatalf("expected 2 restricoesNposso, got %d", count)
+			}
+			if count := fetchCount(t, db, `SELECT COUNT(*) FROM restricoesPrefiroN`); count != 1 {
+				t.Fatalf("expected 1 restricaoPrefiroN, got %d", count)
+			}
+		})
+	})
+}
+
+func TestSave(t *testing.T) {
+	t.Run("supported type", func(t *testing.T) {
+		withTempWorkingDir(t, func(tmpDir string) {
+			db := createTestDB(t, tmpDir)
+
+			err := Save([]types.AvaliadorInfo{
+				{Nome: "Ana", Email: "ana@insper.edu.br", Sigla: "AN"},
+			})
+			if err != nil {
+				t.Fatalf("Save returned error: %v", err)
+			}
+
+			if count := fetchCount(t, db, `SELECT COUNT(*) FROM avaliador`); count != 1 {
+				t.Fatalf("expected 1 avaliador, got %d", count)
+			}
+		})
+	})
+
+	t.Run("unsupported type", func(t *testing.T) {
+		if err := Save("tipo-nao-suportado"); err != nil {
+			t.Fatalf("expected unsupported type to return nil error, got %v", err)
+		}
+	})
+}
+
+func TestBuildCandidateFromRow(t *testing.T) {
+	row := []string{"2026-01-01", "Maria", "12345678901", "Seg 10h", "Ter 14h"}
+	mapping := []types.MappingItem{
+		{Indice: 0, Variavel: "timestamp"},
+		{Indice: 1, Variavel: "nome"},
+		{Indice: 2, Variavel: "cpf"},
+		{Indice: 3, Variavel: "opcao 1"},
+		{Indice: 4, Variavel: "opcao 2"},
+	}
+
+	got, err := buildCandidateFromRow(row, 2, mapping)
+	if err != nil {
+		t.Fatalf("buildCandidateFromRow returned error: %v", err)
+	}
+
+	if got.Timestamp != "2026-01-01" || got.Nome != "Maria" || got.CPF != "12345678901" {
+		t.Fatalf("unexpected candidate built from row: %#v", got)
+	}
+	if !reflect.DeepEqual(got.Opcoes, []string{"Seg 10h", "Ter 14h"}) {
+		t.Fatalf("unexpected candidate options: %#v", got.Opcoes)
+	}
+}
+
+func TestBuildStructFromRow(t *testing.T) {
+	row := []string{"Maria", "AN, BR", "BR"}
+	mapping := []types.MappingItem{
+		{Indice: 0, Variavel: "candidato"},
+		{Indice: 1, Variavel: "naoPosso"},
+		{Indice: 2, Variavel: "prefiroNao"},
+	}
+
+	got, err := buildStructFromRow[types.Restricao](row, mapping)
+	if err != nil {
+		t.Fatalf("buildStructFromRow returned error: %v", err)
+	}
+
+	expected := types.Restricao{Candidato: "Maria", NaoPosso: "AN, BR", PrefiroNao: "BR"}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected struct built from row: %#v", got)
+	}
+}
+
+func TestDecodeMapToStruct(t *testing.T) {
+	got, err := decodeMapToStruct[types.Candidato](map[string]interface{}{
+		"timestamp": "2026-01-01",
+		"nome":      "Maria",
+		"cpf":       "12345678901",
+		"opcoes":    []string{"Seg 10h"},
+	})
+	if err != nil {
+		t.Fatalf("decodeMapToStruct returned error: %v", err)
+	}
+
+	if got.Nome != "Maria" || got.CPF != "12345678901" {
+		t.Fatalf("unexpected decoded struct: %#v", got)
+	}
+	if !reflect.DeepEqual(got.Opcoes, []string{"Seg 10h"}) {
+		t.Fatalf("unexpected decoded options: %#v", got.Opcoes)
+	}
+}
+
+func TestIsStructZeroValue(t *testing.T) {
+	if !isStructZeroValue(types.AvaliadorInfo{}) {
+		t.Fatal("expected empty struct to be zero value")
+	}
+	if isStructZeroValue(types.AvaliadorInfo{Nome: "Ana"}) {
+		t.Fatal("expected non-empty struct to not be zero value")
 	}
 }
 

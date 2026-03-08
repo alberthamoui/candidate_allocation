@@ -149,20 +149,10 @@ export default function VerifyUserPage({
 			return;
 		}
 		console.log("edited users -> ", editedUsers);
-		// Convert editedUsers to the format expected by backend
-		const usuariosParaSalvar = Object.entries(editedUsers).map(
-			([id, user]) => ({
-				timestamp: user.timestamp || "",
-				nome: user.nome || "",
-				cpf: user.cpf || "",
-				numero: user.numero || "",
-				semestre: user.semestre || "",
-				curso: user.curso || "",
-				email_insper: user.email_insper || "",
-				email_pessoal: user.email_pessoal || "",
-				opcoes: user.opcoes || [],
-			})
-		);
+		const usuariosParaSalvar = Object.values(editedUsers).map((user) => ({
+			...user,
+			opcoes: Array.isArray(user.opcoes) ? user.opcoes : [],
+		}));
 
 		console.log("Usuários para salvar:", usuariosParaSalvar);
 		(async () => {

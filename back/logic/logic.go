@@ -41,6 +41,8 @@ type UsuariosResponse struct {
 	Duplicates [][]int                  `json:"duplicates"`
 }
 
+// SuggestMapping lê a aba de candidatos e monta uma sugestão inicial de
+// mapeamento entre colunas do Excel e campos esperados pela aplicação.
 func SuggestMapping(data []byte, quantidadeOpcoes int) ([]types.MappingItem, error) {
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
@@ -82,6 +84,8 @@ func SuggestMapping(data []byte, quantidadeOpcoes int) ([]types.MappingItem, err
 	return mapping_json, nil
 }
 
+// SuggestMappingAvaliador faz a mesma sugestão de mapeamento, mas usando a aba
+// de avaliadores e os campos definidos no tipo AvaliadorInfo.
 func SuggestMappingAvaliador(data []byte) ([]types.MappingItem, error) {
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
@@ -115,6 +119,8 @@ func SuggestMappingAvaliador(data []byte) ([]types.MappingItem, error) {
 	return ProcessMapping(mappingList)
 }
 
+// SuggestMappingRestricao sugere o mapeamento da aba de restrições com base nos
+// campos declarados no tipo Restricao.
 func SuggestMappingRestricao(data []byte) ([]types.MappingItem, error) {
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
@@ -146,6 +152,8 @@ func SuggestMappingRestricao(data []byte) ([]types.MappingItem, error) {
 	return ProcessMapping(mappingList)
 }
 
+// suggestMappingForSheet concentra a lógica genérica de sugestão de mapping
+// para qualquer aba a partir do índice da planilha e da lista de variáveis.
 func suggestMappingForSheet(data []byte, sheetIndex int, variables []string) ([]types.MappingItem, error) {
 	rows, err := getRowsFromSheet(data, sheetIndex)
 	if err != nil {
@@ -168,6 +176,8 @@ func suggestMappingForSheet(data []byte, sheetIndex int, variables []string) ([]
 	return ProcessMapping(mappingList)
 }
 
+// BuildUsuariosWithMapping percorre a aba de candidatos, aplica o mapping
+// definido na interface e devolve os candidatos já validados e agrupados.
 func BuildUsuariosWithMapping(data []byte, nOpcoes int, mappingItems []types.MappingItem) (UsuariosResponse, error) {
 	// Abre o arquivo Excel a partir dos dados em []byte
 	readerData := bytes.NewReader(data)
@@ -189,44 +199,9 @@ func BuildUsuariosWithMapping(data []byte, nOpcoes int, mappingItems []types.Map
 	var users []types.Candidato
 
 	for _, row := range rows[1:] {
-		u := types.Candidato{
-			Opcoes: make([]string, nOpcoes),
-		}
-		// Para cada mapping, pega o conteúdo da coluna correspondente e atribui
-		for _, mItem := range mappingItems {
-			if mItem.Indice >= len(row) {
-				continue
-			}
-			cell := row[mItem.Indice]
-			switch mItem.Variavel {
-			case "timestamp":
-				u.Timestamp = cell
-			case "nome":
-				u.Nome = cell
-			case "cpf":
-				u.CPF = cell
-			case "numero":
-				u.Numero = cell
-			case "semestre":
-				u.Semestre = cell
-			case "curso":
-				u.Curso = cell
-			case "email_insper":
-				u.EmailInsper = cell
-			case "email_pessoal":
-				u.EmailPessoal = cell
-			default:
-				// Se for uma opção, o mItem.UserField deve estar no formato "opcao X"
-				if strings.HasPrefix(mItem.Variavel, "opcao") {
-					parts := strings.Split(mItem.Variavel, " ")
-					if len(parts) == 2 {
-						optionNum, err := strconv.Atoi(parts[1])
-						if err == nil && optionNum > 0 && optionNum <= nOpcoes {
-							u.Opcoes[optionNum-1] = cell
-						}
-					}
-				}
-			}
+		u, err := buildCandidateFromRow(row, nOpcoes, mappingItems)
+		if err != nil {
+			return UsuariosResponse{}, err
 		}
 		users = append(users, u)
 	}
@@ -235,6 +210,8 @@ func BuildUsuariosWithMapping(data []byte, nOpcoes int, mappingItems []types.Map
 	return UsuariosResponse{Usuarios: users_limpo, Duplicates: duplicatedIndices}, nil
 }
 
+// BuildAvaliadoresWithMapping monta os avaliadores a partir da segunda aba,
+// ignora linhas vazias e já persiste o resultado no banco.
 func BuildAvaliadoresWithMapping(data []byte, mappingItems []types.MappingItem) ([]types.AvaliadorInfo, error) {
 
 	if data == nil {
@@ -267,25 +244,13 @@ func BuildAvaliadoresWithMapping(data []byte, mappingItems []types.MappingItem) 
 
 	// percorre linhas (ignorando cabeçalho)
 	for _, row := range rows[1:] {
-		av := types.AvaliadorInfo{}
-		for _, m := range mappingItems {
-			if m.Indice >= len(row) {
-				continue // coluna vazia nesta linha
-			}
-			val := strings.TrimSpace(row[m.Indice])
-
-			switch strings.ToLower(m.Variavel) {
-			case "nome":
-				av.Nome = val
-			case "email":
-				av.Email = val
-			case "sigla":
-				av.Sigla = val
-			}
+		av, err := buildStructFromRow[types.AvaliadorInfo](row, mappingItems)
+		if err != nil {
+			return nil, err
 		}
 
 		// ignora linhas totalmente vazias
-		if av.Nome == "" && av.Email == "" && av.Sigla == "" {
+		if isStructZeroValue(av) {
 			continue
 		}
 		avaliadores = append(avaliadores, av)
@@ -294,6 +259,8 @@ func BuildAvaliadoresWithMapping(data []byte, mappingItems []types.MappingItem) 
 	return avaliadores, nil
 }
 
+// BuildRestricoesWithMapping converte a aba de restrições em structs prontos
+// para uso posterior no salvamento e na etapa de alocação.
 func BuildRestricoesWithMapping(data []byte, mappingItems []types.MappingItem) ([]types.Restricao, error) {
 	rows, err := getRowsFromSheet(data, 2)
 	if err != nil {
@@ -305,21 +272,9 @@ func BuildRestricoesWithMapping(data []byte, mappingItems []types.MappingItem) (
 
 	var restricoes []types.Restricao
 	for _, row := range rows[1:] {
-		r := types.Restricao{}
-		for _, m := range mappingItems {
-			if m.Indice >= len(row) {
-				continue
-			}
-
-			cell := row[m.Indice]
-			switch m.Variavel {
-			case "candidato":
-				r.Candidato = cell
-			case "naoPosso":
-				r.NaoPosso = cell
-			case "prefiroNao":
-				r.PrefiroNao = cell
-			}
+		r, err := buildStructFromRow[types.Restricao](row, mappingItems)
+		if err != nil {
+			return nil, err
 		}
 		restricoes = append(restricoes, r)
 	}
@@ -327,33 +282,31 @@ func BuildRestricoesWithMapping(data []byte, mappingItems []types.MappingItem) (
 	return restricoes, nil
 }
 
+// SaveRestricoesFromMaps converte o payload genérico vindo do frontend para a
+// struct de domínio e delega o salvamento para a função Save.
 func SaveRestricoesFromMaps(restricaoMaps []map[string]interface{}) error {
-	var restricoes []types.Restricao
+	restricoes := make([]types.Restricao, 0, len(restricaoMaps))
 	for _, m := range restricaoMaps {
-		restricoes = append(restricoes, types.Restricao{
-			Candidato:  getStringFromMap(m, "candidato"),
-			NaoPosso:   getStringFromMap(m, "naoPosso"),
-			PrefiroNao: getStringFromMap(m, "prefiroNao"),
-		})
+		restricao, err := decodeMapToStruct[types.Restricao](m)
+		if err != nil {
+			return err
+		}
+		restricoes = append(restricoes, restricao)
 	}
 
 	return Save(restricoes)
 }
 
+// SaveUsuariosFromMaps converte o payload editado no frontend em candidatos e
+// usa o fluxo padrão de persistência da aplicação.
 func SaveUsuariosFromMaps(candidatoMaps []map[string]interface{}) error {
-	var candidatos []types.Candidato
+	candidatos := make([]types.Candidato, 0, len(candidatoMaps))
 	for _, userMap := range candidatoMaps {
-		candidatos = append(candidatos, types.Candidato{
-			Timestamp:    getStringFromMap(userMap, "timestamp"),
-			Nome:         getStringFromMap(userMap, "nome"),
-			CPF:          getStringFromMap(userMap, "cpf"),
-			Numero:       getStringFromMap(userMap, "numero"),
-			Semestre:     getStringFromMap(userMap, "semestre"),
-			Curso:        getStringFromMap(userMap, "curso"),
-			EmailInsper:  getStringFromMap(userMap, "email_insper"),
-			EmailPessoal: getStringFromMap(userMap, "email_pessoal"),
-			Opcoes:       getSliceFromMap(userMap, "opcoes"),
-		})
+		candidato, err := decodeMapToStruct[types.Candidato](userMap)
+		if err != nil {
+			return err
+		}
+		candidatos = append(candidatos, candidato)
 	}
 
 	return Save(candidatos)
@@ -404,27 +357,8 @@ func ProcessMapping(items []string) ([]types.MappingItem, error) {
 	return result, nil
 }
 
-func FilterUniqueUsers(resp UsuariosResponse) []types.Candidato {
-	skip := make(map[int]struct{})
-	for _, grp := range resp.Duplicates {
-		for i, idx := range grp {
-			if i > 0 {
-				skip[idx] = struct{}{}
-			}
-		}
-	}
-
-	var out []types.Candidato
-	for idx, vr := range resp.Usuarios {
-		if _, isDup := skip[idx]; isDup {
-			continue
-		}
-		out = append(out, vr.Usuario)
-	}
-
-	return out
-}
-
+// getRowsFromSheet abre uma planilha em memória e retorna todas as linhas da
+// aba indicada, validando se o índice realmente existe.
 func getRowsFromSheet(data []byte, sheetIndex int) ([][]string, error) {
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
@@ -445,15 +379,11 @@ func getRowsFromSheet(data []byte, sheetIndex int) ([][]string, error) {
 	return rows, nil
 }
 
+// getUsuarioFields lista os campos mapeáveis do tipo Candidato e expande o
+// campo virtual de opções conforme a quantidade pedida.
 func getUsuarioFields(quantidadeOpcoes int) []string {
-	t := reflect.TypeOf(types.Candidato{})
 	var fields []string
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		tag := field.Tag.Get("json")
-		if tag == "" || tag == "-" {
-			continue
-		}
+	for _, tag := range types.JSONFieldNames(types.Candidato{}) {
 		if tag == "opcoes" {
 			for j := 1; j <= quantidadeOpcoes; j++ {
 				fields = append(fields, fmt.Sprintf("opcao %d", j))
@@ -465,30 +395,19 @@ func getUsuarioFields(quantidadeOpcoes int) []string {
 	return fields
 }
 
+// getAvaliadorFields devolve os nomes JSON dos campos que podem ser mapeados
+// para avaliadores.
 func getAvaliadorFields() []string {
-	t := reflect.TypeOf(types.AvaliadorInfo{})
-	var fields []string
-	for i := 0; i < t.NumField(); i++ {
-		tag := t.Field(i).Tag.Get("json")
-		if tag != "" && tag != "-" {
-			fields = append(fields, tag)
-		}
-	}
-	return fields
+	return types.JSONFieldNames(types.AvaliadorInfo{})
 }
 
+// getRestricaoFields devolve os nomes JSON usados no mapeamento de restrições.
 func getRestricaoFields() []string {
-	t := reflect.TypeOf(types.Restricao{})
-	var fields []string
-	for i := 0; i < t.NumField(); i++ {
-		tag := t.Field(i).Tag.Get("json")
-		if tag != "" && tag != "-" {
-			fields = append(fields, tag)
-		}
-	}
-	return fields
+	return types.RestricaoFieldNames()
 }
 
+// processData aplica validações básicas nos candidatos e encontra duplicidades
+// por CPF e e-mails para alimentar a etapa de revisão manual.
 func processData(data []types.Candidato) (map[int]ValidationResult, [][]int) {
 	resultados := make(map[int]ValidationResult)
 
@@ -585,6 +504,8 @@ func processData(data []types.Candidato) (map[int]ValidationResult, [][]int) {
 	return resultados, duplicatedIndices
 }
 
+// getHorarios coleta todas as opções de horário presentes nos candidatos sem
+// repetir valores, para depois persisti-las na tabela de horários.
 func getHorarios(data []types.Candidato) []string {
 	horariosMap := make(map[string]bool)
 	for _, usuario := range data {
@@ -600,10 +521,14 @@ func getHorarios(data []types.Candidato) []string {
 	return horariosUnicos
 }
 
+// normalizaOpcao padroniza um horário removendo espaços extras e convertendo o
+// texto para minúsculas antes de comparar ou salvar.
 func normalizaOpcao(op string) string {
 	return strings.TrimSpace(strings.ToLower(op))
 }
 
+// fillDb recebe um conjunto de dados de domínio e executa as inserções
+// necessárias nas tabelas relacionadas do banco.
 func fillDb(db *sql.DB, data interface{}) {
 	switch v := data.(type) {
 	case []types.Candidato:
@@ -618,8 +543,11 @@ func fillDb(db *sql.DB, data interface{}) {
 		}
 
 		for _, usuario := range v {
-			semestreInt, _ := strconv.Atoi(usuario.Semestre)
-			id, _ := dbpkg.AddPessoa(db, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
+			id, err := dbpkg.InsertStruct(db, "pessoa", usuario, types.CandidateFields())
+			if err != nil {
+				fmt.Printf("Erro ao adicionar candidato %s: %v\n", usuario.Nome, err)
+				continue
+			}
 			for idx, opcao := range usuario.Opcoes {
 				opcaoNormalizada := normalizaOpcao(opcao)
 				if opcaoNormalizada == "" {
@@ -634,7 +562,7 @@ func fillDb(db *sql.DB, data interface{}) {
 		}
 	case []types.AvaliadorInfo:
 		for _, a := range v {
-			if _, err := dbpkg.AddAvaliador(db, a.Nome, a.Email, a.Sigla); err != nil {
+			if _, err := dbpkg.InsertStruct(db, "avaliador", a, types.AvaliadorFields()); err != nil {
 				fmt.Printf("Erro ao adicionar avaliador %s: %v\n", a.Nome, err)
 			}
 		}
@@ -685,6 +613,8 @@ func fillDb(db *sql.DB, data interface{}) {
 	}
 }
 
+// Save abre a conexão padrão do projeto e delega a persistência para fillDb de
+// acordo com o tipo concreto recebido.
 func Save(data interface{}) error {
 	conn, err := sql.Open("sqlite3", "./insper.db")
 	if err != nil {
@@ -702,26 +632,68 @@ func Save(data interface{}) error {
 	return nil
 }
 
-func getStringFromMap(m map[string]interface{}, key string) string {
-	if val, ok := m[key]; ok {
-		if str, ok := val.(string); ok {
-			return str
-		}
-	}
-	return ""
-}
+// buildCandidateFromRow aplica o mapping de uma linha do Excel a um candidato,
+// incluindo o preenchimento das opções em posições ordenadas.
+func buildCandidateFromRow(row []string, nOpcoes int, mappingItems []types.MappingItem) (types.Candidato, error) {
+	record := make(map[string]interface{})
+	record["opcoes"] = make([]string, nOpcoes)
 
-func getSliceFromMap(m map[string]interface{}, key string) []string {
-	if val, ok := m[key]; ok {
-		if slice, ok := val.([]interface{}); ok {
-			var result []string
-			for _, item := range slice {
-				if str, ok := item.(string); ok {
-					result = append(result, str)
+	for _, mItem := range mappingItems {
+		if mItem.Indice >= len(row) {
+			continue
+		}
+
+		cell := strings.TrimSpace(row[mItem.Indice])
+		if strings.HasPrefix(mItem.Variavel, "opcao") {
+			parts := strings.Split(mItem.Variavel, " ")
+			if len(parts) == 2 {
+				optionNum, err := strconv.Atoi(parts[1])
+				if err == nil && optionNum > 0 && optionNum <= nOpcoes {
+					record["opcoes"].([]string)[optionNum-1] = cell
 				}
 			}
-			return result
+			continue
 		}
+
+		record[mItem.Variavel] = cell
 	}
-	return []string{}
+
+	return decodeMapToStruct[types.Candidato](record)
+}
+
+// buildStructFromRow monta qualquer struct baseada em tags JSON a partir de uma
+// linha da planilha e do mapping configurado.
+func buildStructFromRow[T any](row []string, mappingItems []types.MappingItem) (T, error) {
+	record := make(map[string]interface{})
+	for _, mapping := range mappingItems {
+		if mapping.Indice >= len(row) {
+			continue
+		}
+		record[mapping.Variavel] = strings.TrimSpace(row[mapping.Indice])
+	}
+
+	return decodeMapToStruct[T](record)
+}
+
+// decodeMapToStruct usa JSON como ponte para popular uma struct tipada a partir
+// de um map genérico vindo do Excel ou do frontend.
+func decodeMapToStruct[T any](record map[string]interface{}) (T, error) {
+	var target T
+
+	payload, err := json.Marshal(record)
+	if err != nil {
+		return target, err
+	}
+
+	if err := json.Unmarshal(payload, &target); err != nil {
+		return target, err
+	}
+
+	return target, nil
+}
+
+// isStructZeroValue verifica se todos os campos da struct ainda estão com seus
+// valores zero, o que ajuda a ignorar linhas vazias.
+func isStructZeroValue[T any](value T) bool {
+	return reflect.DeepEqual(value, *new(T))
 }

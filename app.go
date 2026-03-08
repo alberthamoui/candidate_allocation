@@ -69,16 +69,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("\n")
 	fmt.Println("mapping candidatos : ", mapping)
-	fmt.Println("\n")
+	fmt.Println()
 
-	// mappingAvaliador, err := app.SuggestMappingAvaliador()
+	mappingAvaliador, err := app.SuggestMappingAvaliador()
+	fmt.Println("mapping avaliadores : ", mappingAvaliador)
+	fmt.Println()
 
 	// mappingRestricao, err := app.SuggestMappingRestricao()
 
-	// fmt.Println("mapping avaliadores : ", mappingAvaliador)
-	// fmt.Println("\n")
 	// fmt.Println("mapping restricao : ", mappingRestricao)
 	// fmt.Println("\n")
 

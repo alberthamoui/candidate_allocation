@@ -26,18 +26,6 @@ func AddHorario(db *sql.DB, opcao string) (int64, error) {
 	return existing, err
 }
 
-// AddPessoa insere um novo registro em pessoa
-func AddPessoa(db *sql.DB, nome, cpf, numero, emailInsper, emailPessoal string, semestre int, curso string) (int64, error) {
-	res, err := db.Exec(`
-        INSERT INTO pessoa (nome,cpf, numero, email_insper, email_pessoal,  semestre, curso)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, nome, cpf, numero, emailInsper, emailPessoal, semestre, curso)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
-}
-
 // AddDisponibilidade insere um vínculo em disponibilidade
 func AddDisponibilidade(db *sql.DB, pessoaID, horarioID, preferencia int64) (int64, error) {
 	res, err := db.Exec(`
@@ -48,25 +36,6 @@ func AddDisponibilidade(db *sql.DB, pessoaID, horarioID, preferencia int64) (int
 		return 0, err
 	}
 	return res.LastInsertId()
-}
-
-func AddAvaliador(db *sql.DB, nome, email, sigla string) (int64, error) {
-	res, err := db.Exec(`
-		INSERT OR IGNORE INTO avaliador (nome, email, sigla)
-		VALUES (?, ?, ?)
-	`, nome, email, sigla)
-	if err != nil {
-		return 0, err
-	}
-
-	id, _ := res.LastInsertId()
-	if id != 0 {
-		return id, nil // inserido agora
-	}
-
-	// reaproveita avaliador existente (usa sigla, que é única)
-	err = db.QueryRow(`SELECT id FROM avaliador WHERE sigla = ?`, sigla).Scan(&id)
-	return id, err
 }
 
 func AddRestricaoNposso(db *sql.DB, avaliadorID, candidatoID int64) (int64, error) {

@@ -1,21 +1,21 @@
 package types
 
 type Candidato struct {
-	Timestamp    string   `json:"timestamp"`
-	Nome         string   `json:"nome"`
-	CPF          string   `json:"cpf"`
-	Numero       string   `json:"numero"`
-	Semestre     string   `json:"semestre"`
-	Curso        string   `json:"curso"`
-	EmailInsper  string   `json:"email_insper"`
-	EmailPessoal string   `json:"email_pessoal"`
-	Opcoes       []string `json:"opcoes"`
+	Timestamp    string   `json:"timestamp" db:"type=TEXT"`
+	Nome         string   `json:"nome" db:"type=TEXT;required"`
+	CPF          string   `json:"cpf" db:"type=TEXT;required;unique"`
+	Numero       string   `json:"numero" db:"type=TEXT;required"`
+	Semestre     string   `json:"semestre" db:"type=INTEGER;required"`
+	Curso        string   `json:"curso" db:"type=TEXT;required"`
+	EmailInsper  string   `json:"email_insper" db:"type=TEXT;required"`
+	EmailPessoal string   `json:"email_pessoal" db:"type=TEXT;required"`
+	Opcoes       []string `json:"opcoes" db:"-"`
 }
 
 type AvaliadorInfo struct {
-	Nome  string `json:"nome"`
-	Email string `json:"email"`
-	Sigla string `json:"sigla"`
+	Nome  string `json:"nome" db:"type=TEXT;required;unique"`
+	Email string `json:"email" db:"type=TEXT;required;unique"`
+	Sigla string `json:"sigla" db:"type=TEXT;required;unique"`
 }
 
 type Restricao struct {
