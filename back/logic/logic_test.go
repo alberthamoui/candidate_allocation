@@ -181,7 +181,7 @@ func TestSuggestMappingAvaliadorUsesCurrentSchema(t *testing.T) {
 		t.Fatalf("SuggestMappingAvaliador returned error: %v", err)
 	}
 
-	expected := expectedMappingItems(avaliadorHeaders(), types.JSONFieldNames(types.AvaliadorInfo{}))
+	expected := expectedMappingItems(avaliadorHeaders(), mappableAvaliadorFields())
 
 	if !reflect.DeepEqual(mappings, expected) {
 		t.Fatalf("unexpected mappings: %#v", mappings)
@@ -357,7 +357,7 @@ func TestBuildAvaliadoresWithMappingSupportsCurrentSchema(t *testing.T) {
 			},
 		)
 
-		mappingItems := expectedMappingItems(header, types.JSONFieldNames(types.AvaliadorInfo{}))
+		mappingItems := expectedMappingItems(header, mappableAvaliadorFields())
 
 		got, err := BuildAvaliadoresWithMapping(workbook, mappingItems)
 		if err != nil {
@@ -535,7 +535,7 @@ func TestGetRowsFromSheet(t *testing.T) {
 
 func TestGetAvaliadorFields(t *testing.T) {
 	got := getAvaliadorFields()
-	expected := types.JSONFieldNames(types.AvaliadorInfo{})
+	expected := mappableAvaliadorFields()
 
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected avaliador fields: %#v", got)
@@ -693,7 +693,10 @@ func TestSave(t *testing.T) {
 		withTempWorkingDir(t, func(tmpDir string) {
 			db := createTestDB(t, tmpDir)
 
-			err := Save([]types.AvaliadorInfo{expectedAvaliadorInfo()})
+			avaliador := expectedAvaliadorInfo()
+			avaliador.Extras = avaliadorExtrasPayload()
+
+			err := Save([]types.AvaliadorInfo{avaliador})
 			if err != nil {
 				t.Fatalf("Save returned error: %v", err)
 			}
@@ -768,6 +771,9 @@ func TestDecodeMapToStruct(t *testing.T) {
 		"nome":      "Maria",
 		"cpf":       "12345678901",
 		"opcoes":    []string{"Seg 10h"},
+		"extras": map[string]string{
+			"linkedin": "linkedin.com/in/maria",
+		},
 	})
 	if err != nil {
 		t.Fatalf("decodeMapToStruct returned error: %v", err)
@@ -778,6 +784,9 @@ func TestDecodeMapToStruct(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.Opcoes, []string{"Seg 10h"}) {
 		t.Fatalf("unexpected decoded options: %#v", got.Opcoes)
+	}
+	if !reflect.DeepEqual(got.Extras, map[string]string{"linkedin": "linkedin.com/in/maria"}) {
+		t.Fatalf("unexpected decoded extras: %#v", got.Extras)
 	}
 }
 
@@ -815,9 +824,8 @@ func expectedMappingItems(headers []string, variables []string) []types.MappingI
 }
 
 func candidateMappingVariables(optionCount int) []string {
-	fields := types.JSONFieldNames(types.Candidato{})
 	var variables []string
-	for _, field := range fields {
+	for _, field := range mappableCandidateFields() {
 		if field == "opcoes" {
 			for i := 1; i <= optionCount; i++ {
 				variables = append(variables, fmt.Sprintf("opcao %d", i))
@@ -901,7 +909,7 @@ func expectedCandidateForBuild() types.Candidato {
 	candidate := types.Candidato{}
 	rv := reflect.ValueOf(&candidate).Elem()
 	for _, field := range types.CandidateFields() {
-		if field.JSONName == "opcoes" {
+		if field.JSONName == "opcoes" || field.JSONName == "extras" {
 			continue
 		}
 		rv.Field(field.Index).SetString(candidateValueForVariable(field.JSONName))
@@ -914,6 +922,10 @@ func candidateMapPayload() map[string]interface{} {
 	payload := make(map[string]interface{})
 	for _, field := range types.CandidateFields() {
 		if field.JSONName == "opcoes" {
+			continue
+		}
+		if field.JSONName == "extras" {
+			payload[field.JSONName] = candidateExtrasPayload()
 			continue
 		}
 		payload[field.JSONName] = candidateValueForVariable(field.JSONName)
@@ -929,6 +941,10 @@ func candidateExpectedDBValues() map[string]string {
 			continue
 		}
 
+		if field.JSONName == "extras" {
+			expected[field.ColumnName] = candidateExtrasJSON()
+			continue
+		}
 		value := candidateValueForVariable(field.JSONName)
 		if field.SQLiteType == "INTEGER" {
 			value = strconv.Itoa(mustAtoi(value))
@@ -939,7 +955,7 @@ func candidateExpectedDBValues() map[string]string {
 }
 
 func avaliadorHeaders() []string {
-	fields := types.JSONFieldNames(types.AvaliadorInfo{})
+	fields := mappableAvaliadorFields()
 	headers := make([]string, 0, len(fields))
 	for _, field := range fields {
 		switch field {
@@ -957,7 +973,7 @@ func avaliadorHeaders() []string {
 }
 
 func avaliadorValues() []string {
-	fields := types.JSONFieldNames(types.AvaliadorInfo{})
+	fields := mappableAvaliadorFields()
 	values := make([]string, 0, len(fields))
 	for _, field := range fields {
 		values = append(values, avaliadorValueForField(field))
@@ -982,6 +998,9 @@ func expectedAvaliadorInfo() types.AvaliadorInfo {
 	avaliador := types.AvaliadorInfo{}
 	rv := reflect.ValueOf(&avaliador).Elem()
 	for _, field := range types.AvaliadorFields() {
+		if field.JSONName == "extras" {
+			continue
+		}
 		rv.Field(field.Index).SetString(avaliadorValueForField(field.JSONName))
 	}
 	return avaliador
@@ -993,9 +1012,58 @@ func avaliadorExpectedDBValues() map[string]string {
 		if !field.Persist {
 			continue
 		}
+		if field.JSONName == "extras" {
+			expected[field.ColumnName] = avaliadorExtrasJSON()
+			continue
+		}
 		expected[field.ColumnName] = avaliadorValueForField(field.JSONName)
 	}
 	return expected
+}
+
+func mappableCandidateFields() []string {
+	fields := types.JSONFieldNames(types.Candidato{})
+	filtered := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if field == "extras" {
+			continue
+		}
+		filtered = append(filtered, field)
+	}
+	return filtered
+}
+
+func mappableAvaliadorFields() []string {
+	fields := types.JSONFieldNames(types.AvaliadorInfo{})
+	filtered := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if field == "extras" {
+			continue
+		}
+		filtered = append(filtered, field)
+	}
+	return filtered
+}
+
+func candidateExtrasPayload() map[string]string {
+	return map[string]string{
+		"linkedin":      "linkedin.com/in/maria",
+		"empresa_atual": "XP",
+	}
+}
+
+func candidateExtrasJSON() string {
+	return `{"empresa_atual":"XP","linkedin":"linkedin.com/in/maria"}`
+}
+
+func avaliadorExtrasPayload() map[string]string {
+	return map[string]string{
+		"area": "Financas",
+	}
+}
+
+func avaliadorExtrasJSON() string {
+	return `{"area":"Financas"}`
 }
 
 func interfaceSlice(values []string) []interface{} {

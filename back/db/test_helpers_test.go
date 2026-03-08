@@ -3,6 +3,7 @@ package db
 import (
 	types "candidate_alocator/back/type"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -227,6 +228,16 @@ func setSyntheticFieldValue(t *testing.T, field types.FieldSchema, dest reflect.
 	case reflect.Bool:
 		dest.SetBool(true)
 		return "1"
+	case reflect.Map:
+		value := map[string]string{
+			fmt.Sprintf("%s_extra_%d", field.JSONName, idx): fmt.Sprintf("valor_%d", idx),
+		}
+		dest.Set(reflect.ValueOf(value))
+		payload, err := json.Marshal(value)
+		if err != nil {
+			t.Fatalf("failed to marshal synthetic map for %s: %v", field.GoName, err)
+		}
+		return string(payload)
 	default:
 		t.Fatalf("unsupported field kind %s for %s", dest.Kind(), field.GoName)
 		return ""
@@ -236,6 +247,15 @@ func setSyntheticFieldValue(t *testing.T, field types.FieldSchema, dest reflect.
 func syntheticDBValue(field types.FieldSchema, idx int) any {
 	if field.SQLiteType == "INTEGER" {
 		return 100 + idx
+	}
+	if field.Kind == reflect.Map {
+		payload, err := json.Marshal(map[string]string{
+			fmt.Sprintf("%s_legacy_%d", field.JSONName, idx): fmt.Sprintf("valor_legacy_%d", idx),
+		})
+		if err != nil {
+			panic(err)
+		}
+		return string(payload)
 	}
 	return fmt.Sprintf("%s_legacy_%d", field.JSONName, idx)
 }

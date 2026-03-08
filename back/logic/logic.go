@@ -388,6 +388,9 @@ func getRowsFromSheet(data []byte, sheetIndex int) ([][]string, error) {
 func getUsuarioFields(quantidadeOpcoes int) []string {
 	var fields []string
 	for _, tag := range types.JSONFieldNames(types.Candidato{}) {
+		if tag == "extras" {
+			continue
+		}
 		if tag == "opcoes" {
 			for j := 1; j <= quantidadeOpcoes; j++ {
 				fields = append(fields, fmt.Sprintf("opcao %d", j))
@@ -402,7 +405,14 @@ func getUsuarioFields(quantidadeOpcoes int) []string {
 // getAvaliadorFields devolve os nomes JSON dos campos que podem ser mapeados
 // para avaliadores.
 func getAvaliadorFields() []string {
-	return types.JSONFieldNames(types.AvaliadorInfo{})
+	var fields []string
+	for _, tag := range types.JSONFieldNames(types.AvaliadorInfo{}) {
+		if tag == "extras" {
+			continue
+		}
+		fields = append(fields, tag)
+	}
+	return fields
 }
 
 // getRestricaoFields devolve os nomes JSON usados no mapeamento de restrições.

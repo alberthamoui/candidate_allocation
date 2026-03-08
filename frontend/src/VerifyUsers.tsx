@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-	PencilIcon,
 	ExclamationTriangleIcon,
 	CheckCircleIcon,
 	XMarkIcon,
-	TrashIcon,
 } from "@heroicons/react/24/outline";
-import { UserCard } from "./UserCard";
+import { UserCard, type MapUsuario, type UserExtras } from "./UserCard";
 
 import {
 	SaveUsuariosFromMaps,
@@ -19,13 +17,9 @@ interface ErrorItem {
 	msg: string;
 }
 
-interface Usuario {
-	[key: string]: any;
-}
-
 interface UserWrapper {
 	erros: ErrorItem[];
-	usuario: Usuario;
+	usuario: MapUsuario;
 }
 
 interface VerifyUserPageProps {
@@ -41,31 +35,200 @@ export default function VerifyUserPage({
 	duplicates,
 	duplicateFields,
 }: VerifyUserPageProps) {
+	const cloneExtras = (extras: unknown): UserExtras => {
+		if (!extras || typeof extras !== "object" || Array.isArray(extras)) {
+			return {};
+		}
+
+		return Object.fromEntries(
+			Object.entries(extras as Record<string, unknown>).map(([key, value]) => [
+				key,
+				String(value ?? ""),
+			])
+		);
+	};
+
+	const cloneUser = (user: MapUsuario): MapUsuario => ({
+		...user,
+		opcoes: Array.isArray(user.opcoes) ? [...user.opcoes] : [],
+		extras: cloneExtras(user.extras),
+	});
+
 	const makeEditableCopy = () =>
 		Object.fromEntries(
-			Object.entries(usuarios).map(([id, u]) => [id, { ...u.usuario }])
+			Object.entries(usuarios).map(([id, u]) => [id, cloneUser(u.usuario)])
 		);
 
-	const [editedUsers, setEditedUsers] = useState<Record<number, Usuario>>(
+	const [editedUsers, setEditedUsers] = useState<Record<number, MapUsuario>>(
 		makeEditableCopy()
 	);
 	const [dupGroups, setDupGroups] = useState<number[][]>(duplicates);
 	const [acceptedIds, setAcceptedIds] = useState<Set<number>>(new Set());
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-	// ... existing helper functions ...
 	const getGroup = (id: number) =>
 		duplicates.find((g) => g.includes(id)) || [];
+
+	const coreKeysForUser = (user: MapUsuario) =>
+		Object.keys(user).filter((key) => key !== "extras");
+
+	const normalizeExtraKey = (raw: string) =>
+		raw
+			.normalize("NFD")
+			.replace(/[\u0300-\u036f]/g, "")
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "_")
+			.replace(/^_+|_+$/g, "");
+
+	const parseOpcoes = (value: string) =>
+		value
+			.split(",")
+			.map((item) => item.trim())
+			.filter(Boolean);
+
+	const makeUniqueExtraKey = (user: MapUsuario) => {
+		const extras = user.extras ?? {};
+		const base = "novo_campo";
+		if (!extras[base]) {
+			return base;
+		}
+
+		let counter = 2;
+		for (;;) {
+			const key = `${base}_${counter}`;
+			if (!extras[key]) {
+				return key;
+			}
+			counter++;
+		}
+	};
 
 	function handleCellChange(
 		userId: number,
 		field: string,
 		value: string | number
 	) {
-		setEditedUsers((prev) => ({
-			...prev,
-			[userId]: { ...prev[userId], [field]: value },
-		}));
+		setEditedUsers((prev) => {
+			const user = prev[userId];
+			if (!user) {
+				return prev;
+			}
+
+			const nextValue =
+				field === "opcoes" ? parseOpcoes(String(value)) : value;
+
+			return {
+				...prev,
+				[userId]: { ...user, [field]: nextValue },
+			};
+		});
+	}
+
+	function handleExtraValueChange(userId: number, key: string, value: string) {
+		setEditedUsers((prev) => {
+			const user = prev[userId];
+			if (!user) {
+				return prev;
+			}
+
+			return {
+				...prev,
+				[userId]: {
+					...user,
+					extras: {
+						...(user.extras ?? {}),
+						[key]: value,
+					},
+				},
+			};
+		});
+	}
+
+	function handleExtraKeyChange(
+		userId: number,
+		currentKey: string,
+		nextKey: string
+	) {
+		setEditedUsers((prev) => {
+			const user = prev[userId];
+			if (!user) {
+				return prev;
+			}
+
+			const normalizedKey = normalizeExtraKey(nextKey);
+			if (!normalizedKey) {
+				setErrorMsg("A chave do campo extra não pode ficar vazia.");
+				return prev;
+			}
+			if (coreKeysForUser(user).includes(normalizedKey)) {
+				setErrorMsg(
+					`A chave "${normalizedKey}" conflita com um campo principal do usuário.`
+				);
+				return prev;
+			}
+
+			const extras = { ...(user.extras ?? {}) };
+			if (normalizedKey !== currentKey && normalizedKey in extras) {
+				setErrorMsg(
+					`Já existe um campo extra com a chave "${normalizedKey}".`
+				);
+				return prev;
+			}
+
+			const currentValue = extras[currentKey] ?? "";
+			delete extras[currentKey];
+			extras[normalizedKey] = currentValue;
+
+			return {
+				...prev,
+				[userId]: {
+					...user,
+					extras,
+				},
+			};
+		});
+	}
+
+	function addExtraField(userId: number) {
+		setEditedUsers((prev) => {
+			const user = prev[userId];
+			if (!user) {
+				return prev;
+			}
+
+			const nextKey = makeUniqueExtraKey(user);
+			return {
+				...prev,
+				[userId]: {
+					...user,
+					extras: {
+						...(user.extras ?? {}),
+						[nextKey]: "",
+					},
+				},
+			};
+		});
+	}
+
+	function removeExtraField(userId: number, key: string) {
+		setEditedUsers((prev) => {
+			const user = prev[userId];
+			if (!user) {
+				return prev;
+			}
+
+			const extras = { ...(user.extras ?? {}) };
+			delete extras[key];
+
+			return {
+				...prev,
+				[userId]: {
+					...user,
+					extras,
+				},
+			};
+		});
 	}
 	const flattenDup = () => dupGroups.flat();
 	const isDuplicate = (id: number) => flattenDup().includes(id);
@@ -134,7 +297,6 @@ export default function VerifyUserPage({
 	}
 
 	function rejectAll(group: number[]) {
-		const toRemove = new Set(group);
 		setEditedUsers((prev) => {
 			const n = { ...prev };
 			group.forEach((id) => delete n[id]);
@@ -148,21 +310,31 @@ export default function VerifyUserPage({
 		});
 	}
 
+	const sanitizeExtras = (user: MapUsuario) =>
+		Object.fromEntries(
+			Object.entries(user.extras ?? {})
+				.map(([key, value]) => [normalizeExtraKey(key), String(value ?? "")])
+				.filter(([key]) => {
+					if (!key) {
+						return false;
+					}
+					return !coreKeysForUser(user).includes(key);
+				})
+		);
+
 	function saveCandidates() {
-		// Check if there are still duplicates
 		if (dupGroups.length > 0) {
 			setErrorMsg(
 				"Não é possível salvar enquanto houver usuários duplicados. Resolva todos os conflitos primeiro."
 			);
 			return;
 		}
-		console.log("edited users -> ", editedUsers);
+
 		const usuariosParaSalvar = Object.values(editedUsers).map((user) => ({
 			...user,
 			opcoes: Array.isArray(user.opcoes) ? user.opcoes : [],
+			extras: sanitizeExtras(user),
 		}));
-
-		console.log("Usuários para salvar:", usuariosParaSalvar);
 		(async () => {
 			try {
 				await SaveUsuariosFromMaps(usuariosParaSalvar);
@@ -184,6 +356,10 @@ export default function VerifyUserPage({
 				errors={errors}
 				onDelete={deleteUser}
 				onCellChange={handleCellChange}
+				onExtraKeyChange={handleExtraKeyChange}
+				onExtraValueChange={handleExtraValueChange}
+				onAddExtraField={addExtraField}
+				onRemoveExtraField={removeExtraField}
 				extraBtn={extraBtn}
 			/>
 		);

@@ -3,6 +3,7 @@ package db
 import (
 	types "candidate_alocator/back/type"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -71,6 +72,18 @@ func valueForDB(field types.FieldSchema, value reflect.Value) (interface{}, erro
 			}
 			return number, nil
 		}
+	}
+
+	if value.Kind() == reflect.Map && field.SQLiteType == "TEXT" {
+		if value.IsNil() {
+			return "{}", nil
+		}
+
+		payload, err := json.Marshal(value.Interface())
+		if err != nil {
+			return nil, fmt.Errorf("campo %s nao pode ser serializado para JSON: %w", field.JSONName, err)
+		}
+		return string(payload), nil
 	}
 
 	switch value.Kind() {

@@ -3,6 +3,7 @@ import {
 	PencilIcon,
 	ExclamationTriangleIcon,
 	TrashIcon,
+	PlusIcon,
 } from "@heroicons/react/24/outline";
 import { EditableCell } from "./EditableCell";
 
@@ -10,16 +11,51 @@ interface ErrorItem {
 	field: string;
 	msg: string;
 }
-interface MapUsuario {
-	[key: string]: string | number;
+
+export interface UserExtras {
+	[key: string]: string;
 }
+
+export interface MapUsuario {
+	[key: string]: string | number | string[] | UserExtras | undefined;
+	opcoes?: string[];
+	extras?: UserExtras;
+}
+
 interface UserCardProps {
 	userId: number;
 	user: MapUsuario;
 	errors: ErrorItem[];
 	onDelete: (userId: number) => void;
 	onCellChange: (userId: number, field: string, value: string) => void;
+	onExtraKeyChange: (
+		userId: number,
+		currentKey: string,
+		nextKey: string
+	) => void;
+	onExtraValueChange: (userId: number, key: string, value: string) => void;
+	onAddExtraField: (userId: number) => void;
+	onRemoveExtraField: (userId: number, key: string) => void;
 	extraBtn?: React.ReactNode;
+}
+
+function formatFieldLabel(field: string) {
+	return field
+		.replace(/_/g, " ")
+		.replace(/([A-Z])/g, " $1")
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/^./, (str) => str.toUpperCase());
+}
+
+function displayValue(value: MapUsuario[string]) {
+	if (Array.isArray(value)) {
+		return value.join(", ");
+	}
+	if (typeof value === "number" || typeof value === "string") {
+		return value;
+	}
+	return "";
 }
 
 export function UserCard({
@@ -28,9 +64,15 @@ export function UserCard({
 	errors,
 	onDelete,
 	onCellChange,
+	onExtraKeyChange,
+	onExtraValueChange,
+	onAddExtraField,
+	onRemoveExtraField,
 	extraBtn,
 }: UserCardProps) {
 	const hasErrors = errors.length > 0;
+	const extras = user.extras ?? {};
+	const coreEntries = Object.entries(user).filter(([field]) => field !== "extras");
 
 	return (
 		<motion.div
@@ -43,7 +85,6 @@ export function UserCard({
 					: "border-gray-200 bg-white hover:shadow-xl hover:border-blue-300"
 			}`}
 		>
-			{/* Header with ID, error indicator, and delete button */}
 			<div className="flex items-center justify-between mb-3">
 				<div className="flex items-center space-x-2">
 					<span className="text-sm font-bold text-gray-600">
@@ -74,7 +115,6 @@ export function UserCard({
 				</div>
 			</div>
 
-			{/* Error summary */}
 			{hasErrors && (
 				<div className="mb-3 p-2 bg-red-100 border border-red-200 rounded-lg">
 					<div className="text-xs font-semibold text-red-700 mb-1">
@@ -93,9 +133,8 @@ export function UserCard({
 				</div>
 			)}
 
-			{/* User fields */}
 			<div className="space-y-2">
-				{Object.entries(user).map(([field, val]) => {
+				{coreEntries.map(([field, val]) => {
 					const fieldError = errors.find((e) => e.field === field);
 					const hasFieldError = !!fieldError;
 
@@ -110,11 +149,7 @@ export function UserCard({
 						>
 							<div className="flex items-center justify-between mb-1">
 								<span className="text-xs font-semibold text-gray-700 capitalize">
-									{field
-										.replace(/([A-Z])/g, " $1")
-										.replace(/^./, (str) =>
-											str.toUpperCase()
-										)}
+									{formatFieldLabel(field)}
 								</span>
 								{hasFieldError && (
 									<ExclamationTriangleIcon className="w-3 h-3 text-red-500" />
@@ -122,7 +157,7 @@ export function UserCard({
 							</div>
 
 							<EditableCell
-								value={val}
+								value={displayValue(val)}
 								onChange={(v) => onCellChange(userId, field, v)}
 								hasError={hasFieldError}
 							/>
@@ -131,7 +166,73 @@ export function UserCard({
 				})}
 			</div>
 
-			{/* Action button */}
+			<div className="mt-4 space-y-2">
+				<div className="flex items-center justify-between">
+					<span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+						Campos extras
+					</span>
+					<button
+						onClick={() => onAddExtraField(userId)}
+						className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+						title="Adicionar campo extra"
+					>
+						<PlusIcon className="h-3 w-3" />
+						Adicionar
+					</button>
+				</div>
+
+				{Object.entries(extras).length === 0 && (
+					<div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+						Nenhum campo extra adicionado.
+					</div>
+				)}
+
+				{Object.entries(extras).map(([key, value]) => (
+					<div
+						key={key}
+						className="rounded-lg border border-gray-200 bg-slate-50 p-2"
+					>
+						<div className="mb-2 flex items-center justify-between">
+							<span className="text-xs font-semibold text-gray-600">
+								Extra
+							</span>
+							<button
+								onClick={() => onRemoveExtraField(userId, key)}
+								className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full transition-colors"
+								title="Remover campo extra"
+							>
+								<TrashIcon className="w-3 h-3" />
+							</button>
+						</div>
+
+						<div className="space-y-2">
+							<div>
+								<div className="mb-1 text-[11px] font-semibold text-gray-600">
+									Chave
+								</div>
+								<EditableCell
+									value={key}
+									onChange={(nextKey) =>
+										onExtraKeyChange(userId, key, nextKey)
+									}
+								/>
+							</div>
+							<div>
+								<div className="mb-1 text-[11px] font-semibold text-gray-600">
+									Valor
+								</div>
+								<EditableCell
+									value={value}
+									onChange={(nextValue) =>
+										onExtraValueChange(userId, key, nextValue)
+									}
+								/>
+							</div>
+						</div>
+					</div>
+				))}
+			</div>
+
 			{extraBtn && (
 				<div className="mt-4 pt-3 border-t border-gray-200">
 					{extraBtn}

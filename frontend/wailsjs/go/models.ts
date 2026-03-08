@@ -89,6 +89,7 @@ export namespace types {
 	    nome: string;
 	    email: string;
 	    sigla: string;
+	    extras: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new AvaliadorInfo(source);
@@ -99,6 +100,7 @@ export namespace types {
 	        this.nome = source["nome"];
 	        this.email = source["email"];
 	        this.sigla = source["sigla"];
+	        this.extras = source["extras"];
 	    }
 	}
 	export class Candidato {
@@ -111,6 +113,7 @@ export namespace types {
 	    email_secundario: string;
 	    email_pessoal: string;
 	    opcoes: string[];
+	    extras: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new Candidato(source);
@@ -127,6 +130,7 @@ export namespace types {
 	        this.email_secundario = source["email_secundario"];
 	        this.email_pessoal = source["email_pessoal"];
 	        this.opcoes = source["opcoes"];
+	        this.extras = source["extras"];
 	    }
 	}
 	export class MappingItem {
