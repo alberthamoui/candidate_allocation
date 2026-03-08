@@ -143,11 +143,88 @@ func containsErrorMessage(errors []ErrorEntry, msg string) bool {
 	return false
 }
 
+func TestNormalizeMappingName(t *testing.T) {
+	got := normalizeMappingName("EmailPessoal-1")
+	if got != "email pessoal 1" {
+		t.Fatalf("unexpected normalized name: %q", got)
+	}
+}
+
+func TestMappingSimilarityScore(t *testing.T) {
+	exact := mappingSimilarityScore("email_pessoal", "Email Pessoal")
+	partial := mappingSimilarityScore("email_pessoal", "Email")
+	mismatch := mappingSimilarityScore("opcao 1", "Opcao 2")
+
+	if exact <= partial {
+		t.Fatalf("expected exact score to beat partial match: exact=%d partial=%d", exact, partial)
+	}
+	if partial <= mismatch {
+		t.Fatalf("expected partial score to beat mismatched option number: partial=%d mismatch=%d", partial, mismatch)
+	}
+}
+
+func TestResolveMappingConflictsUsesBestAvailableUniqueColumn(t *testing.T) {
+	headers := []string{"Email", "Email Pessoal"}
+	variables := []string{"email_pessoal", "email_secundario"}
+
+	got := resolveMappingConflicts(headers, variables, buildMappingCandidates(headers, variables))
+
+	assertSuggestedColumn(t, got, "email_pessoal", "Email Pessoal", 1)
+	assertSuggestedColumn(t, got, "email_secundario", "Email", 0)
+	assertUniqueMappedIndices(t, got, len(headers))
+}
+
+func TestResolveMappingConflictsFallsBackToNextBestColumn(t *testing.T) {
+	headers := []string{"Email", "Email Alternativo"}
+	variables := []string{"email_pessoal", "email_secundario"}
+
+	got := resolveMappingConflicts(headers, variables, buildMappingCandidates(headers, variables))
+
+	assertSuggestedColumn(t, got, "email_pessoal", "Email", 0)
+	assertSuggestedColumn(t, got, "email_secundario", "Email Alternativo", 1)
+	assertUniqueMappedIndices(t, got, len(headers))
+}
+
+func TestSuggestMappingByNameLeavesRemainingVariablesUnmappedWhenHeadersAreFewer(t *testing.T) {
+	headers := []string{"Nome", "CPF"}
+	variables := []string{"nome", "cpf", "email"}
+
+	got := suggestMappingByName(headers, variables)
+
+	assertSuggestedColumn(t, got, "nome", "Nome", 0)
+	assertSuggestedColumn(t, got, "cpf", "CPF", 1)
+	assertUnmappedVariable(t, got, "email", len(headers))
+	assertUniqueMappedIndices(t, got, len(headers))
+}
+
+func TestSuggestMappingByNameMapsAllVariablesWhenHeadersAreEnough(t *testing.T) {
+	headers := []string{"Email", "Nome", "CPF"}
+	variables := []string{"nome", "cpf", "email"}
+
+	got := suggestMappingByName(headers, variables)
+
+	assertSuggestedColumn(t, got, "nome", "Nome", 1)
+	assertSuggestedColumn(t, got, "cpf", "CPF", 2)
+	assertSuggestedColumn(t, got, "email", "Email", 0)
+	assertUniqueMappedIndices(t, got, len(headers))
+}
+
+func TestSuggestMappingTimestampCamelCase(t *testing.T) {
+	headers := []string{"TimeStamp", "Nome"}
+	variables := []string{"timestamp", "nome"}
+
+	got := suggestMappingByName(headers, variables)
+
+	assertSuggestedColumn(t, got, "timestamp", "TimeStamp", 0)
+	assertSuggestedColumn(t, got, "nome", "Nome", 1)
+	assertUniqueMappedIndices(t, got, len(headers))
+}
+
 func TestSuggestMappingUsesCurrentCandidateSchema(t *testing.T) {
 	workbook := createWorkbook(t, testSheet{
 		name: "Candidatos",
 		rows: [][]interface{}{
-			{"Timestamp", "Nome", "CPF"},
+			{"Email Pessoal", "CPF", "Opcao 2", "Nome", "Opcao 1", "Email Secundario", "Numero", "Curso", "Semestre", "Timestamp"},
 			{"2026-01-01", "Maria", "12345678901"},
 		},
 	})
@@ -157,11 +234,17 @@ func TestSuggestMappingUsesCurrentCandidateSchema(t *testing.T) {
 		t.Fatalf("SuggestMapping returned error: %v", err)
 	}
 
-	expected := expectedMappingItems([]string{"Timestamp", "Nome", "CPF"}, candidateMappingVariables(2))
-
-	if !reflect.DeepEqual(mappings, expected) {
-		t.Fatalf("unexpected mappings: %#v", mappings)
-	}
+	assertSuggestedColumn(t, mappings, "email_pessoal", "Email Pessoal", 0)
+	assertSuggestedColumn(t, mappings, "cpf", "CPF", 1)
+	assertSuggestedColumn(t, mappings, "opcao 2", "Opcao 2", 2)
+	assertSuggestedColumn(t, mappings, "nome", "Nome", 3)
+	assertSuggestedColumn(t, mappings, "opcao 1", "Opcao 1", 4)
+	assertSuggestedColumn(t, mappings, "email_secundario", "Email Secundario", 5)
+	assertSuggestedColumn(t, mappings, "numero", "Numero", 6)
+	assertSuggestedColumn(t, mappings, "curso", "Curso", 7)
+	assertSuggestedColumn(t, mappings, "semestre", "Semestre", 8)
+	assertSuggestedColumn(t, mappings, "timestamp", "Timestamp", 9)
+	assertUniqueMappedIndices(t, mappings, 10)
 }
 
 func TestSuggestMappingAvaliadorUsesCurrentSchema(t *testing.T) {
@@ -170,7 +253,7 @@ func TestSuggestMappingAvaliadorUsesCurrentSchema(t *testing.T) {
 		testSheet{
 			name: "Avaliadores",
 			rows: [][]interface{}{
-				interfaceSlice(avaliadorHeaders()),
+				{"Sigla", "Nome", "Email"},
 				{"Ana", "ana@insper.edu.br", "AN"},
 			},
 		},
@@ -181,11 +264,10 @@ func TestSuggestMappingAvaliadorUsesCurrentSchema(t *testing.T) {
 		t.Fatalf("SuggestMappingAvaliador returned error: %v", err)
 	}
 
-	expected := expectedMappingItems(avaliadorHeaders(), mappableAvaliadorFields())
-
-	if !reflect.DeepEqual(mappings, expected) {
-		t.Fatalf("unexpected mappings: %#v", mappings)
-	}
+	assertSuggestedColumn(t, mappings, "sigla", "Sigla", 0)
+	assertSuggestedColumn(t, mappings, "nome", "Nome", 1)
+	assertSuggestedColumn(t, mappings, "email", "Email", 2)
+	assertUniqueMappedIndices(t, mappings, 3)
 }
 
 func TestSuggestMappingRestricao(t *testing.T) {
@@ -195,7 +277,7 @@ func TestSuggestMappingRestricao(t *testing.T) {
 		testSheet{
 			name: "Restricoes",
 			rows: [][]interface{}{
-				{"Candidato", "Nao Posso", "Prefiro Nao"},
+				{"Prefiro Nao", "Candidato", "Nao Posso"},
 				{"Maria", "AB", "CD"},
 			},
 		},
@@ -206,15 +288,10 @@ func TestSuggestMappingRestricao(t *testing.T) {
 		t.Fatalf("SuggestMappingRestricao returned error: %v", err)
 	}
 
-	expected := []types.MappingItem{
-		{NomeColuna: "Candidato", Indice: 0, Variavel: "candidato"},
-		{NomeColuna: "Nao Posso", Indice: 1, Variavel: "naoPosso"},
-		{NomeColuna: "Prefiro Nao", Indice: 2, Variavel: "prefiroNao"},
-	}
-
-	if !reflect.DeepEqual(mappings, expected) {
-		t.Fatalf("unexpected mappings: %#v", mappings)
-	}
+	assertSuggestedColumn(t, mappings, "prefiroNao", "Prefiro Nao", 0)
+	assertSuggestedColumn(t, mappings, "candidato", "Candidato", 1)
+	assertSuggestedColumn(t, mappings, "naoPosso", "Nao Posso", 2)
+	assertUniqueMappedIndices(t, mappings, 3)
 }
 
 func TestSuggestMappingForSheet(t *testing.T) {
@@ -223,7 +300,7 @@ func TestSuggestMappingForSheet(t *testing.T) {
 		testSheet{
 			name: "Avaliadores",
 			rows: [][]interface{}{
-				{"Nome", "Email"},
+				{"Email", "Nome"},
 				{"Ana", "ana@insper.edu.br"},
 			},
 		},
@@ -234,14 +311,10 @@ func TestSuggestMappingForSheet(t *testing.T) {
 		t.Fatalf("suggestMappingForSheet returned error: %v", err)
 	}
 
-	expected := []types.MappingItem{
-		{NomeColuna: "Nome", Indice: 0, Variavel: "nome"},
-		{NomeColuna: "Email", Indice: 1, Variavel: "email"},
-		{NomeColuna: "", Indice: 2, Variavel: "sigla"},
-	}
-	if !reflect.DeepEqual(got, expected) {
-		t.Fatalf("unexpected mapping items: %#v", got)
-	}
+	assertSuggestedColumn(t, got, "email", "Email", 0)
+	assertSuggestedColumn(t, got, "nome", "Nome", 1)
+	assertUnmappedVariable(t, got, "sigla", 2)
+	assertUniqueMappedIndices(t, got, 2)
 }
 
 func TestProcessMapping(t *testing.T) {
@@ -278,9 +351,9 @@ func TestBuildUsuariosWithMapping(t *testing.T) {
 	workbook := createWorkbook(t, testSheet{
 		name: "Candidatos",
 		rows: [][]interface{}{
-			{"Timestamp", "Nome", "CPF", "Numero", "Semestre", "Curso", "Email Secundario", "Email Pessoal", "Opcao 1", "Opcao 2"},
-			{"2026-01-01", "Maria", "12345678901", "123456789", "11", "ADM", "maria@al.insper.edu.br", "invalido", "Seg 10h", "Ter 10h"},
-			{"2026-01-02", "Ana", "12345678901", "987654321", "2", "ECO", "ana@al.insper.edu.br", "ana@gmail.com", "Qua 10h", "Qui 10h"},
+			{"Timestamp", "Nome", "CPF", "Numero", "Semestre", "Curso", "Email Secundario", "Email Pessoal", "Opcao 1", "Opcao 2", "LinkedIn"},
+			{"2026-01-01", "Maria", "12345678901", "123456789", "11", "ADM", "maria@al.insper.edu.br", "invalido", "Seg 10h", "Ter 10h", "linkedin.com/in/maria"},
+			{"2026-01-02", "Ana", "12345678901", "987654321", "2", "ECO", "ana@al.insper.edu.br", "ana@gmail.com", "Qua 10h", "Qui 10h", ""},
 		},
 	})
 
@@ -318,6 +391,9 @@ func TestBuildUsuariosWithMapping(t *testing.T) {
 	}
 	if !reflect.DeepEqual(first.Usuario.Opcoes, []string{"Seg 10h", "Ter 10h"}) {
 		t.Fatalf("unexpected first user options: %#v", first.Usuario.Opcoes)
+	}
+	if !reflect.DeepEqual(first.Usuario.Extras, map[string]string{"LinkedIn": "linkedin.com/in/maria"}) {
+		t.Fatalf("unexpected extras: %#v", first.Usuario.Extras)
 	}
 	if !containsErrorMessage(first.Erros, "semestre inválido") {
 		t.Fatalf("expected semestre inválido error, got %#v", first.Erros)
@@ -375,6 +451,75 @@ func TestBuildAvaliadoresWithMappingSupportsCurrentSchema(t *testing.T) {
 	})
 }
 
+func TestBuildUsuariosWithMappingStoresUnusedColumnsInExtras(t *testing.T) {
+	workbook := createWorkbook(t, testSheet{
+		name: "Candidatos",
+		rows: [][]interface{}{
+			{"Nome", "CPF", "Observacao", "Github"},
+			{"Maria", "12345678901", "Aluna destaque", "github.com/maria"},
+		},
+	})
+
+	mappingItems := []types.MappingItem{
+		{NomeColuna: "Nome", Indice: 0, Variavel: "nome"},
+		{NomeColuna: "CPF", Indice: 1, Variavel: "cpf"},
+	}
+
+	resp, err := BuildUsuariosWithMapping(workbook, 0, mappingItems)
+	if err != nil {
+		t.Fatalf("BuildUsuariosWithMapping returned error: %v", err)
+	}
+
+	got := resp.Usuarios[1].Usuario.Extras
+	expected := map[string]string{
+		"Observacao": "Aluna destaque",
+		"Github":     "github.com/maria",
+	}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected extras: %#v", got)
+	}
+}
+
+func TestBuildAvaliadoresWithMappingStoresUnusedColumnsInExtras(t *testing.T) {
+	withTempWorkingDir(t, func(tmpDir string) {
+		_ = createTestDB(t, tmpDir)
+
+		workbook := createWorkbook(t,
+			testSheet{name: "Candidatos", rows: [][]interface{}{{"A"}}},
+			testSheet{
+				name: "Avaliadores",
+				rows: [][]interface{}{
+					{"Nome", "Email", "Sigla", "LinkedIn"},
+					{"Ana", "ana@insper.edu.br", "AN", "linkedin.com/in/ana"},
+				},
+			},
+		)
+
+		mappingItems := []types.MappingItem{
+			{NomeColuna: "Nome", Indice: 0, Variavel: "nome"},
+			{NomeColuna: "Email", Indice: 1, Variavel: "email"},
+			{NomeColuna: "Sigla", Indice: 2, Variavel: "sigla"},
+		}
+
+		got, err := BuildAvaliadoresWithMapping(workbook, mappingItems)
+		if err != nil {
+			t.Fatalf("BuildAvaliadoresWithMapping returned error: %v", err)
+		}
+
+		expected := []types.AvaliadorInfo{{
+			Nome:  "Ana",
+			Email: "ana@insper.edu.br",
+			Sigla: "AN",
+			Extras: map[string]string{
+				"LinkedIn": "linkedin.com/in/ana",
+			},
+		}}
+		if !reflect.DeepEqual(got, expected) {
+			t.Fatalf("unexpected avaliadores with extras: %#v", got)
+		}
+	})
+}
+
 func TestBuildRestricoesWithMapping(t *testing.T) {
 	workbook := createWorkbook(t,
 		testSheet{name: "Candidatos", rows: [][]interface{}{{"A"}}},
@@ -382,8 +527,8 @@ func TestBuildRestricoesWithMapping(t *testing.T) {
 		testSheet{
 			name: "Restricoes",
 			rows: [][]interface{}{
-				{"Candidato", "Nao Posso", "Prefiro Nao"},
-				{"Maria", "AB, CD", "EF"},
+				{"Candidato", "Nao Posso", "Prefiro Nao", "Observacao"},
+				{"Maria", "AB, CD", "EF", "ignorar"},
 			},
 		},
 	)
@@ -404,6 +549,36 @@ func TestBuildRestricoesWithMapping(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected restricoes: %#v", got)
+	}
+}
+
+func TestBuildRestricoesWithMappingIgnoresUnusedColumns(t *testing.T) {
+	workbook := createWorkbook(t,
+		testSheet{name: "Candidatos", rows: [][]interface{}{{"A"}}},
+		testSheet{name: "Avaliadores", rows: [][]interface{}{{"B"}}},
+		testSheet{
+			name: "Restricoes",
+			rows: [][]interface{}{
+				{"Candidato", "Nao Posso", "Prefiro Nao", "Observacao"},
+				{"Maria", "AB", "CD", "ignorar"},
+			},
+		},
+	)
+
+	mappingItems := []types.MappingItem{
+		{NomeColuna: "Candidato", Indice: 0, Variavel: "candidato"},
+		{NomeColuna: "Nao Posso", Indice: 1, Variavel: "naoPosso"},
+		{NomeColuna: "Prefiro Nao", Indice: 2, Variavel: "prefiroNao"},
+	}
+
+	got, err := BuildRestricoesWithMapping(workbook, mappingItems)
+	if err != nil {
+		t.Fatalf("BuildRestricoesWithMapping returned error: %v", err)
+	}
+
+	expected := []types.Restricao{{Candidato: "Maria", NaoPosso: "AB", PrefiroNao: "CD"}}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected restricoes ignoring extras: %#v", got)
 	}
 }
 
@@ -732,15 +907,17 @@ func TestSave(t *testing.T) {
 }
 
 func TestBuildCandidateFromRowSupportsCurrentCandidateSchema(t *testing.T) {
-	row := candidateRowValues(2)
+	header := append(candidateHeaders(2), "LinkedIn")
+	row := append(candidateRowValues(2), "linkedin.com/in/maria")
 	mapping := expectedMappingItems(candidateHeaders(2), candidateMappingVariables(2))
 
-	got, err := buildCandidateFromRow(row, 2, mapping)
+	got, err := buildCandidateFromRow(row, header, 2, mapping)
 	if err != nil {
 		t.Fatalf("buildCandidateFromRow returned error: %v", err)
 	}
 
 	expected := expectedCandidateForBuild()
+	expected.Extras = map[string]string{"LinkedIn": "linkedin.com/in/maria"}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected candidate built from row: %#v", got)
 	}
@@ -762,6 +939,33 @@ func TestBuildStructFromRow(t *testing.T) {
 	expected := types.Restricao{Candidato: "Maria", NaoPosso: "AN, BR", PrefiroNao: "BR"}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected struct built from row: %#v", got)
+	}
+}
+
+func TestBuildStructFromRowWithExtras(t *testing.T) {
+	row := []string{"Ana", "ana@insper.edu.br", "AN", "linkedin.com/in/ana"}
+	header := []string{"Nome", "Email", "Sigla", "LinkedIn"}
+	mapping := []types.MappingItem{
+		{Indice: 0, Variavel: "nome"},
+		{Indice: 1, Variavel: "email"},
+		{Indice: 2, Variavel: "sigla"},
+	}
+
+	got, err := buildStructFromRowWithExtras[types.AvaliadorInfo](row, header, mapping)
+	if err != nil {
+		t.Fatalf("buildStructFromRowWithExtras returned error: %v", err)
+	}
+
+	expected := types.AvaliadorInfo{
+		Nome:  "Ana",
+		Email: "ana@insper.edu.br",
+		Sigla: "AN",
+		Extras: map[string]string{
+			"LinkedIn": "linkedin.com/in/ana",
+		},
+	}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected struct built with extras: %#v", got)
 	}
 }
 
@@ -806,6 +1010,23 @@ func TestGetRowsFromSheetInvalidWorkbook(t *testing.T) {
 	}
 }
 
+func TestCollectUnusedColumnExtras(t *testing.T) {
+	header := []string{"Nome", "", "Nome"}
+	row := []string{"Maria", "valor sem header", "campo duplicado"}
+	mapping := []types.MappingItem{
+		{Indice: 0, Variavel: "nome"},
+	}
+
+	got := collectUnusedColumnExtras(row, header, mapping)
+	expected := map[string]string{
+		"coluna_1": "valor sem header",
+		"Nome":     "campo duplicado",
+	}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected extras collected: %#v", got)
+	}
+}
+
 func expectedMappingItems(headers []string, variables []string) []types.MappingItem {
 	items := make([]types.MappingItem, 0, len(variables))
 	for i, variable := range variables {
@@ -821,6 +1042,55 @@ func expectedMappingItems(headers []string, variables []string) []types.MappingI
 		})
 	}
 	return items
+}
+
+func mappingItemByVariable(t *testing.T, mappings []types.MappingItem, variable string) types.MappingItem {
+	t.Helper()
+
+	for _, item := range mappings {
+		if item.Variavel == variable {
+			return item
+		}
+	}
+
+	t.Fatalf("mapping for variable %q not found", variable)
+	return types.MappingItem{}
+}
+
+func assertSuggestedColumn(t *testing.T, mappings []types.MappingItem, variable string, column string, index int) {
+	t.Helper()
+
+	item := mappingItemByVariable(t, mappings, variable)
+	if item.NomeColuna != column || item.Indice != index {
+		t.Fatalf("unexpected mapping for %s: %#v", variable, item)
+	}
+}
+
+func assertUnmappedVariable(t *testing.T, mappings []types.MappingItem, variable string, minIndex int) {
+	t.Helper()
+
+	item := mappingItemByVariable(t, mappings, variable)
+	if item.NomeColuna != "" {
+		t.Fatalf("expected %s to be unmapped, got %#v", variable, item)
+	}
+	if item.Indice < minIndex {
+		t.Fatalf("expected unmapped index for %s to be outside header range, got %#v", variable, item)
+	}
+}
+
+func assertUniqueMappedIndices(t *testing.T, mappings []types.MappingItem, headerCount int) {
+	t.Helper()
+
+	seen := make(map[int]string)
+	for _, item := range mappings {
+		if item.Indice < 0 || item.Indice >= headerCount {
+			continue
+		}
+		if previous, exists := seen[item.Indice]; exists {
+			t.Fatalf("duplicate mapped index %d for %s and %s", item.Indice, previous, item.Variavel)
+		}
+		seen[item.Indice] = item.Variavel
+	}
 }
 
 func candidateMappingVariables(optionCount int) []string {

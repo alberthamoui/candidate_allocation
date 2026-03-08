@@ -41,115 +41,22 @@ type UsuariosResponse struct {
 	DuplicateFields []string                 `json:"duplicateFields"`
 }
 
-// SuggestMapping lê a aba de candidatos e monta uma sugestão inicial de
-// mapeamento entre colunas do Excel e campos esperados pela aplicação.
+// SuggestMapping lê a aba de candidatos e sugere um mapeamento inicial com
+// base na similaridade entre os nomes das colunas e os campos esperados.
 func SuggestMapping(data []byte, quantidadeOpcoes int) ([]types.MappingItem, error) {
-	readerData := bytes.NewReader(data)
-	file, err := excelize.OpenReader(readerData)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	sheet := file.GetSheetName(0)
-	rows, err := file.GetRows(sheet)
-
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) < 1 {
-		return nil, fmt.Errorf("arquivo sem dados")
-	}
-	header := rows[0]
-	// fmt.Println("header : ", header)
-
-	// Lista de possíveis variáveis da struct Usuario (em minúsculo)
-	variaveisUsuario := getUsuarioFields(quantidadeOpcoes)
-	fmt.Println("variaveis usuario: ", variaveisUsuario)
-
-	// Alocação aleatória das variáveis para cada coluna
-	mappingList := make([]string, len(variaveisUsuario))
-	for i, usuarioVar := range variaveisUsuario {
-		if i < len(header) {
-			mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", header[i], i, usuarioVar)
-		} else {
-			mappingList[i] = fmt.Sprintf("[[null, %d], %q]", i, usuarioVar)
-		}
-	}
-	fmt.Println(mappingList)
-	mapping_json, err := ProcessMapping(mappingList)
-	if err != nil {
-		return nil, err
-	}
-	return mapping_json, nil
+	return suggestMappingForSheet(data, 0, getUsuarioFields(quantidadeOpcoes))
 }
 
-// SuggestMappingAvaliador faz a mesma sugestão de mapeamento, mas usando a aba
-// de avaliadores e os campos definidos no tipo AvaliadorInfo.
+// SuggestMappingAvaliador faz a sugestão de mapeamento da aba de avaliadores
+// usando a similaridade com os campos do tipo AvaliadorInfo.
 func SuggestMappingAvaliador(data []byte) ([]types.MappingItem, error) {
-	readerData := bytes.NewReader(data)
-	file, err := excelize.OpenReader(readerData)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	sheet := file.GetSheetName(1) // Avaliador
-	rows, err := file.GetRows(sheet)
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) < 1 {
-		return nil, fmt.Errorf("arquivo sem dados")
-	}
-	header := rows[0]
-
-	// gerar dinamicamente as variáveis de avaliador
-	variaveisAvaliador := getAvaliadorFields()
-
-	fmt.Println("variaveis avaliador : ", variaveisAvaliador)
-	mappingList := make([]string, len(variaveisAvaliador))
-	for i, v := range variaveisAvaliador {
-		if i < len(header) {
-			mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", header[i], i, v)
-		} else {
-			mappingList[i] = fmt.Sprintf("[[null, %d], %q]", i, v)
-		}
-	}
-	return ProcessMapping(mappingList)
+	return suggestMappingForSheet(data, 1, getAvaliadorFields())
 }
 
-// SuggestMappingRestricao sugere o mapeamento da aba de restrições com base nos
-// campos declarados no tipo Restricao.
+// SuggestMappingRestricao sugere o mapeamento da aba de restrições usando a
+// similaridade entre cabeçalhos e campos do tipo Restricao.
 func SuggestMappingRestricao(data []byte) ([]types.MappingItem, error) {
-	readerData := bytes.NewReader(data)
-	file, err := excelize.OpenReader(readerData)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	sheet := file.GetSheetName(2) // Restrição
-	rows, err := file.GetRows(sheet)
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) < 1 {
-		return nil, fmt.Errorf("arquivo sem dados")
-	}
-	header := rows[0]
-
-	// gerar dinamicamente as variáveis de restrição
-	variaveisRestricao := getRestricaoFields()
-	mappingList := make([]string, len(variaveisRestricao))
-	for i, v := range variaveisRestricao {
-		if i < len(header) {
-			mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", header[i], i, v)
-		} else {
-			mappingList[i] = fmt.Sprintf("[[null, %d], %q]", i, v)
-		}
-	}
-	return ProcessMapping(mappingList)
+	return suggestMappingForSheet(data, 2, getRestricaoFields())
 }
 
 // suggestMappingForSheet concentra a lógica genérica de sugestão de mapping
@@ -164,16 +71,7 @@ func suggestMappingForSheet(data []byte, sheetIndex int, variables []string) ([]
 	}
 
 	header := rows[0]
-	mappingList := make([]string, len(variables))
-	for i, variable := range variables {
-		if i < len(header) {
-			mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", header[i], i, variable)
-		} else {
-			mappingList[i] = fmt.Sprintf("[[null, %d], %q]", i, variable)
-		}
-	}
-
-	return ProcessMapping(mappingList)
+	return suggestMappingByName(header, variables), nil
 }
 
 // BuildUsuariosWithMapping percorre a aba de candidatos, aplica o mapping
@@ -198,8 +96,9 @@ func BuildUsuariosWithMapping(data []byte, nOpcoes int, mappingItems []types.Map
 
 	var users []types.Candidato
 
+	header := rows[0]
 	for _, row := range rows[1:] {
-		u, err := buildCandidateFromRow(row, nOpcoes, mappingItems)
+		u, err := buildCandidateFromRow(row, header, nOpcoes, mappingItems)
 		if err != nil {
 			return UsuariosResponse{}, err
 		}
@@ -247,8 +146,9 @@ func BuildAvaliadoresWithMapping(data []byte, mappingItems []types.MappingItem) 
 	var avaliadores []types.AvaliadorInfo
 
 	// percorre linhas (ignorando cabeçalho)
+	header := rows[0]
 	for _, row := range rows[1:] {
-		av, err := buildStructFromRow[types.AvaliadorInfo](row, mappingItems)
+		av, err := buildStructFromRowWithExtras[types.AvaliadorInfo](row, header, mappingItems)
 		if err != nil {
 			return nil, err
 		}
@@ -666,8 +566,8 @@ func Save(data interface{}) error {
 }
 
 // buildCandidateFromRow aplica o mapping de uma linha do Excel a um candidato,
-// incluindo o preenchimento das opções em posições ordenadas.
-func buildCandidateFromRow(row []string, nOpcoes int, mappingItems []types.MappingItem) (types.Candidato, error) {
+// incluindo o preenchimento das opções em posições ordenadas e o residual em extras.
+func buildCandidateFromRow(row []string, header []string, nOpcoes int, mappingItems []types.MappingItem) (types.Candidato, error) {
 	record := make(map[string]interface{})
 	record["opcoes"] = make([]string, nOpcoes)
 
@@ -691,6 +591,10 @@ func buildCandidateFromRow(row []string, nOpcoes int, mappingItems []types.Mappi
 		record[mItem.Variavel] = cell
 	}
 
+	if extras := collectUnusedColumnExtras(row, header, mappingItems); extras != nil {
+		record["extras"] = extras
+	}
+
 	return decodeMapToStruct[types.Candidato](record)
 }
 
@@ -703,6 +607,24 @@ func buildStructFromRow[T any](row []string, mappingItems []types.MappingItem) (
 			continue
 		}
 		record[mapping.Variavel] = strings.TrimSpace(row[mapping.Indice])
+	}
+
+	return decodeMapToStruct[T](record)
+}
+
+// buildStructFromRowWithExtras monta uma struct genérica e anexa colunas não
+// consumidas pelo mapping ao campo extras, quando ele existir no tipo alvo.
+func buildStructFromRowWithExtras[T any](row []string, header []string, mappingItems []types.MappingItem) (T, error) {
+	record := make(map[string]interface{})
+	for _, mapping := range mappingItems {
+		if mapping.Indice >= len(row) {
+			continue
+		}
+		record[mapping.Variavel] = strings.TrimSpace(row[mapping.Indice])
+	}
+
+	if extras := collectUnusedColumnExtras(row, header, mappingItems); extras != nil {
+		record["extras"] = extras
 	}
 
 	return decodeMapToStruct[T](record)
