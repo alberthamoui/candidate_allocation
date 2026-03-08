@@ -1,6 +1,7 @@
 package main
 
 import (
+	dbpkg "candidate_alocator/back/db"
 	"candidate_alocator/back/logic"
 	types "candidate_alocator/back/type"
 	"context"
@@ -27,7 +28,10 @@ func NewApp() *App {
 // startup is called at application startup
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	SetUp()
+	if err := dbpkg.EnsureDefaultDatabase(); err != nil {
+		fmt.Println("Erro ao preparar banco:", err)
+		panic(err)
+	}
 	writeWailsSmokeSentinel()
 }
 

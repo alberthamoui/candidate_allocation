@@ -14,7 +14,6 @@ import (
 	"strings"
 	"unicode"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -636,7 +635,11 @@ func fillDb(db *sql.DB, data interface{}) {
 // Save abre a conexão padrão do projeto e delega a persistência para fillDb de
 // acordo com o tipo concreto recebido.
 func Save(data interface{}) error {
-	conn, err := sql.Open("sqlite3", "./insper.db")
+	if err := dbpkg.EnsureDefaultDatabase(); err != nil {
+		return err
+	}
+
+	conn, err := dbpkg.OpenDefault()
 	if err != nil {
 		return err
 	}
