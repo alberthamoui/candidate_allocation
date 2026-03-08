@@ -32,12 +32,14 @@ interface VerifyUserPageProps {
 	usuarios: Record<number, UserWrapper>;
 	restricoes: any;
 	duplicates: number[][];
+	duplicateFields: string[];
 }
 
 export default function VerifyUserPage({
 	usuarios,
 	restricoes,
 	duplicates,
+	duplicateFields,
 }: VerifyUserPageProps) {
 	const makeEditableCopy = () =>
 		Object.fromEntries(
@@ -67,6 +69,13 @@ export default function VerifyUserPage({
 	}
 	const flattenDup = () => dupGroups.flat();
 	const isDuplicate = (id: number) => flattenDup().includes(id);
+	const firstEditedUser = Object.values(editedUsers)[0];
+	const duplicateKeys =
+		duplicateFields.length > 0
+			? duplicateFields
+			: Object.keys(firstEditedUser ?? {}).filter(
+					(field) => field === "cpf" || field.startsWith("email_")
+				);
 
 	// ... existing action functions ...
 	function acceptOne(group: number[], idAccepted: number) {
@@ -82,11 +91,10 @@ export default function VerifyUserPage({
 	}
 
 	function acceptAll(group: number[]) {
-		const keys = ["cpf", "emailpessoal", "emailinsper"];
 		const seen = new Map<string, number>();
 		for (const id of group) {
 			const usr = editedUsers[id];
-			for (const k of keys) {
+			for (const k of duplicateKeys) {
 				const v = usr[k];
 				if (v && seen.has(`${k}_${v}`)) {
 					setErrorMsg(

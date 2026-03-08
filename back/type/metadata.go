@@ -14,12 +14,24 @@ type FieldSchema struct {
 	SQLiteType string
 	Required   bool
 	Unique     bool
+	Duplicate  bool
 	Persist    bool
 	Kind       reflect.Kind
 }
 
 func CandidateFields() []FieldSchema {
 	return DescribeStruct(Candidato{})
+}
+
+func CandidateDuplicateFieldNames() []string {
+	fields := CandidateFields()
+	duplicates := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if field.Duplicate {
+			duplicates = append(duplicates, field.JSONName)
+		}
+	}
+	return duplicates
 }
 
 func AvaliadorFields() []FieldSchema {
@@ -62,13 +74,15 @@ func DescribeStruct(model interface{}) []FieldSchema {
 		}
 
 		dbMeta := parseDBTag(field.Tag.Get("db"))
+		appMeta := parseAppTag(field.Tag.Get("app"))
 		if dbMeta.skip {
 			fields = append(fields, FieldSchema{
-				Index:    i,
-				GoName:   field.Name,
-				JSONName: jsonName,
-				Persist:  false,
-				Kind:     field.Type.Kind(),
+				Index:     i,
+				GoName:    field.Name,
+				JSONName:  jsonName,
+				Duplicate: appMeta.duplicate,
+				Persist:   false,
+				Kind:      field.Type.Kind(),
 			})
 			continue
 		}
@@ -86,6 +100,7 @@ func DescribeStruct(model interface{}) []FieldSchema {
 			SQLiteType: sqliteType,
 			Required:   dbMeta.required,
 			Unique:     dbMeta.unique,
+			Duplicate:  appMeta.duplicate,
 			Persist:    sqliteType != "",
 			Kind:       field.Type.Kind(),
 		})
@@ -114,6 +129,10 @@ type dbTagMeta struct {
 	unique     bool
 }
 
+type appTagMeta struct {
+	duplicate bool
+}
+
 func parseDBTag(tag string) dbTagMeta {
 	if tag == "-" {
 		return dbTagMeta{skip: true}
@@ -135,6 +154,25 @@ func parseDBTag(tag string) dbTagMeta {
 			meta.sqliteType = strings.TrimSpace(strings.TrimPrefix(part, "type="))
 		default:
 			panic(fmt.Sprintf("unsupported db tag option %q", part))
+		}
+	}
+
+	return meta
+}
+
+func parseAppTag(tag string) appTagMeta {
+	var meta appTagMeta
+	for _, part := range strings.Split(tag, ";") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		switch part {
+		case "duplicate":
+			meta.duplicate = true
+		default:
+			panic(fmt.Sprintf("unsupported app tag option %q", part))
 		}
 	}
 

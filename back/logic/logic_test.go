@@ -161,7 +161,7 @@ func TestSuggestMapping(t *testing.T) {
 		{NomeColuna: "", Indice: 3, Variavel: "numero"},
 		{NomeColuna: "", Indice: 4, Variavel: "semestre"},
 		{NomeColuna: "", Indice: 5, Variavel: "curso"},
-		{NomeColuna: "", Indice: 6, Variavel: "email_insper"},
+		{NomeColuna: "", Indice: 6, Variavel: "email_secundario"},
 		{NomeColuna: "", Indice: 7, Variavel: "email_pessoal"},
 		{NomeColuna: "", Indice: 8, Variavel: "opcao 1"},
 		{NomeColuna: "", Indice: 9, Variavel: "opcao 2"},
@@ -290,7 +290,7 @@ func TestBuildUsuariosWithMapping(t *testing.T) {
 	workbook := createWorkbook(t, testSheet{
 		name: "Candidatos",
 		rows: [][]interface{}{
-			{"Timestamp", "Nome", "CPF", "Numero", "Semestre", "Curso", "Email Insper", "Email Pessoal", "Opcao 1", "Opcao 2"},
+			{"Timestamp", "Nome", "CPF", "Numero", "Semestre", "Curso", "Email Secundario", "Email Pessoal", "Opcao 1", "Opcao 2"},
 			{"2026-01-01", "Maria", "12345678901", "123456789", "11", "ADM", "maria@al.insper.edu.br", "invalido", "Seg 10h", "Ter 10h"},
 			{"2026-01-02", "Ana", "12345678901", "987654321", "2", "ECO", "ana@al.insper.edu.br", "ana@gmail.com", "Qua 10h", "Qui 10h"},
 		},
@@ -303,7 +303,7 @@ func TestBuildUsuariosWithMapping(t *testing.T) {
 		{NomeColuna: "Numero", Indice: 3, Variavel: "numero"},
 		{NomeColuna: "Semestre", Indice: 4, Variavel: "semestre"},
 		{NomeColuna: "Curso", Indice: 5, Variavel: "curso"},
-		{NomeColuna: "Email Insper", Indice: 6, Variavel: "email_insper"},
+		{NomeColuna: "Email Secundario", Indice: 6, Variavel: "email_secundario"},
 		{NomeColuna: "Email Pessoal", Indice: 7, Variavel: "email_pessoal"},
 		{NomeColuna: "Opcao 1", Indice: 8, Variavel: "opcao 1"},
 		{NomeColuna: "Opcao 2", Indice: 9, Variavel: "opcao 2"},
@@ -340,6 +340,9 @@ func TestBuildUsuariosWithMapping(t *testing.T) {
 
 	if len(resp.Duplicates) != 1 {
 		t.Fatalf("expected one duplicate group, got %#v", resp.Duplicates)
+	}
+	if !reflect.DeepEqual(resp.DuplicateFields, []string{"cpf", "email_secundario", "email_pessoal"}) {
+		t.Fatalf("unexpected duplicate fields: %#v", resp.DuplicateFields)
 	}
 	group := append([]int(nil), resp.Duplicates[0]...)
 	slices.Sort(group)
@@ -426,15 +429,15 @@ func TestSaveUsuariosFromMaps(t *testing.T) {
 
 		input := []map[string]interface{}{
 			{
-				"timestamp":     "2026-01-01",
-				"nome":          "Maria",
-				"cpf":           "12345678901",
-				"numero":        "123456789",
-				"semestre":      "2",
-				"curso":         "ADM",
-				"email_insper":  "maria@al.insper.edu.br",
-				"email_pessoal": "maria@gmail.com",
-				"opcoes":        []interface{}{" Seg 10h ", "Ter 14h"},
+				"timestamp":        "2026-01-01",
+				"nome":             "Maria",
+				"cpf":              "12345678901",
+				"numero":           "123456789",
+				"semestre":         "2",
+				"curso":            "ADM",
+				"email_secundario": "maria@al.insper.edu.br",
+				"email_pessoal":    "maria@gmail.com",
+				"opcoes":           []interface{}{" Seg 10h ", "Ter 14h"},
 			},
 		}
 
@@ -462,7 +465,7 @@ func TestSaveRestricoesFromMaps(t *testing.T) {
 		db := createTestDB(t, tmpDir)
 
 		seedStatements := []string{
-			`INSERT INTO pessoa (nome, cpf, numero, email_insper, email_pessoal, semestre, curso)
+			`INSERT INTO pessoa (nome, cpf, numero, email_secundario, email_pessoal, semestre, curso)
 			 VALUES ('Maria', '12345678901', '123456789', 'maria@al.insper.edu.br', 'maria@gmail.com', 2, 'ADM');`,
 			`INSERT INTO avaliador (nome, email, sigla) VALUES ('Ana', 'ana@insper.edu.br', 'AN');`,
 			`INSERT INTO avaliador (nome, email, sigla) VALUES ('Bruno', 'bruno@insper.edu.br', 'BR');`,
@@ -532,20 +535,20 @@ func TestGetRestricaoFields(t *testing.T) {
 func TestProcessData(t *testing.T) {
 	users := []types.Candidato{
 		{
-			Nome:         "Maria",
-			CPF:          "12345678901",
-			Numero:       "123456789",
-			Semestre:     "2",
-			EmailInsper:  "MARIA@AL.INSPER.EDU.BR",
-			EmailPessoal: "maria@gmail.com",
+			Nome:            "Maria",
+			CPF:             "12345678901",
+			Numero:          "123456789",
+			Semestre:        "2",
+			EmailSecundario: "MARIA@AL.INSPER.EDU.BR",
+			EmailPessoal:    "maria@gmail.com",
 		},
 		{
-			Nome:         "Ana",
-			CPF:          "12345678901",
-			Numero:       "abc",
-			Semestre:     "12",
-			EmailInsper:  "ana@al.insper.edu.br",
-			EmailPessoal: "invalido",
+			Nome:            "Ana",
+			CPF:             "12345678901",
+			Numero:          "abc",
+			Semestre:        "12",
+			EmailSecundario: "ana@al.insper.edu.br",
+			EmailPessoal:    "invalido",
 		},
 	}
 
@@ -555,8 +558,8 @@ func TestProcessData(t *testing.T) {
 	}
 
 	first := resultados[1].Usuario
-	if first.EmailInsper != "maria@al.insper.edu.br" {
-		t.Fatalf("expected normalized insper email, got %q", first.EmailInsper)
+	if first.EmailSecundario != "maria@al.insper.edu.br" {
+		t.Fatalf("expected normalized insper email, got %q", first.EmailSecundario)
 	}
 
 	second := resultados[2]
@@ -601,15 +604,15 @@ func TestFillDb(t *testing.T) {
 
 			fillDb(db, []types.Candidato{
 				{
-					Timestamp:    "2026-01-01",
-					Nome:         "Maria",
-					CPF:          "12345678901",
-					Numero:       "123456789",
-					Semestre:     "2",
-					Curso:        "ADM",
-					EmailInsper:  "maria@al.insper.edu.br",
-					EmailPessoal: "maria@gmail.com",
-					Opcoes:       []string{"Seg 10h", "Ter 14h"},
+					Timestamp:       "2026-01-01",
+					Nome:            "Maria",
+					CPF:             "12345678901",
+					Numero:          "123456789",
+					Semestre:        "2",
+					Curso:           "ADM",
+					EmailSecundario: "maria@al.insper.edu.br",
+					EmailPessoal:    "maria@gmail.com",
+					Opcoes:          []string{"Seg 10h", "Ter 14h"},
 				},
 			})
 
@@ -641,7 +644,7 @@ func TestFillDb(t *testing.T) {
 			db := createTestDB(t, tmpDir)
 
 			seedStatements := []string{
-				`INSERT INTO pessoa (timestamp, nome, cpf, numero, email_insper, email_pessoal, semestre, curso)
+				`INSERT INTO pessoa (timestamp, nome, cpf, numero, email_secundario, email_pessoal, semestre, curso)
 				 VALUES ('2026-01-01', 'Maria', '12345678901', '123456789', 'maria@al.insper.edu.br', 'maria@gmail.com', 2, 'ADM');`,
 				`INSERT INTO avaliador (nome, email, sigla) VALUES ('Ana', 'ana@insper.edu.br', 'AN');`,
 				`INSERT INTO avaliador (nome, email, sigla) VALUES ('Bruno', 'bruno@insper.edu.br', 'BR');`,

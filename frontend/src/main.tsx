@@ -17,6 +17,7 @@ function Root() {
 	const [restricoes, setRestricoes] = useState<any>(null);
 
 	const [duplicatas, setDuplicatas] = useState<any>(null);
+	const [duplicateFields, setDuplicateFields] = useState<string[]>([]);
 
 	return (
 		<React.StrictMode>
@@ -39,6 +40,7 @@ function Root() {
 								mapping={mappingData}
 								setUsers={setUsers}
 								setDuplicatas={setDuplicatas}
+								setDuplicateFields={setDuplicateFields}
 							/>
 						}
 					/>
@@ -67,6 +69,7 @@ function Root() {
 								usuarios={users}
 								restricoes={restricoes}
 								duplicates={duplicatas}
+								duplicateFields={duplicateFields}
 							/>
 						}
 					/>

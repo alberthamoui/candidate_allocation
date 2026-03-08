@@ -27,6 +27,24 @@ Este projeto lê um arquivo Excel (`.xlsx`) e interativamente mapeia cada coluna
 
 ## Como rodar
 
+Modo desktop com Wails:
+
+```bash
+wails dev
+```
+
+Modo CLI, sem comentar o bootstrap do Wails:
+
+```bash
+go run . cli -file caminho/para/arquivo.xlsx
+```
+
+Se quiser mudar a quantidade de opcoes de horario esperadas na aba de candidatos:
+
+```bash
+go run . cli -file caminho/para/arquivo.xlsx -opcoes 5
+```
+
 ## About
 
 Wails template which includes: Vite, React, TS, TailwindCSS out of the box.

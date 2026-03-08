@@ -11,11 +11,13 @@ interface MappingPageProps {
 	mapping: MappingItem[] | null;
 	setUsers: (data: any) => void;
 	setDuplicatas: (data: any) => void;
+	setDuplicateFields: (data: string[]) => void;
 }
 export default function MappingPage({
 	mapping,
 	setUsers,
 	setDuplicatas,
+	setDuplicateFields,
 }: MappingPageProps) {
 	const navigate = useNavigate();
 	const dragActiveRef = useRef<boolean>(false);
@@ -113,9 +115,11 @@ export default function MappingPage({
 
 	async function onConfirm() {
 		console.log(items, " : mapping");
-		const { usuarios, duplicates } = await BuildUsuariosWithMapping(items);
+		const { usuarios, duplicates, duplicateFields } =
+			await BuildUsuariosWithMapping(items);
 		setUsers(usuarios);
 		setDuplicatas(duplicates);
+		setDuplicateFields(duplicateFields ?? []);
 		navigate("/mappingAvaliadores");
 	}
 

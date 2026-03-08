@@ -19,11 +19,11 @@ import (
 )
 
 var (
-	reEmailPessoal = regexp.MustCompile(`^[^@]+@[^@]+\.[^@]+$`)
-	reEmailInsper  = regexp.MustCompile(`^[^@]+@al\.insper\.edu\.br$`)
-	reCPF          = regexp.MustCompile(`^\d{11}$`)
-	reNumero       = regexp.MustCompile(`^\d{9}$`)
-	reSemestre     = regexp.MustCompile(`^([1-9]|10)$`)
+	reEmailPessoal    = regexp.MustCompile(`^[^@]+@[^@]+\.[^@]+$`)
+	reEmailSecundario = regexp.MustCompile(`^[^@]+@al\.insper\.edu\.br$`)
+	reCPF             = regexp.MustCompile(`^\d{11}$`)
+	reNumero          = regexp.MustCompile(`^\d{9}$`)
+	reSemestre        = regexp.MustCompile(`^([1-9]|10)$`)
 )
 
 type ErrorEntry struct {
@@ -37,8 +37,9 @@ type ValidationResult struct {
 }
 
 type UsuariosResponse struct {
-	Usuarios   map[int]ValidationResult `json:"usuarios"`
-	Duplicates [][]int                  `json:"duplicates"`
+	Usuarios        map[int]ValidationResult `json:"usuarios"`
+	Duplicates      [][]int                  `json:"duplicates"`
+	DuplicateFields []string                 `json:"duplicateFields"`
 }
 
 // SuggestMapping lê a aba de candidatos e monta uma sugestão inicial de
@@ -207,7 +208,11 @@ func BuildUsuariosWithMapping(data []byte, nOpcoes int, mappingItems []types.Map
 	}
 	users_limpo, duplicatedIndices := processData(users)
 
-	return UsuariosResponse{Usuarios: users_limpo, Duplicates: duplicatedIndices}, nil
+	return UsuariosResponse{
+		Usuarios:        users_limpo,
+		Duplicates:      duplicatedIndices,
+		DuplicateFields: types.CandidateDuplicateFieldNames(),
+	}, nil
 }
 
 // BuildAvaliadoresWithMapping monta os avaliadores a partir da segunda aba,
@@ -415,7 +420,7 @@ func processData(data []types.Candidato) (map[int]ValidationResult, [][]int) {
 		var errs []ErrorEntry
 
 		entrada.CPF = strings.TrimSpace(entrada.CPF)
-		entrada.EmailInsper = strings.ToLower(strings.TrimSpace(entrada.EmailInsper))
+		entrada.EmailSecundario = strings.ToLower(strings.TrimSpace(entrada.EmailSecundario))
 		entrada.EmailPessoal = strings.ToLower(strings.TrimSpace(entrada.EmailPessoal))
 		entrada.Numero = strings.TrimSpace(entrada.Numero)
 
@@ -429,9 +434,9 @@ func processData(data []types.Candidato) (map[int]ValidationResult, [][]int) {
 			errs = append(errs, ErrorEntry{Field: 5, Msg: "semestre inválido"})
 			entrada.Semestre = ""
 		}
-		if !reEmailInsper.MatchString(entrada.EmailInsper) {
-			errs = append(errs, ErrorEntry{Field: 7, Msg: "email_insper inválido"})
-			entrada.EmailInsper = ""
+		if !reEmailSecundario.MatchString(entrada.EmailSecundario) {
+			errs = append(errs, ErrorEntry{Field: 7, Msg: "email_secundario inválido"})
+			entrada.EmailSecundario = ""
 		}
 		if !reEmailPessoal.MatchString(entrada.EmailPessoal) {
 			errs = append(errs, ErrorEntry{Field: 8, Msg: "email_pessoal inválido"})
@@ -447,14 +452,13 @@ func processData(data []types.Candidato) (map[int]ValidationResult, [][]int) {
 	valueIndices := make(map[string][]int)
 	for idx, resultado := range resultados {
 		usr := resultado.Usuario
-		if usr.CPF != "" {
-			valueIndices["cpf:"+usr.CPF] = append(valueIndices["cpf:"+usr.CPF], idx)
-		}
-		if usr.EmailInsper != "" {
-			valueIndices["email_insper:"+usr.EmailInsper] = append(valueIndices["email_insper:"+usr.EmailInsper], idx)
-		}
-		if usr.EmailPessoal != "" {
-			valueIndices["email_pessoal:"+usr.EmailPessoal] = append(valueIndices["email_pessoal:"+usr.EmailPessoal], idx)
+		for _, fieldName := range types.CandidateDuplicateFieldNames() {
+			rawValue := candidateFieldValue(usr, fieldName)
+			if rawValue == "" {
+				continue
+			}
+			key := fieldName + ":" + rawValue
+			valueIndices[key] = append(valueIndices[key], idx)
 		}
 	}
 
@@ -502,6 +506,22 @@ func processData(data []types.Candidato) (map[int]ValidationResult, [][]int) {
 	}
 
 	return resultados, duplicatedIndices
+}
+
+func candidateFieldValue(candidate types.Candidato, fieldName string) string {
+	for _, field := range types.CandidateFields() {
+		if field.JSONName != fieldName || field.Kind != reflect.String {
+			continue
+		}
+
+		value := reflect.ValueOf(candidate).Field(field.Index)
+		if !value.IsValid() {
+			return ""
+		}
+		return strings.TrimSpace(value.String())
+	}
+
+	return ""
 }
 
 // getHorarios coleta todas as opções de horário presentes nos candidatos sem
