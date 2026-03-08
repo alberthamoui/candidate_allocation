@@ -5,6 +5,7 @@ import (
 	types "candidate_alocator/back/type"
 	"context"
 	"fmt"
+	"os"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -27,6 +28,7 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	SetUp()
+	writeWailsSmokeSentinel()
 }
 
 // domReady is called after front-end resources have been loaded
@@ -88,4 +90,15 @@ func (a *App) SaveRestricoesFromMaps(restricaoMaps []map[string]interface{}) err
 
 func (a *App) SaveUsuariosFromMaps(candidatoMaps []map[string]interface{}) error {
 	return logic.SaveUsuariosFromMaps(candidatoMaps)
+}
+
+func writeWailsSmokeSentinel() {
+	path := os.Getenv("CANDIDATE_ALLOCATOR_WAILS_SMOKE_FILE")
+	if path == "" {
+		return
+	}
+
+	if err := os.WriteFile(path, []byte("ok"), 0o644); err != nil {
+		fmt.Println("Erro ao escrever sentinel do smoke test do Wails:", err)
+	}
 }

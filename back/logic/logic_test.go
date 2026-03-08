@@ -5,10 +5,13 @@ import (
 	dbpkg "candidate_alocator/back/db"
 	types "candidate_alocator/back/type"
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -140,7 +143,7 @@ func containsErrorMessage(errors []ErrorEntry, msg string) bool {
 	return false
 }
 
-func TestSuggestMapping(t *testing.T) {
+func TestSuggestMappingUsesCurrentCandidateSchema(t *testing.T) {
 	workbook := createWorkbook(t, testSheet{
 		name: "Candidatos",
 		rows: [][]interface{}{
@@ -154,31 +157,20 @@ func TestSuggestMapping(t *testing.T) {
 		t.Fatalf("SuggestMapping returned error: %v", err)
 	}
 
-	expected := []types.MappingItem{
-		{NomeColuna: "Timestamp", Indice: 0, Variavel: "timestamp"},
-		{NomeColuna: "Nome", Indice: 1, Variavel: "nome"},
-		{NomeColuna: "CPF", Indice: 2, Variavel: "cpf"},
-		{NomeColuna: "", Indice: 3, Variavel: "numero"},
-		{NomeColuna: "", Indice: 4, Variavel: "semestre"},
-		{NomeColuna: "", Indice: 5, Variavel: "curso"},
-		{NomeColuna: "", Indice: 6, Variavel: "email_secundario"},
-		{NomeColuna: "", Indice: 7, Variavel: "email_pessoal"},
-		{NomeColuna: "", Indice: 8, Variavel: "opcao 1"},
-		{NomeColuna: "", Indice: 9, Variavel: "opcao 2"},
-	}
+	expected := expectedMappingItems([]string{"Timestamp", "Nome", "CPF"}, candidateMappingVariables(2))
 
 	if !reflect.DeepEqual(mappings, expected) {
 		t.Fatalf("unexpected mappings: %#v", mappings)
 	}
 }
 
-func TestSuggestMappingAvaliador(t *testing.T) {
+func TestSuggestMappingAvaliadorUsesCurrentSchema(t *testing.T) {
 	workbook := createWorkbook(t,
 		testSheet{name: "Candidatos", rows: [][]interface{}{{"A"}}},
 		testSheet{
 			name: "Avaliadores",
 			rows: [][]interface{}{
-				{"Nome Completo", "Email", "Sigla"},
+				interfaceSlice(avaliadorHeaders()),
 				{"Ana", "ana@insper.edu.br", "AN"},
 			},
 		},
@@ -189,11 +181,7 @@ func TestSuggestMappingAvaliador(t *testing.T) {
 		t.Fatalf("SuggestMappingAvaliador returned error: %v", err)
 	}
 
-	expected := []types.MappingItem{
-		{NomeColuna: "Nome Completo", Indice: 0, Variavel: "nome"},
-		{NomeColuna: "Email", Indice: 1, Variavel: "email"},
-		{NomeColuna: "Sigla", Indice: 2, Variavel: "sigla"},
-	}
+	expected := expectedMappingItems(avaliadorHeaders(), types.JSONFieldNames(types.AvaliadorInfo{}))
 
 	if !reflect.DeepEqual(mappings, expected) {
 		t.Fatalf("unexpected mappings: %#v", mappings)
@@ -351,36 +339,32 @@ func TestBuildUsuariosWithMapping(t *testing.T) {
 	}
 }
 
-func TestBuildAvaliadoresWithMapping(t *testing.T) {
+func TestBuildAvaliadoresWithMappingSupportsCurrentSchema(t *testing.T) {
 	withTempWorkingDir(t, func(tmpDir string) {
 		db := createTestDB(t, tmpDir)
+		header := avaliadorHeaders()
+		values := withPadding(avaliadorValues())
 
 		workbook := createWorkbook(t,
 			testSheet{name: "Candidatos", rows: [][]interface{}{{"A"}}},
 			testSheet{
 				name: "Avaliadores",
 				rows: [][]interface{}{
-					{"Nome", "Email", "Sigla"},
-					{" Ana ", " ana@insper.edu.br ", " AN "},
+					interfaceSlice(header),
+					interfaceSlice(values),
 					{"", "", ""},
 				},
 			},
 		)
 
-		mappingItems := []types.MappingItem{
-			{NomeColuna: "Nome", Indice: 0, Variavel: "nome"},
-			{NomeColuna: "Email", Indice: 1, Variavel: "email"},
-			{NomeColuna: "Sigla", Indice: 2, Variavel: "sigla"},
-		}
+		mappingItems := expectedMappingItems(header, types.JSONFieldNames(types.AvaliadorInfo{}))
 
 		got, err := BuildAvaliadoresWithMapping(workbook, mappingItems)
 		if err != nil {
 			t.Fatalf("BuildAvaliadoresWithMapping returned error: %v", err)
 		}
 
-		expected := []types.AvaliadorInfo{
-			{Nome: "Ana", Email: "ana@insper.edu.br", Sigla: "AN"},
-		}
+		expected := []types.AvaliadorInfo{expectedAvaliadorInfo()}
 		if !reflect.DeepEqual(got, expected) {
 			t.Fatalf("unexpected avaliadores: %#v", got)
 		}
@@ -460,6 +444,41 @@ func TestSaveUsuariosFromMaps(t *testing.T) {
 	})
 }
 
+func TestSaveUsuariosFromMapsSupportsCurrentCandidateSchema(t *testing.T) {
+	withTempWorkingDir(t, func(tmpDir string) {
+		db := createTestDB(t, tmpDir)
+
+		if err := SaveUsuariosFromMaps([]map[string]interface{}{candidateMapPayload()}); err != nil {
+			t.Fatalf("SaveUsuariosFromMaps returned error: %v", err)
+		}
+
+		if count := fetchCount(t, db, `SELECT COUNT(*) FROM pessoa`); count != 1 {
+			t.Fatalf("expected 1 persisted user, got %d", count)
+		}
+
+		expected := candidateExpectedDBValues()
+		for _, field := range types.CandidateFields() {
+			if !field.Persist {
+				continue
+			}
+
+			var got sql.NullString
+			query := fmt.Sprintf(`SELECT CAST("%s" AS TEXT) FROM pessoa LIMIT 1`, field.ColumnName)
+			if err := db.QueryRow(query).Scan(&got); err != nil {
+				t.Fatalf("failed to query persisted candidate field %s: %v", field.ColumnName, err)
+			}
+
+			if got.String != expected[field.ColumnName] {
+				t.Fatalf("unexpected value for pessoa.%s: got %q want %q", field.ColumnName, got.String, expected[field.ColumnName])
+			}
+		}
+
+		if count := fetchCount(t, db, `SELECT COUNT(*) FROM disponibilidade`); count != 2 {
+			t.Fatalf("expected 2 disponibilidades, got %d", count)
+		}
+	})
+}
+
 func TestSaveRestricoesFromMaps(t *testing.T) {
 	withTempWorkingDir(t, func(tmpDir string) {
 		db := createTestDB(t, tmpDir)
@@ -516,7 +535,7 @@ func TestGetRowsFromSheet(t *testing.T) {
 
 func TestGetAvaliadorFields(t *testing.T) {
 	got := getAvaliadorFields()
-	expected := []string{"nome", "email", "sigla"}
+	expected := types.JSONFieldNames(types.AvaliadorInfo{})
 
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected avaliador fields: %#v", got)
@@ -674,15 +693,30 @@ func TestSave(t *testing.T) {
 		withTempWorkingDir(t, func(tmpDir string) {
 			db := createTestDB(t, tmpDir)
 
-			err := Save([]types.AvaliadorInfo{
-				{Nome: "Ana", Email: "ana@insper.edu.br", Sigla: "AN"},
-			})
+			err := Save([]types.AvaliadorInfo{expectedAvaliadorInfo()})
 			if err != nil {
 				t.Fatalf("Save returned error: %v", err)
 			}
 
 			if count := fetchCount(t, db, `SELECT COUNT(*) FROM avaliador`); count != 1 {
 				t.Fatalf("expected 1 avaliador, got %d", count)
+			}
+
+			expected := avaliadorExpectedDBValues()
+			for _, field := range types.AvaliadorFields() {
+				if !field.Persist {
+					continue
+				}
+
+				var got sql.NullString
+				query := fmt.Sprintf(`SELECT CAST("%s" AS TEXT) FROM avaliador LIMIT 1`, field.ColumnName)
+				if err := db.QueryRow(query).Scan(&got); err != nil {
+					t.Fatalf("failed to query persisted avaliador field %s: %v", field.ColumnName, err)
+				}
+
+				if got.String != expected[field.ColumnName] {
+					t.Fatalf("unexpected value for avaliador.%s: got %q want %q", field.ColumnName, got.String, expected[field.ColumnName])
+				}
 			}
 		})
 	})
@@ -694,26 +728,18 @@ func TestSave(t *testing.T) {
 	})
 }
 
-func TestBuildCandidateFromRow(t *testing.T) {
-	row := []string{"2026-01-01", "Maria", "12345678901", "Seg 10h", "Ter 14h"}
-	mapping := []types.MappingItem{
-		{Indice: 0, Variavel: "timestamp"},
-		{Indice: 1, Variavel: "nome"},
-		{Indice: 2, Variavel: "cpf"},
-		{Indice: 3, Variavel: "opcao 1"},
-		{Indice: 4, Variavel: "opcao 2"},
-	}
+func TestBuildCandidateFromRowSupportsCurrentCandidateSchema(t *testing.T) {
+	row := candidateRowValues(2)
+	mapping := expectedMappingItems(candidateHeaders(2), candidateMappingVariables(2))
 
 	got, err := buildCandidateFromRow(row, 2, mapping)
 	if err != nil {
 		t.Fatalf("buildCandidateFromRow returned error: %v", err)
 	}
 
-	if got.Timestamp != "2026-01-01" || got.Nome != "Maria" || got.CPF != "12345678901" {
+	expected := expectedCandidateForBuild()
+	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected candidate built from row: %#v", got)
-	}
-	if !reflect.DeepEqual(got.Opcoes, []string{"Seg 10h", "Ter 14h"}) {
-		t.Fatalf("unexpected candidate options: %#v", got.Opcoes)
 	}
 }
 
@@ -769,4 +795,229 @@ func TestGetRowsFromSheetInvalidWorkbook(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid workbook to return an error")
 	}
+}
+
+func expectedMappingItems(headers []string, variables []string) []types.MappingItem {
+	items := make([]types.MappingItem, 0, len(variables))
+	for i, variable := range variables {
+		column := ""
+		if i < len(headers) {
+			column = headers[i]
+		}
+
+		items = append(items, types.MappingItem{
+			NomeColuna: column,
+			Indice:     i,
+			Variavel:   variable,
+		})
+	}
+	return items
+}
+
+func candidateMappingVariables(optionCount int) []string {
+	fields := types.JSONFieldNames(types.Candidato{})
+	var variables []string
+	for _, field := range fields {
+		if field == "opcoes" {
+			for i := 1; i <= optionCount; i++ {
+				variables = append(variables, fmt.Sprintf("opcao %d", i))
+			}
+			continue
+		}
+		variables = append(variables, field)
+	}
+	return variables
+}
+
+func candidateHeaders(optionCount int) []string {
+	var headers []string
+	for _, variable := range candidateMappingVariables(optionCount) {
+		headers = append(headers, candidateHeaderForVariable(variable))
+	}
+	return headers
+}
+
+func candidateHeaderForVariable(variable string) string {
+	switch variable {
+	case "timestamp":
+		return "Timestamp"
+	case "nome":
+		return "Nome"
+	case "cpf":
+		return "CPF"
+	case "numero":
+		return "Numero"
+	case "semestre":
+		return "Semestre"
+	case "curso":
+		return "Curso"
+	case "email_secundario":
+		return "Email Secundario"
+	case "email_pessoal":
+		return "Email Pessoal"
+	default:
+		if strings.HasPrefix(variable, "opcao ") {
+			return "Opcao " + strings.TrimPrefix(variable, "opcao ")
+		}
+		return strings.Title(strings.ReplaceAll(variable, "_", " "))
+	}
+}
+
+func candidateRowValues(optionCount int) []string {
+	var values []string
+	for _, variable := range candidateMappingVariables(optionCount) {
+		values = append(values, candidateValueForVariable(variable))
+	}
+	return values
+}
+
+func candidateValueForVariable(variable string) string {
+	switch variable {
+	case "timestamp":
+		return "2026-01-01"
+	case "nome":
+		return "Maria"
+	case "cpf":
+		return "12345678901"
+	case "numero":
+		return "123456789"
+	case "semestre":
+		return "2"
+	case "curso":
+		return "ADM"
+	case "email_secundario":
+		return "maria@al.insper.edu.br"
+	case "email_pessoal":
+		return "maria@gmail.com"
+	default:
+		if strings.HasPrefix(variable, "opcao ") {
+			return "Horario " + strings.TrimPrefix(variable, "opcao ")
+		}
+		return fmt.Sprintf("%s_value", variable)
+	}
+}
+
+func expectedCandidateForBuild() types.Candidato {
+	candidate := types.Candidato{}
+	rv := reflect.ValueOf(&candidate).Elem()
+	for _, field := range types.CandidateFields() {
+		if field.JSONName == "opcoes" {
+			continue
+		}
+		rv.Field(field.Index).SetString(candidateValueForVariable(field.JSONName))
+	}
+	candidate.Opcoes = []string{"Horario 1", "Horario 2"}
+	return candidate
+}
+
+func candidateMapPayload() map[string]interface{} {
+	payload := make(map[string]interface{})
+	for _, field := range types.CandidateFields() {
+		if field.JSONName == "opcoes" {
+			continue
+		}
+		payload[field.JSONName] = candidateValueForVariable(field.JSONName)
+	}
+	payload["opcoes"] = []interface{}{" Seg 10h ", "Ter 14h"}
+	return payload
+}
+
+func candidateExpectedDBValues() map[string]string {
+	expected := make(map[string]string)
+	for _, field := range types.CandidateFields() {
+		if !field.Persist {
+			continue
+		}
+
+		value := candidateValueForVariable(field.JSONName)
+		if field.SQLiteType == "INTEGER" {
+			value = strconv.Itoa(mustAtoi(value))
+		}
+		expected[field.ColumnName] = value
+	}
+	return expected
+}
+
+func avaliadorHeaders() []string {
+	fields := types.JSONFieldNames(types.AvaliadorInfo{})
+	headers := make([]string, 0, len(fields))
+	for _, field := range fields {
+		switch field {
+		case "nome":
+			headers = append(headers, "Nome")
+		case "email":
+			headers = append(headers, "Email")
+		case "sigla":
+			headers = append(headers, "Sigla")
+		default:
+			headers = append(headers, strings.Title(strings.ReplaceAll(field, "_", " ")))
+		}
+	}
+	return headers
+}
+
+func avaliadorValues() []string {
+	fields := types.JSONFieldNames(types.AvaliadorInfo{})
+	values := make([]string, 0, len(fields))
+	for _, field := range fields {
+		values = append(values, avaliadorValueForField(field))
+	}
+	return values
+}
+
+func avaliadorValueForField(field string) string {
+	switch field {
+	case "nome":
+		return "Ana"
+	case "email":
+		return "ana@insper.edu.br"
+	case "sigla":
+		return "AN"
+	default:
+		return fmt.Sprintf("%s_value", field)
+	}
+}
+
+func expectedAvaliadorInfo() types.AvaliadorInfo {
+	avaliador := types.AvaliadorInfo{}
+	rv := reflect.ValueOf(&avaliador).Elem()
+	for _, field := range types.AvaliadorFields() {
+		rv.Field(field.Index).SetString(avaliadorValueForField(field.JSONName))
+	}
+	return avaliador
+}
+
+func avaliadorExpectedDBValues() map[string]string {
+	expected := make(map[string]string)
+	for _, field := range types.AvaliadorFields() {
+		if !field.Persist {
+			continue
+		}
+		expected[field.ColumnName] = avaliadorValueForField(field.JSONName)
+	}
+	return expected
+}
+
+func interfaceSlice(values []string) []interface{} {
+	result := make([]interface{}, 0, len(values))
+	for _, value := range values {
+		result = append(result, value)
+	}
+	return result
+}
+
+func withPadding(values []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		result = append(result, " "+value+" ")
+	}
+	return result
+}
+
+func mustAtoi(value string) int {
+	number, err := strconv.Atoi(value)
+	if err != nil {
+		panic(err)
+	}
+	return number
 }
