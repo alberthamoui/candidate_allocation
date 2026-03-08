@@ -5,6 +5,7 @@ package main
 // ==================================================
 
 import (
+	types "candidate_alocator/back/type"
 	"database/sql"
 	"fmt"
 	"log"
@@ -32,38 +33,6 @@ const (
 // ==================== STRUCTS =====================
 // ==================================================
 
-type Mesa struct {
-	ID          int    // único (ex.: 301 = quarta-mesa1)
-	DiaID       int    // 1=segunda, 2=terça, ...
-	Descricao   string // "quarta – mesa 2"
-	Candidatos  []int  // já alocados
-	Avaliadores []int
-}
-
-type ResultadoAlocacao struct {
-	Alocacao  map[int]int
-	Pontuacao int
-	Alocados  int
-}
-
-type Avaliador struct {
-	ID    int    `json:"id"`
-	Nome  string `json:"nome"`
-	Email string `json:"email"`
-}
-
-type Horario struct {
-	ID          int
-	Descricao   string
-	Candidatos  []int
-	Avaliadores []int
-}
-
-type horarioInfo struct {
-	H       *Horario
-	Pessoas []int
-}
-
 func fatorialBig(n int) *big.Int {
 	result := big.NewInt(1)
 	for i := 2; i <= n; i++ {
@@ -76,8 +45,8 @@ func fatorialBig(n int) *big.Int {
 // =========== CARREGAMENTO DE DADOS DB ============
 // ==================================================
 
-func carregarHorarios(db *sql.DB) map[int]*Horario {
-	horarios := make(map[int]*Horario)
+func carregarHorarios(db *sql.DB) map[int]*types.Horario {
+	horarios := make(map[int]*types.Horario)
 	rows, err := db.Query(`SELECT id, opcao FROM opcoes_horario`)
 	if err != nil {
 		log.Fatal(err)
@@ -85,7 +54,7 @@ func carregarHorarios(db *sql.DB) map[int]*Horario {
 	defer rows.Close()
 
 	for rows.Next() {
-		var h Horario
+		var h types.Horario
 		if err := rows.Scan(&h.ID, &h.Descricao); err != nil {
 			log.Fatal(err)
 		}
@@ -95,7 +64,7 @@ func carregarHorarios(db *sql.DB) map[int]*Horario {
 	return horarios
 }
 
-func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]int {
+func carregarDisponibilidades(db *sql.DB, horarios map[int]*types.Horario) map[int][]int {
 	prefs := make(map[int][]int)
 	rows, err := db.Query(`SELECT pessoa_id, horario_id, preferencia FROM disponibilidade ORDER BY pessoa_id, preferencia ASC`)
 	if err != nil {
@@ -121,16 +90,16 @@ func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]i
 	return prefs
 }
 
-func carregarAvaliadores(db *sql.DB) []*Avaliador {
+func carregarAvaliadores(db *sql.DB) []*types.Avaliador {
 	rows, err := db.Query(`SELECT id, nome, email FROM avaliador`)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer rows.Close()
 
-	var avals []*Avaliador
+	var avals []*types.Avaliador
 	for rows.Next() {
-		var a Avaliador
+		var a types.Avaliador
 		if err := rows.Scan(&a.ID, &a.Nome, &a.Email); err != nil {
 			log.Fatal(err)
 		}
@@ -185,16 +154,16 @@ func carregarRestricoes(db *sql.DB) map[int]map[int]bool {
 	return restr
 }
 
-func gerarMesas(horarios map[int]*Horario, avals []*Avaliador) ([]*Mesa, map[int][]*Mesa) {
-	var todas []*Mesa
-	porDia := make(map[int][]*Mesa)
+func gerarMesas(horarios map[int]*types.Horario, avals []*types.Avaliador) ([]*types.Mesa, map[int][]*types.Mesa) {
+	var todas []*types.Mesa
+	porDia := make(map[int][]*types.Mesa)
 
 	rand.Seed(time.Now().UnixNano())
 
 	for _, h := range horarios {
 		for i := 0; i < MESAS_POR_HORARIO; i++ {
 			idMesa := h.ID*100 + i // 101,102… 201,202…
-			m := &Mesa{
+			m := &types.Mesa{
 				ID:        idMesa,
 				DiaID:     h.ID,
 				Descricao: fmt.Sprintf("%s – mesa %d", h.Descricao, i+1),
@@ -218,8 +187,8 @@ func gerarMesas(horarios map[int]*Horario, avals []*Avaliador) ([]*Mesa, map[int
 // ========= PRÉ-PROCESSAMENTO DE HORÁRIOS =========
 // ==================================================
 
-func filtrarHorariosValidos(horarios map[int]*Horario) []*Horario {
-	var valid []*Horario
+func filtrarHorariosValidos(horarios map[int]*types.Horario) []*types.Horario {
+	var valid []*types.Horario
 	for _, h := range horarios {
 		if len(h.Candidatos) >= MIN_PESSOAS_POR_MESA {
 			valid = append(valid, h)
@@ -228,7 +197,7 @@ func filtrarHorariosValidos(horarios map[int]*Horario) []*Horario {
 	return valid
 }
 
-func sortHorariosPorCandidatos(hs []*Horario) {
+func sortHorariosPorCandidatos(hs []*types.Horario) {
 	sort.SliceStable(hs, func(i, j int) bool {
 		return len(hs[i].Candidatos) < len(hs[j].Candidatos)
 	})
@@ -242,7 +211,7 @@ func podeAvaliar(avID, pid int, restr map[int]map[int]bool) bool {
 	return !restr[avID][pid]
 }
 
-func podeAlocarNoHorario(h *Horario, pid int, restr map[int]map[int]bool) bool {
+func podeAlocarNoHorario(h *types.Horario, pid int, restr map[int]map[int]bool) bool {
 	for _, av := range h.Avaliadores {
 		if !podeAvaliar(av, pid, restr) {
 			return false
@@ -251,7 +220,7 @@ func podeAlocarNoHorario(h *Horario, pid int, restr map[int]map[int]bool) bool {
 	return true
 }
 
-func fazerAlocacaoMesas(mesas []*Mesa, porDia map[int][]*Mesa, prefs map[int][]int, restr map[int]map[int]bool) ResultadoAlocacao {
+func fazerAlocacaoMesas(mesas []*types.Mesa, porDia map[int][]*types.Mesa, prefs map[int][]int, restr map[int]map[int]bool) types.ResultadoAlocacao {
 	aloc := make(map[int]int)      // pessoa -> mesaID
 	alocados := make(map[int]bool) // set
 	pontuacao := 0
@@ -272,7 +241,7 @@ func fazerAlocacaoMesas(mesas []*Mesa, porDia map[int][]*Mesa, prefs map[int][]i
 				if ocupado[m.ID] >= MAX_PESSOAS_POR_MESA {
 					continue
 				}
-				if !podeAlocarNoHorario(&Horario{Avaliadores: m.Avaliadores}, pid, restr) {
+				if !podeAlocarNoHorario(&types.Horario{Avaliadores: m.Avaliadores}, pid, restr) {
 					continue
 				}
 
@@ -298,7 +267,7 @@ func fazerAlocacaoMesas(mesas []*Mesa, porDia map[int][]*Mesa, prefs map[int][]i
 			ocupado[m.ID] = 0
 		}
 	}
-	return ResultadoAlocacao{Alocacao: aloc, Pontuacao: pontuacao, Alocados: len(aloc)}
+	return types.ResultadoAlocacao{Alocacao: aloc, Pontuacao: pontuacao, Alocados: len(aloc)}
 }
 
 // ==================================================
@@ -367,7 +336,7 @@ func fazerAlocacaoMesas(mesas []*Mesa, porDia map[int][]*Mesa, prefs map[int][]i
 // ============= IMPRESSÃO DOS RESULTADOS ===========
 // ==================================================
 
-func imprimirAlocacao(aloc map[int]int, horarios map[int]*Horario) int {
+func imprimirAlocacao(aloc map[int]int, horarios map[int]*types.Horario) int {
 	fmt.Println("\n---- ALOCAÇÃO FINAL ----")
 	alSet := make(map[int]bool) // quem foi alocado
 
@@ -397,7 +366,7 @@ func imprimirAlocacao(aloc map[int]int, horarios map[int]*Horario) int {
 	return len(totalSet)
 }
 
-func imprimirHorariosPreenchidos(horarios map[int]*Horario, aloc map[int]int, total int) {
+func imprimirHorariosPreenchidos(horarios map[int]*types.Horario, aloc map[int]int, total int) {
 	fmt.Printf("\n---- HORÁRIOS PREENCHIDOS ----\nCandidatos totais: %d\n\n", total)
 
 	m := make(map[int][]int)
@@ -405,10 +374,10 @@ func imprimirHorariosPreenchidos(horarios map[int]*Horario, aloc map[int]int, to
 		m[hid] = append(m[hid], pid)
 	}
 
-	var preenchidos []horarioInfo
+	var preenchidos []types.HorarioInfo
 	for _, h := range horarios {
 		if ps := m[h.ID]; len(ps) > 0 {
-			preenchidos = append(preenchidos, horarioInfo{h, ps})
+			preenchidos = append(preenchidos, types.HorarioInfo{h, ps})
 		}
 	}
 
@@ -426,7 +395,7 @@ func imprimirHorariosPreenchidos(horarios map[int]*Horario, aloc map[int]int, to
 	}
 }
 
-func imprimirAlocacaoMesas(aloc map[int]int, mesas map[int]*Mesa, prefs map[int][]int) int {
+func imprimirAlocacaoMesas(aloc map[int]int, mesas map[int]*types.Mesa, prefs map[int][]int) int {
 	fmt.Println("\n---- ALOCAÇÃO FINAL ----")
 	alocados := make(map[int]bool)
 	for pid, mid := range aloc {
@@ -451,7 +420,7 @@ func imprimirAlocacaoMesas(aloc map[int]int, mesas map[int]*Mesa, prefs map[int]
 	return len(totalSet)
 }
 
-func imprimirMesasPreenchidas(mesas []*Mesa, aloc map[int]int, total int) {
+func imprimirMesasPreenchidas(mesas []*types.Mesa, aloc map[int]int, total int) {
 	fmt.Printf("\n---- MESAS PREENCHIDAS ----\nPessoas únicas com disponibilidade: %d\n\n", total)
 
 	// Mapa de prioridade dos dias
@@ -536,7 +505,7 @@ func Alocar(db *sql.DB) {
 	res := fazerAlocacaoMesas(mesas, porDia, prefs, restr)
 
 	// índice mesaID -> *Mesa  (facilita buscas na impressão)
-	mapMesa := make(map[int]*Mesa, len(mesas))
+	mapMesa := make(map[int]*types.Mesa, len(mesas))
 	for _, m := range mesas {
 		mapMesa[m.ID] = m
 	}
