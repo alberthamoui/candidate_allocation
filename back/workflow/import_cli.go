@@ -78,6 +78,11 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 	if err != nil {
 		return fmt.Errorf("erro ao construir avaliadores: %w", err)
 	}
+
+	if err := logic.Save(avaliadores); err != nil {
+		return fmt.Errorf("erro ao salvar avaliador: %w", err)
+	}
+
 	fmt.Printf("Avaliadores processados: %d\n", len(avaliadores))
 
 	if err := logic.Save(restricoes); err != nil {

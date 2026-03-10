@@ -159,7 +159,7 @@ func BuildAvaliadoresWithMapping(data []byte, mappingItems []types.MappingItem) 
 		}
 		avaliadores = append(avaliadores, av)
 	}
-	Save(avaliadores)
+
 	return avaliadores, nil
 }
 
