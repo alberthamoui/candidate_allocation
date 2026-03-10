@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
 	ExclamationTriangleIcon,
@@ -35,6 +36,7 @@ export default function VerifyUserPage({
 	duplicates,
 	duplicateFields,
 }: VerifyUserPageProps) {
+	const navigate = useNavigate();
 	const cloneExtras = (extras: unknown): UserExtras => {
 		if (!extras || typeof extras !== "object" || Array.isArray(extras)) {
 			return {};
@@ -339,6 +341,7 @@ export default function VerifyUserPage({
 			try {
 				await SaveUsuariosFromMaps(usuariosParaSalvar);
 				await SaveRestricoesFromMaps(restricoes);
+				navigate("/success");
 			} catch (err) {
 				setErrorMsg("Erro ao salvar dados: " + (err as Error).message);
 			}

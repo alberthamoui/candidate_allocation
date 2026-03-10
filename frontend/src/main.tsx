@@ -7,6 +7,8 @@ import "./index.css";
 import VerifyUserPage from "./VerifyUsers";
 import MappingAvaliadoresPage from "./MappingAvaliadoresPage";
 import MappingResticoesPage from "./MappingRerstricoesPage";
+import SuccessPage from "./SuccessPage";
+
 function Root() {
 	const [mappingData, setMappingData] = useState<any>(null);
 	const [mappingAvaliadores, setMappingAvaliadores] = useState<any>(null);
@@ -73,6 +75,7 @@ function Root() {
 							/>
 						}
 					/>
+					<Route path="/success" element={<SuccessPage />} />
 				</Routes>
 			</BrowserRouter>
 		</React.StrictMode>

@@ -29,6 +29,17 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 	if err := dbpkg.EnsureDefaultDatabase(); err != nil {
 		return err
 	}
+	db, err := dbpkg.OpenDefault()
+	if err != nil {
+		fmt.Println("Erro ao abrir banco para limpeza:", err)
+		panic(err)
+	}
+	defer db.Close()
+
+	if err := dbpkg.ClearDatabase(db); err != nil {
+		fmt.Println("Erro ao limpar banco:", err)
+		panic(err)
+	}
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -89,12 +100,6 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 		return fmt.Errorf("erro ao salvar restricoes: %w", err)
 	}
 	fmt.Printf("Restricoes processadas: %d\n", len(restricoes))
-
-	db, err := dbpkg.OpenDefault()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
 
 	if err := allocation.Run(db); err != nil {
 		return fmt.Errorf("erro ao executar alocacao: %w", err)

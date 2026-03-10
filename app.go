@@ -32,6 +32,19 @@ func (a *App) startup(ctx context.Context) {
 		fmt.Println("Erro ao preparar banco:", err)
 		panic(err)
 	}
+
+	db, err := dbpkg.OpenDefault()
+	if err != nil {
+		fmt.Println("Erro ao abrir banco para limpeza:", err)
+		panic(err)
+	}
+	defer db.Close()
+
+	if err := dbpkg.ClearDatabase(db); err != nil {
+		fmt.Println("Erro ao limpar banco:", err)
+		panic(err)
+	}
+
 	writeWailsSmokeSentinel()
 }
 

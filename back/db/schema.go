@@ -57,6 +57,30 @@ func EnsureAppSchema(db *sql.DB) error {
 	return nil
 }
 
+func ClearDatabase(db *sql.DB) error {
+	tables := []string{
+		"disponibilidade",
+		"restricoesNposso",
+		"restricoesPrefiroN",
+		"opcoes_horario",
+		"avaliador",
+		"pessoa",
+	}
+
+	for _, table := range tables {
+		if _, err := db.Exec(fmt.Sprintf(`DELETE FROM "%s"`, table)); err != nil {
+			return fmt.Errorf("erro ao limpar tabela %s: %w", table, err)
+		}
+		// Reseta o auto-incremento para cada tabela
+		if _, err := db.Exec(fmt.Sprintf(`DELETE FROM sqlite_sequence WHERE name='%s'`, table)); err != nil {
+			// Ignora erro se a tabela não tiver auto-incremento
+			continue
+		}
+	}
+
+	return nil
+}
+
 func ensureDynamicTable(db *sql.DB, table string, fields []types.FieldSchema) error {
 	createStmt := buildCreateTableStatement(table, fields)
 	if _, err := db.Exec(createStmt); err != nil {
