@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"unicode"
@@ -36,13 +35,50 @@ func tokenizeMappingName(value string) []string {
 		case unicode.IsUpper(r) && builder.Len() > 0 && (unicode.IsLower(prev) || unicode.IsDigit(prev)):
 			builder.WriteRune(' ')
 			builder.WriteRune(unicode.ToLower(r))
+		case unicode.IsDigit(r) && builder.Len() > 0 && unicode.IsLetter(prev):
+			builder.WriteRune(' ')
+			builder.WriteRune(r)
+		case unicode.IsLetter(r) && builder.Len() > 0 && unicode.IsDigit(prev):
+			builder.WriteRune(' ')
+			builder.WriteRune(unicode.ToLower(r))
 		default:
 			builder.WriteRune(unicode.ToLower(r))
 		}
 		prev = r
 	}
 
-	return strings.Fields(builder.String())
+	rawTokens := strings.Fields(builder.String())
+	var result []string
+	for _, t := range rawTokens {
+		result = append(result, normalizeNumericToken(t))
+	}
+	return result
+}
+
+func normalizeNumericToken(token string) string {
+	switch token {
+	case "um", "uma", "primeira", "primeiro", "1a", "1o":
+		return "1"
+	case "dois", "duas", "segunda", "segundo", "2a", "2o":
+		return "2"
+	case "tres", "terceira", "terceiro", "3a", "3o":
+		return "3"
+	case "quatro", "quarta", "quarto", "4a", "4o":
+		return "4"
+	case "cinco", "quinta", "quinto", "5a", "5o":
+		return "5"
+	case "seis", "sexta", "sexto", "6a", "6o":
+		return "6"
+	case "sete", "setima", "setimo", "7a", "7o":
+		return "7"
+	case "oito", "oitava", "oitavo", "8a", "8o":
+		return "8"
+	case "nove", "nona", "nono", "9a", "9o":
+		return "9"
+	case "dez", "decima", "decimo", "10a", "10o":
+		return "10"
+	}
+	return token
 }
 
 func mappingSimilarityScore(variable string, header string) int {
@@ -63,11 +99,12 @@ func mappingSimilarityDetails(variable string, header string) (int, bool, bool, 
 	exactNormalized := normalizedVariable != "" && (normalizedVariable == normalizedHeader || normalizedVariable == varHeaderCompact || varVariableCompact == normalizedHeader || varVariableCompact == varHeaderCompact)
 	exactTokenSequence := slicesEqual(varTokens, headerTokens)
 	sharedTokens := countSharedTokens(varTokens, headerTokens)
+	allTokensMatch := sharedTokens > 0 && sharedTokens == len(varTokens) && sharedTokens == len(headerTokens)
 	tokenCountDelta := abs(len(varTokens) - len(headerTokens))
 
 	score := 0
 	switch {
-	case exactNormalized:
+	case exactNormalized || allTokensMatch:
 		score += 10_000
 	case exactTokenSequence:
 		score += 9_000
@@ -128,7 +165,7 @@ func buildMappingCandidates(headers []string, variables []string) []mappingCandi
 	return candidates
 }
 
-func resolveMappingConflicts(headers []string, variables []string, candidates []mappingCandidate) []types.MappingItem {
+func resolveMappingConflicts(headers []string, variables []string, candidates []mappingCandidate) ([]types.MappingItem, map[int]bool) {
 	assignments := make([]types.MappingItem, len(variables))
 	for i, variable := range variables {
 		assignments[i] = unmappedMappingItem(variable, len(headers), i)
@@ -161,11 +198,18 @@ func resolveMappingConflicts(headers []string, variables []string, candidates []
 	assignmentLimit := min(len(headers), len(variables))
 	assigned := 0
 
+	threshold := 0.2
+
 	for _, candidate := range candidates {
 		if assigned >= assignmentLimit {
 			break
 		}
 		if usedHeaders[candidate.headerIndex] || usedVariables[candidate.variableIndex] {
+			continue
+		}
+
+		// Check similarity threshold for core variables
+		if stringSimilarity(candidate.variable, candidate.header) < threshold {
 			continue
 		}
 
@@ -179,13 +223,10 @@ func resolveMappingConflicts(headers []string, variables []string, candidates []
 		assigned++
 	}
 
-	return assignments
+	return assignments, usedHeaders
 }
 
 func suggestMappingByName(headers []string, variables []string) []types.MappingItem {
-	if len(variables) == 0 {
-		return nil
-	}
 	if len(headers) == 0 {
 		items := make([]types.MappingItem, 0, len(variables))
 		for i, variable := range variables {
@@ -195,7 +236,59 @@ func suggestMappingByName(headers []string, variables []string) []types.MappingI
 	}
 
 	candidates := buildMappingCandidates(headers, variables)
-	return resolveMappingConflicts(headers, variables, candidates)
+	assignments, usedHeaders := resolveMappingConflicts(headers, variables, candidates)
+
+	// Add all unused headers as extra mappings
+	for i, header := range headers {
+		if usedHeaders[i] {
+			continue
+		}
+		assignments = append(assignments, types.MappingItem{
+			NomeColuna: header,
+			Indice:     i,
+			Variavel:   header, // Suggested as extra with same name as column
+		})
+	}
+
+	return assignments
+}
+
+func stringSimilarity(s1, s2 string) float64 {
+	s1 = strings.ToLower(normalizeMappingName(s1))
+	s2 = strings.ToLower(normalizeMappingName(s2))
+	if s1 == s2 {
+		return 1.0
+	}
+	if len(s1) == 0 || len(s2) == 0 {
+		return 0.0
+	}
+
+	d := make([][]int, len(s1)+1)
+	for i := range d {
+		d[i] = make([]int, len(s2)+1)
+		d[i][0] = i
+	}
+	for j := range d[0] {
+		d[0][j] = j
+	}
+
+	for i := 1; i <= len(s1); i++ {
+		for j := 1; j <= len(s2); j++ {
+			cost := 1
+			if s1[i-1] == s2[j-1] {
+				cost = 0
+			}
+			d[i][j] = min(d[i-1][j]+1, min(d[i][j-1]+1, d[i-1][j-1]+cost))
+		}
+	}
+
+	distance := d[len(s1)][len(s2)]
+	maxLen := len(s1)
+	if len(s2) > maxLen {
+		maxLen = len(s2)
+	}
+
+	return 1.0 - float64(distance)/float64(maxLen)
 }
 
 func unmappedMappingItem(variable string, headerCount int, offset int) types.MappingItem {
@@ -204,47 +297,6 @@ func unmappedMappingItem(variable string, headerCount int, offset int) types.Map
 		Indice:     headerCount + offset,
 		Variavel:   variable,
 	}
-}
-
-func collectUnusedColumnExtras(row []string, header []string, mappingItems []types.MappingItem) map[string]string {
-	usedColumns := make(map[int]bool, len(mappingItems))
-	for _, item := range mappingItems {
-		if item.Indice >= 0 && item.Indice < len(header) {
-			usedColumns[item.Indice] = true
-		}
-	}
-
-	extras := make(map[string]string)
-	for index, columnName := range header {
-		if usedColumns[index] || index >= len(row) {
-			continue
-		}
-
-		value := strings.TrimSpace(row[index])
-		if value == "" {
-			continue
-		}
-
-		key := extraColumnKey(columnName, index, extras)
-		extras[key] = value
-	}
-
-	if len(extras) == 0 {
-		return nil
-	}
-
-	return extras
-}
-
-func extraColumnKey(columnName string, index int, existing map[string]string) string {
-	base := strings.TrimSpace(columnName)
-	if base == "" {
-		base = fmt.Sprintf("coluna_%d", index)
-	}
-	if _, exists := existing[base]; !exists {
-		return base
-	}
-	return fmt.Sprintf("%s_%d", base, index)
 }
 
 func countSharedTokens(left []string, right []string) int {

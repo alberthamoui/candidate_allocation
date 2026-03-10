@@ -13,10 +13,11 @@ type Candidato struct {
 	Extras          map[string]string `json:"extras" db:"type=TEXT"`
 }
 
-type AvaliadorInfo struct {
-	Nome   string            `json:"nome" db:"type=TEXT;required;unique"`
-	Email  string            `json:"email" db:"type=TEXT;required;unique"`
-	Sigla  string            `json:"sigla" db:"type=TEXT;required;unique"`
+type Avaliador struct {
+	ID     int               `json:"id" db:"-"`
+	Nome   string            `json:"nome" db:"type=TEXT;required;unique" app:"duplicate"`
+	Email  string            `json:"email" db:"type=TEXT;required;unique" app:"duplicate"`
+	Sigla  string            `json:"sigla" db:"type=TEXT;required;unique" app:"duplicate"`
 	Extras map[string]string `json:"extras" db:"type=TEXT"`
 }
 
@@ -31,14 +32,17 @@ type MappingItem struct {
 	Indice     int    `json:"indice"`
 	Variavel   string `json:"variavel"`
 }
+
 type NaoAlocados struct {
 	Candidatos  []Candidato `json:"candidatos"`
 	Avaliadores []Avaliador `json:"avaliadores"`
 }
+
 type Allocation struct {
 	Horarios    []Horario   `json:"horarios"`
 	NaoAlocados NaoAlocados `json:"naoAlocados"`
 }
+
 type Mesa struct {
 	ID          int    // único (ex.: 301 = quarta-mesa1)
 	DiaID       int    // 1=segunda, 2=terça, ...
@@ -51,12 +55,6 @@ type ResultadoAlocacao struct {
 	Alocacao  map[int]int
 	Pontuacao int
 	Alocados  int
-}
-
-type Avaliador struct {
-	ID    int    `json:"id"`
-	Nome  string `json:"nome"`
-	Email string `json:"email"`
 }
 
 type Horario struct {

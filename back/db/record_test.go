@@ -30,7 +30,7 @@ func TestInsertStructPersistsAllAvaliadorFields(t *testing.T) {
 		t.Fatalf("EnsureAppSchema returned error: %v", err)
 	}
 
-	avaliador, expected := populateStructForFields[types.AvaliadorInfo](t, types.AvaliadorFields())
+	avaliador, expected := populateStructForFields[types.Avaliador](t, types.AvaliadorFields())
 	id, err := InsertStruct(db, "avaliador", avaliador, types.AvaliadorFields())
 	if err != nil {
 		t.Fatalf("InsertStruct returned error: %v", err)

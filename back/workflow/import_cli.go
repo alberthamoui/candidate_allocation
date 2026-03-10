@@ -85,11 +85,12 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 		return fmt.Errorf("erro ao salvar candidatos: %w", err)
 	}
 
-	avaliadores, err := logic.BuildAvaliadoresWithMapping(data, avaliadorMapping)
+	avaliadoresResp, err := logic.BuildAvaliadoresWithMapping(data, avaliadorMapping)
 	if err != nil {
 		return fmt.Errorf("erro ao construir avaliadores: %w", err)
 	}
 
+	avaliadores := buildAvaliadoresForCLI(avaliadoresResp)
 	if err := logic.Save(avaliadores); err != nil {
 		return fmt.Errorf("erro ao salvar avaliador: %w", err)
 	}
@@ -188,4 +189,55 @@ func printCandidateSummary(summary cliCandidateSummary, resp logic.UsuariosRespo
 	if len(resp.Duplicates) > 0 {
 		fmt.Printf("Duplicados detectados: %v\n", resp.Duplicates)
 	}
+}
+
+func buildAvaliadoresForCLI(resp logic.AvaliadoresResponse) []types.Avaliador {
+	duplicateMembers := make(map[int]bool)
+	duplicateChosen := make(map[int]bool)
+
+	for _, rawGroup := range resp.Duplicates {
+		group := append([]int(nil), rawGroup...)
+		sort.Ints(group)
+
+		chosenID := 0
+		for _, id := range group {
+			duplicateMembers[id] = true
+			if chosenID != 0 {
+				continue
+			}
+			if result, ok := resp.Avaliadores[id]; ok && len(result.Erros) == 0 {
+				chosenID = id
+			}
+		}
+
+		if chosenID == 0 && len(group) > 0 {
+			chosenID = group[0]
+		}
+		if chosenID != 0 {
+			duplicateChosen[chosenID] = true
+		}
+	}
+
+	ids := make([]int, 0, len(resp.Avaliadores))
+	for id := range resp.Avaliadores {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+
+	avaliadores := make([]types.Avaliador, 0, len(ids))
+	for _, id := range ids {
+		result := resp.Avaliadores[id]
+
+		if len(result.Erros) > 0 {
+			continue
+		}
+
+		if duplicateMembers[id] && !duplicateChosen[id] {
+			continue
+		}
+
+		avaliadores = append(avaliadores, result.Avaliador)
+	}
+
+	return avaliadores
 }

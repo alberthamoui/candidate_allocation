@@ -22,7 +22,16 @@ func TestCandidateFieldMetadataInvariants(t *testing.T) {
 
 func TestAvaliadorFieldMetadataInvariants(t *testing.T) {
 	fields := AvaliadorFields()
-	assertFieldMetadataInvariants(t, reflect.TypeOf(AvaliadorInfo{}), fields)
+	assertFieldMetadataInvariants(t, reflect.TypeOf(Avaliador{}), fields)
+
+	expectedDuplicates := duplicateJSONFieldsFromTags(t, reflect.TypeOf(Avaliador{}))
+	gotDuplicates := AvaliadorDuplicateFieldNames()
+	slices.Sort(expectedDuplicates)
+	slices.Sort(gotDuplicates)
+
+	if !reflect.DeepEqual(gotDuplicates, expectedDuplicates) {
+		t.Fatalf("unexpected duplicate fields: got %#v want %#v", gotDuplicates, expectedDuplicates)
+	}
 }
 
 func assertFieldMetadataInvariants(t *testing.T, modelType reflect.Type, fields []FieldSchema) {

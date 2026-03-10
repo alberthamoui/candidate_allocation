@@ -14,7 +14,7 @@ func TestWailsModelsContainAllCandidateJSONFields(t *testing.T) {
 }
 
 func TestWailsModelsContainAllAvaliadorJSONFields(t *testing.T) {
-	assertWailsModelContainsJSONFields(t, "AvaliadorInfo", types.JSONFieldNames(types.AvaliadorInfo{}))
+	assertWailsModelContainsJSONFields(t, "Avaliador", types.JSONFieldNames(types.Avaliador{}))
 }
 
 func assertWailsModelContainsJSONFields(t *testing.T, className string, fields []string) {

@@ -35,7 +35,18 @@ func CandidateDuplicateFieldNames() []string {
 }
 
 func AvaliadorFields() []FieldSchema {
-	return DescribeStruct(AvaliadorInfo{})
+	return DescribeStruct(Avaliador{})
+}
+
+func AvaliadorDuplicateFieldNames() []string {
+	fields := AvaliadorFields()
+	duplicates := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if field.Duplicate {
+			duplicates = append(duplicates, field.JSONName)
+		}
+	}
+	return duplicates
 }
 
 func RestricaoFieldNames() []string {

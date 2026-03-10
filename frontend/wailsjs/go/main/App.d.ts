@@ -3,13 +3,15 @@
 import {types} from '../models';
 import {logic} from '../models';
 
-export function BuildAvaliadoresWithMapping(arg1:Array<types.MappingItem>):Promise<Array<types.AvaliadorInfo>>;
+export function BuildAvaliadoresWithMapping(arg1:Array<types.MappingItem>):Promise<logic.AvaliadoresResponse>;
 
 export function BuildRestricoesWithMapping(arg1:Array<types.MappingItem>):Promise<Array<types.Restricao>>;
 
 export function BuildUsuariosWithMapping(arg1:Array<types.MappingItem>):Promise<logic.UsuariosResponse>;
 
 export function Greet(arg1:string):Promise<string>;
+
+export function SaveAvaliadoresFromMaps(arg1:Array<Record<string, any>>):Promise<void>;
 
 export function SaveRestricoesFromMaps(arg1:Array<Record<string, any>>):Promise<void>;
 

@@ -10,6 +10,7 @@ import (
 	"log"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -35,6 +36,17 @@ type ValidationResult struct {
 	Usuario types.Candidato `json:"usuario"`
 }
 
+type AvaliadorValidationResult struct {
+	Erros     []ErrorEntry    `json:"erros"`
+	Avaliador types.Avaliador `json:"avaliador"`
+}
+
+type AvaliadoresResponse struct {
+	Avaliadores     map[int]AvaliadorValidationResult `json:"avaliadores"`
+	Duplicates      [][]int                           `json:"duplicates"`
+	DuplicateFields []string                          `json:"duplicateFields"`
+}
+
 type UsuariosResponse struct {
 	Usuarios        map[int]ValidationResult `json:"usuarios"`
 	Duplicates      [][]int                  `json:"duplicates"`
@@ -48,7 +60,7 @@ func SuggestMapping(data []byte, quantidadeOpcoes int) ([]types.MappingItem, err
 }
 
 // SuggestMappingAvaliador faz a sugestão de mapeamento da aba de avaliadores
-// usando a similaridade com os campos do tipo AvaliadorInfo.
+// usando a similaridade com os campos do tipo Avaliador.
 func SuggestMappingAvaliador(data []byte) ([]types.MappingItem, error) {
 	return suggestMappingForSheet(data, 1, getAvaliadorFields())
 }
@@ -114,43 +126,43 @@ func BuildUsuariosWithMapping(data []byte, nOpcoes int, mappingItems []types.Map
 }
 
 // BuildAvaliadoresWithMapping monta os avaliadores a partir da segunda aba,
-// ignora linhas vazias e já persiste o resultado no banco.
-func BuildAvaliadoresWithMapping(data []byte, mappingItems []types.MappingItem) ([]types.AvaliadorInfo, error) {
+// ignora linhas vazias e retorna a resposta com validação e duplicados.
+func BuildAvaliadoresWithMapping(data []byte, mappingItems []types.MappingItem) (AvaliadoresResponse, error) {
 
 	if data == nil {
-		return nil, fmt.Errorf("dados do Excel ainda não carregados")
+		return AvaliadoresResponse{}, fmt.Errorf("dados do Excel ainda não carregados")
 	}
 
 	// abre planilha a partir do []byte salvo em a.excelData
 	reader := bytes.NewReader(data)
 	file, err := excelize.OpenReader(reader)
 	if err != nil {
-		return nil, fmt.Errorf("erro abrindo excel: %w", err)
+		return AvaliadoresResponse{}, fmt.Errorf("erro abrindo excel: %w", err)
 	}
 	defer file.Close()
 
 	// 2ª aba (índice 1) onde estão os avaliadores
 	sheet := file.GetSheetName(1)
 	if sheet == "" {
-		return nil, fmt.Errorf("arquivo não possui uma segunda aba com avaliadores")
+		return AvaliadoresResponse{}, fmt.Errorf("arquivo não possui uma segunda aba com avaliadores")
 	}
 
 	rows, err := file.GetRows(sheet)
 	if err != nil {
-		return nil, fmt.Errorf("erro lendo aba de avaliadores: %w", err)
+		return AvaliadoresResponse{}, fmt.Errorf("erro lendo aba de avaliadores: %w", err)
 	}
 	if len(rows) < 2 {
-		return nil, fmt.Errorf("aba de avaliadores não contém dados além do cabeçalho")
+		return AvaliadoresResponse{}, fmt.Errorf("aba de avaliadores não contém dados além do cabeçalho")
 	}
 
-	var avaliadores []types.AvaliadorInfo
+	var avaliadores []types.Avaliador
 
 	// percorre linhas (ignorando cabeçalho)
 	header := rows[0]
 	for _, row := range rows[1:] {
-		av, err := buildStructFromRowWithExtras[types.AvaliadorInfo](row, header, mappingItems)
+		av, err := buildStructFromRowWithExtras[types.Avaliador](row, header, mappingItems)
 		if err != nil {
-			return nil, err
+			return AvaliadoresResponse{}, err
 		}
 
 		// ignora linhas totalmente vazias
@@ -160,7 +172,13 @@ func BuildAvaliadoresWithMapping(data []byte, mappingItems []types.MappingItem) 
 		avaliadores = append(avaliadores, av)
 	}
 
-	return avaliadores, nil
+	avaliadoresLimpo, duplicatedIndices := processAvaliadores(avaliadores)
+
+	return AvaliadoresResponse{
+		Avaliadores:     avaliadoresLimpo,
+		Duplicates:      duplicatedIndices,
+		DuplicateFields: types.AvaliadorDuplicateFieldNames(),
+	}, nil
 }
 
 // BuildRestricoesWithMapping converte a aba de restrições em structs prontos
@@ -306,8 +324,8 @@ func getUsuarioFields(quantidadeOpcoes int) []string {
 // para avaliadores.
 func getAvaliadorFields() []string {
 	var fields []string
-	for _, tag := range types.JSONFieldNames(types.AvaliadorInfo{}) {
-		if tag == "extras" {
+	for _, tag := range types.JSONFieldNames(types.Avaliador{}) {
+		if tag == "extras" || tag == "id" {
 			continue
 		}
 		fields = append(fields, tag)
@@ -318,6 +336,21 @@ func getAvaliadorFields() []string {
 // getRestricaoFields devolve os nomes JSON usados no mapeamento de restrições.
 func getRestricaoFields() []string {
 	return types.RestricaoFieldNames()
+}
+
+// SaveAvaliadoresFromMaps converte o payload editado no frontend em avaliadores e
+// usa o fluxo padrão de persistência da aplicação.
+func SaveAvaliadoresFromMaps(avaliadorMaps []map[string]interface{}) error {
+	avaliadores := make([]types.Avaliador, 0, len(avaliadorMaps))
+	for _, m := range avaliadorMaps {
+		avaliador, err := decodeMapToStruct[types.Avaliador](m)
+		if err != nil {
+			return err
+		}
+		avaliadores = append(avaliadores, avaliador)
+	}
+
+	return Save(avaliadores)
 }
 
 // processData aplica validações básicas nos candidatos e encontra duplicidades
@@ -358,20 +391,61 @@ func processData(data []types.Candidato) (map[int]ValidationResult, [][]int) {
 		}
 	}
 
-	valueIndices := make(map[string][]int)
-	for idx, resultado := range resultados {
-		usr := resultado.Usuario
-		for _, fieldName := range types.CandidateDuplicateFieldNames() {
-			rawValue := candidateFieldValue(usr, fieldName)
-			if rawValue == "" {
-				continue
-			}
-			key := fieldName + ":" + rawValue
-			valueIndices[key] = append(valueIndices[key], idx)
+	duplicateFields := types.CandidateDuplicateFieldNames()
+	duplicatedIndices := findDuplicatesGeneric(len(resultados), duplicateFields, func(id int, field string) string {
+		return candidateFieldValue(resultados[id].Usuario, field)
+	})
+
+	return resultados, duplicatedIndices
+}
+
+func processAvaliadores(data []types.Avaliador) (map[int]AvaliadorValidationResult, [][]int) {
+	resultados := make(map[int]AvaliadorValidationResult)
+
+	for idx, entrada := range data {
+		var errs []ErrorEntry
+
+		entrada.Nome = strings.TrimSpace(entrada.Nome)
+		entrada.Email = strings.ToLower(strings.TrimSpace(entrada.Email))
+		entrada.Sigla = strings.TrimSpace(entrada.Sigla)
+
+		if entrada.Nome == "" {
+			errs = append(errs, ErrorEntry{Field: 0, Msg: "nome é obrigatório"})
+		}
+		if entrada.Email == "" {
+			errs = append(errs, ErrorEntry{Field: 1, Msg: "email é obrigatório"})
+		}
+		if entrada.Sigla == "" {
+			errs = append(errs, ErrorEntry{Field: 2, Msg: "sigla é obrigatória"})
+		}
+
+		resultados[idx+1] = AvaliadorValidationResult{
+			Erros:     errs,
+			Avaliador: entrada,
 		}
 	}
 
-	n := len(resultados)
+	duplicateFields := types.AvaliadorDuplicateFieldNames()
+	duplicatedIndices := findDuplicatesGeneric(len(resultados), duplicateFields, func(id int, field string) string {
+		return avaliadorFieldValue(resultados[id].Avaliador, field)
+	})
+
+	return resultados, duplicatedIndices
+}
+
+func findDuplicatesGeneric(n int, duplicateFieldNames []string, getFieldValue func(int, string) string) [][]int {
+	valueIndices := make(map[string][]int)
+	for i := 1; i <= n; i++ {
+		for _, fieldName := range duplicateFieldNames {
+			rawValue := strings.TrimSpace(getFieldValue(i, fieldName))
+			if rawValue == "" || strings.ToLower(rawValue) == "null" {
+				continue
+			}
+			key := fieldName + ":" + rawValue
+			valueIndices[key] = append(valueIndices[key], i)
+		}
+	}
+
 	parent := make([]int, n+1)
 	for i := 1; i <= n; i++ {
 		parent[i] = i
@@ -414,7 +488,23 @@ func processData(data []types.Candidato) (map[int]ValidationResult, [][]int) {
 		}
 	}
 
-	return resultados, duplicatedIndices
+	return duplicatedIndices
+}
+
+func avaliadorFieldValue(avaliador types.Avaliador, fieldName string) string {
+	for _, field := range types.AvaliadorFields() {
+		if field.JSONName != fieldName || field.Kind != reflect.String {
+			continue
+		}
+
+		value := reflect.ValueOf(avaliador).Field(field.Index)
+		if !value.IsValid() {
+			return ""
+		}
+		return strings.TrimSpace(value.String())
+	}
+
+	return ""
 }
 
 func candidateFieldValue(candidate types.Candidato, fieldName string) string {
@@ -447,6 +537,7 @@ func getHorarios(data []types.Candidato) []string {
 	for horario := range horariosMap {
 		horariosUnicos = append(horariosUnicos, horario)
 	}
+	sort.Strings(horariosUnicos)
 	return horariosUnicos
 }
 
@@ -489,7 +580,7 @@ func fillDb(db *sql.DB, data interface{}) {
 				dbpkg.AddDisponibilidade(db, id, horarioID, int64(idx+1))
 			}
 		}
-	case []types.AvaliadorInfo:
+	case []types.Avaliador:
 		for _, a := range v {
 			if _, err := dbpkg.InsertStruct(db, "avaliador", a, types.AvaliadorFields()); err != nil {
 				fmt.Printf("Erro ao adicionar avaliador %s: %v\n", a.Nome, err)
@@ -556,7 +647,7 @@ func Save(data interface{}) error {
 	defer conn.Close()
 
 	switch data.(type) {
-	case []types.Candidato, []types.AvaliadorInfo, []types.Restricao:
+	case []types.Candidato, []types.Avaliador, []types.Restricao:
 		fillDb(conn, data)
 	default:
 		log.Printf("Tipo de dado não suportado em fillDb: %T", data)
@@ -570,6 +661,12 @@ func Save(data interface{}) error {
 func buildCandidateFromRow(row []string, header []string, nOpcoes int, mappingItems []types.MappingItem) (types.Candidato, error) {
 	record := make(map[string]interface{})
 	record["opcoes"] = make([]string, nOpcoes)
+	extras := make(map[string]string)
+
+	coreFields := make(map[string]bool)
+	for _, tag := range types.JSONFieldNames(types.Candidato{}) {
+		coreFields[tag] = true
+	}
 
 	for _, mItem := range mappingItems {
 		if mItem.Indice >= len(row) {
@@ -588,10 +685,14 @@ func buildCandidateFromRow(row []string, header []string, nOpcoes int, mappingIt
 			continue
 		}
 
-		record[mItem.Variavel] = cell
+		if coreFields[mItem.Variavel] {
+			record[mItem.Variavel] = cell
+		} else if mItem.Variavel != "" {
+			extras[mItem.Variavel] = cell
+		}
 	}
 
-	if extras := collectUnusedColumnExtras(row, header, mappingItems); extras != nil {
+	if len(extras) > 0 {
 		record["extras"] = extras
 	}
 
@@ -603,7 +704,7 @@ func buildCandidateFromRow(row []string, header []string, nOpcoes int, mappingIt
 func buildStructFromRow[T any](row []string, mappingItems []types.MappingItem) (T, error) {
 	record := make(map[string]interface{})
 	for _, mapping := range mappingItems {
-		if mapping.Indice >= len(row) {
+		if mapping.Indice >= len(row) || mapping.Variavel == "" {
 			continue
 		}
 		record[mapping.Variavel] = strings.TrimSpace(row[mapping.Indice])
@@ -616,14 +717,26 @@ func buildStructFromRow[T any](row []string, mappingItems []types.MappingItem) (
 // consumidas pelo mapping ao campo extras, quando ele existir no tipo alvo.
 func buildStructFromRowWithExtras[T any](row []string, header []string, mappingItems []types.MappingItem) (T, error) {
 	record := make(map[string]interface{})
+	extras := make(map[string]string)
+
+	coreFields := make(map[string]bool)
+	for _, tag := range types.JSONFieldNames(*new(T)) {
+		coreFields[tag] = true
+	}
+
 	for _, mapping := range mappingItems {
 		if mapping.Indice >= len(row) {
 			continue
 		}
-		record[mapping.Variavel] = strings.TrimSpace(row[mapping.Indice])
+		value := strings.TrimSpace(row[mapping.Indice])
+		if coreFields[mapping.Variavel] {
+			record[mapping.Variavel] = value
+		} else if mapping.Variavel != "" {
+			extras[mapping.Variavel] = value
+		}
 	}
 
-	if extras := collectUnusedColumnExtras(row, header, mappingItems); extras != nil {
+	if len(extras) > 0 {
 		record["extras"] = extras
 	}
 

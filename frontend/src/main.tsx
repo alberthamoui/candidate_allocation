@@ -5,6 +5,7 @@ import App from "./App";
 import MappingPage from "./MappingPage";
 import "./index.css";
 import VerifyUserPage from "./VerifyUsers";
+import VerifyAvaliadoresPage from "./VerifyAvaliadores";
 import MappingAvaliadoresPage from "./MappingAvaliadoresPage";
 import MappingResticoesPage from "./MappingRerstricoesPage";
 import SuccessPage from "./SuccessPage";
@@ -20,6 +21,9 @@ function Root() {
 
 	const [duplicatas, setDuplicatas] = useState<any>(null);
 	const [duplicateFields, setDuplicateFields] = useState<string[]>([]);
+
+	const [avaliadoresDuplicatas, setAvaliadoresDuplicatas] = useState<any>(null);
+	const [avaliadoresDuplicateFields, setAvaliadoresDuplicateFields] = useState<string[]>([]);
 
 	return (
 		<React.StrictMode>
@@ -52,6 +56,8 @@ function Root() {
 							<MappingAvaliadoresPage
 								mapping={mappingAvaliadores}
 								setAvaliadores={setAvaliadores}
+								setDuplicatas={setAvaliadoresDuplicatas}
+								setDuplicateFields={setAvaliadoresDuplicateFields}
 							/>
 						}
 					/>
@@ -72,6 +78,16 @@ function Root() {
 								restricoes={restricoes}
 								duplicates={duplicatas}
 								duplicateFields={duplicateFields}
+							/>
+						}
+					/>
+					<Route
+						path="/verifyAvaliadores"
+						element={
+							<VerifyAvaliadoresPage
+								avaliadores={avaliadores}
+								duplicates={avaliadoresDuplicatas}
+								duplicateFields={avaliadoresDuplicateFields}
 							/>
 						}
 					/>

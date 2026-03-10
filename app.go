@@ -93,7 +93,7 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []types.MappingItem) (Usuari
 	return logic.BuildUsuariosWithMapping(a.excelData, a.nOpcoes, mappingItems)
 }
 
-func (a *App) BuildAvaliadoresWithMapping(mappingItems []types.MappingItem) ([]types.AvaliadorInfo, error) {
+func (a *App) BuildAvaliadoresWithMapping(mappingItems []types.MappingItem) (logic.AvaliadoresResponse, error) {
 	return logic.BuildAvaliadoresWithMapping(a.excelData, mappingItems)
 }
 
@@ -107,6 +107,10 @@ func (a *App) SaveRestricoesFromMaps(restricaoMaps []map[string]interface{}) err
 
 func (a *App) SaveUsuariosFromMaps(candidatoMaps []map[string]interface{}) error {
 	return logic.SaveUsuariosFromMaps(candidatoMaps)
+}
+
+func (a *App) SaveAvaliadoresFromMaps(avaliadorMaps []map[string]interface{}) error {
+	return logic.SaveAvaliadoresFromMaps(avaliadorMaps)
 }
 
 func writeWailsSmokeSentinel() {

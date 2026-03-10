@@ -164,24 +164,24 @@ func TestMappingSimilarityScore(t *testing.T) {
 }
 
 func TestResolveMappingConflictsUsesBestAvailableUniqueColumn(t *testing.T) {
-	headers := []string{"Email", "Email Pessoal"}
+	headers := []string{"Email Secundario", "Email Pessoal"}
 	variables := []string{"email_pessoal", "email_secundario"}
 
-	got := resolveMappingConflicts(headers, variables, buildMappingCandidates(headers, variables))
+	got, _ := resolveMappingConflicts(headers, variables, buildMappingCandidates(headers, variables))
 
 	assertSuggestedColumn(t, got, "email_pessoal", "Email Pessoal", 1)
-	assertSuggestedColumn(t, got, "email_secundario", "Email", 0)
+	assertSuggestedColumn(t, got, "email_secundario", "Email Secundario", 0)
 	assertUniqueMappedIndices(t, got, len(headers))
 }
 
 func TestResolveMappingConflictsFallsBackToNextBestColumn(t *testing.T) {
-	headers := []string{"Email", "Email Alternativo"}
+	headers := []string{"Email Pessoal", "Email Secundario"}
 	variables := []string{"email_pessoal", "email_secundario"}
 
-	got := resolveMappingConflicts(headers, variables, buildMappingCandidates(headers, variables))
+	got, _ := resolveMappingConflicts(headers, variables, buildMappingCandidates(headers, variables))
 
-	assertSuggestedColumn(t, got, "email_pessoal", "Email", 0)
-	assertSuggestedColumn(t, got, "email_secundario", "Email Alternativo", 1)
+	assertSuggestedColumn(t, got, "email_pessoal", "Email Pessoal", 0)
+	assertSuggestedColumn(t, got, "email_secundario", "Email Secundario", 1)
 	assertUniqueMappedIndices(t, got, len(headers))
 }
 
@@ -368,6 +368,7 @@ func TestBuildUsuariosWithMapping(t *testing.T) {
 		{NomeColuna: "Email Pessoal", Indice: 7, Variavel: "email_pessoal"},
 		{NomeColuna: "Opcao 1", Indice: 8, Variavel: "opcao 1"},
 		{NomeColuna: "Opcao 2", Indice: 9, Variavel: "opcao 2"},
+		{NomeColuna: "LinkedIn", Indice: 10, Variavel: "linkedin"},
 	}
 
 	resp, err := BuildUsuariosWithMapping(workbook, 2, mappingItems)
@@ -392,7 +393,7 @@ func TestBuildUsuariosWithMapping(t *testing.T) {
 	if !reflect.DeepEqual(first.Usuario.Opcoes, []string{"Seg 10h", "Ter 10h"}) {
 		t.Fatalf("unexpected first user options: %#v", first.Usuario.Opcoes)
 	}
-	if !reflect.DeepEqual(first.Usuario.Extras, map[string]string{"LinkedIn": "linkedin.com/in/maria"}) {
+	if !reflect.DeepEqual(first.Usuario.Extras, map[string]string{"linkedin": "linkedin.com/in/maria"}) {
 		t.Fatalf("unexpected extras: %#v", first.Usuario.Extras)
 	}
 	if !containsErrorMessage(first.Erros, "semestre inválido") {
@@ -435,14 +436,22 @@ func TestBuildAvaliadoresWithMappingSupportsCurrentSchema(t *testing.T) {
 
 		mappingItems := expectedMappingItems(header, mappableAvaliadorFields())
 
-		got, err := BuildAvaliadoresWithMapping(workbook, mappingItems)
+		resp, err := BuildAvaliadoresWithMapping(workbook, mappingItems)
 		if err != nil {
 			t.Fatalf("BuildAvaliadoresWithMapping returned error: %v", err)
 		}
 
-		expected := []types.AvaliadorInfo{expectedAvaliadorInfo()}
+		if len(resp.Avaliadores) != 1 {
+			t.Fatalf("expected 1 avaliador, got %d", len(resp.Avaliadores))
+		}
+		got := resp.Avaliadores[1].Avaliador
+		expected := expectedAvaliador()
 		if !reflect.DeepEqual(got, expected) {
 			t.Fatalf("unexpected avaliadores: %#v", got)
+		}
+
+		if err := Save([]types.Avaliador{got}); err != nil {
+			t.Fatalf("Save returned error: %v", err)
 		}
 
 		if count := fetchCount(t, db, `SELECT COUNT(*) FROM avaliador`); count != 1 {
@@ -463,6 +472,8 @@ func TestBuildUsuariosWithMappingStoresUnusedColumnsInExtras(t *testing.T) {
 	mappingItems := []types.MappingItem{
 		{NomeColuna: "Nome", Indice: 0, Variavel: "nome"},
 		{NomeColuna: "CPF", Indice: 1, Variavel: "cpf"},
+		{NomeColuna: "Observacao", Indice: 2, Variavel: "obs"},
+		{NomeColuna: "Github", Indice: 3, Variavel: "git"},
 	}
 
 	resp, err := BuildUsuariosWithMapping(workbook, 0, mappingItems)
@@ -472,8 +483,8 @@ func TestBuildUsuariosWithMappingStoresUnusedColumnsInExtras(t *testing.T) {
 
 	got := resp.Usuarios[1].Usuario.Extras
 	expected := map[string]string{
-		"Observacao": "Aluna destaque",
-		"Github":     "github.com/maria",
+		"obs": "Aluna destaque",
+		"git": "github.com/maria",
 	}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected extras: %#v", got)
@@ -499,21 +510,26 @@ func TestBuildAvaliadoresWithMappingStoresUnusedColumnsInExtras(t *testing.T) {
 			{NomeColuna: "Nome", Indice: 0, Variavel: "nome"},
 			{NomeColuna: "Email", Indice: 1, Variavel: "email"},
 			{NomeColuna: "Sigla", Indice: 2, Variavel: "sigla"},
+			{NomeColuna: "LinkedIn", Indice: 3, Variavel: "link"},
 		}
 
-		got, err := BuildAvaliadoresWithMapping(workbook, mappingItems)
+		resp, err := BuildAvaliadoresWithMapping(workbook, mappingItems)
 		if err != nil {
 			t.Fatalf("BuildAvaliadoresWithMapping returned error: %v", err)
 		}
 
-		expected := []types.AvaliadorInfo{{
+		if len(resp.Avaliadores) != 1 {
+			t.Fatalf("expected 1 avaliador, got %d", len(resp.Avaliadores))
+		}
+		got := resp.Avaliadores[1].Avaliador
+		expected := types.Avaliador{
 			Nome:  "Ana",
 			Email: "ana@insper.edu.br",
 			Sigla: "AN",
 			Extras: map[string]string{
-				"LinkedIn": "linkedin.com/in/ana",
+				"link": "linkedin.com/in/ana",
 			},
-		}}
+		}
 		if !reflect.DeepEqual(got, expected) {
 			t.Fatalf("unexpected avaliadores with extras: %#v", got)
 		}
@@ -823,7 +839,7 @@ func TestFillDb(t *testing.T) {
 		withTempWorkingDir(t, func(tmpDir string) {
 			db := createTestDB(t, tmpDir)
 
-			fillDb(db, []types.AvaliadorInfo{
+			fillDb(db, []types.Avaliador{
 				{Nome: "Ana", Email: "ana@insper.edu.br", Sigla: "AN"},
 			})
 
@@ -868,10 +884,10 @@ func TestSave(t *testing.T) {
 		withTempWorkingDir(t, func(tmpDir string) {
 			db := createTestDB(t, tmpDir)
 
-			avaliador := expectedAvaliadorInfo()
+			avaliador := expectedAvaliador()
 			avaliador.Extras = avaliadorExtrasPayload()
 
-			err := Save([]types.AvaliadorInfo{avaliador})
+			err := Save([]types.Avaliador{avaliador})
 			if err != nil {
 				t.Fatalf("Save returned error: %v", err)
 			}
@@ -909,7 +925,7 @@ func TestSave(t *testing.T) {
 func TestBuildCandidateFromRowSupportsCurrentCandidateSchema(t *testing.T) {
 	header := append(candidateHeaders(2), "LinkedIn")
 	row := append(candidateRowValues(2), "linkedin.com/in/maria")
-	mapping := expectedMappingItems(candidateHeaders(2), candidateMappingVariables(2))
+	mapping := expectedMappingItems(header, append(candidateMappingVariables(2), "link"))
 
 	got, err := buildCandidateFromRow(row, header, 2, mapping)
 	if err != nil {
@@ -917,7 +933,7 @@ func TestBuildCandidateFromRowSupportsCurrentCandidateSchema(t *testing.T) {
 	}
 
 	expected := expectedCandidateForBuild()
-	expected.Extras = map[string]string{"LinkedIn": "linkedin.com/in/maria"}
+	expected.Extras = map[string]string{"link": "linkedin.com/in/maria"}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected candidate built from row: %#v", got)
 	}
@@ -949,19 +965,20 @@ func TestBuildStructFromRowWithExtras(t *testing.T) {
 		{Indice: 0, Variavel: "nome"},
 		{Indice: 1, Variavel: "email"},
 		{Indice: 2, Variavel: "sigla"},
+		{Indice: 3, Variavel: "link"},
 	}
 
-	got, err := buildStructFromRowWithExtras[types.AvaliadorInfo](row, header, mapping)
+	got, err := buildStructFromRowWithExtras[types.Avaliador](row, header, mapping)
 	if err != nil {
 		t.Fatalf("buildStructFromRowWithExtras returned error: %v", err)
 	}
 
-	expected := types.AvaliadorInfo{
+	expected := types.Avaliador{
 		Nome:  "Ana",
 		Email: "ana@insper.edu.br",
 		Sigla: "AN",
 		Extras: map[string]string{
-			"LinkedIn": "linkedin.com/in/ana",
+			"link": "linkedin.com/in/ana",
 		},
 	}
 	if !reflect.DeepEqual(got, expected) {
@@ -995,10 +1012,10 @@ func TestDecodeMapToStruct(t *testing.T) {
 }
 
 func TestIsStructZeroValue(t *testing.T) {
-	if !isStructZeroValue(types.AvaliadorInfo{}) {
+	if !isStructZeroValue(types.Avaliador{}) {
 		t.Fatal("expected empty struct to be zero value")
 	}
-	if isStructZeroValue(types.AvaliadorInfo{Nome: "Ana"}) {
+	if isStructZeroValue(types.Avaliador{Nome: "Ana"}) {
 		t.Fatal("expected non-empty struct to not be zero value")
 	}
 }
@@ -1007,23 +1024,6 @@ func TestGetRowsFromSheetInvalidWorkbook(t *testing.T) {
 	_, err := getRowsFromSheet(bytes.Repeat([]byte("x"), 10), 0)
 	if err == nil {
 		t.Fatal("expected invalid workbook to return an error")
-	}
-}
-
-func TestCollectUnusedColumnExtras(t *testing.T) {
-	header := []string{"Nome", "", "Nome"}
-	row := []string{"Maria", "valor sem header", "campo duplicado"}
-	mapping := []types.MappingItem{
-		{Indice: 0, Variavel: "nome"},
-	}
-
-	got := collectUnusedColumnExtras(row, header, mapping)
-	expected := map[string]string{
-		"coluna_1": "valor sem header",
-		"Nome":     "campo duplicado",
-	}
-	if !reflect.DeepEqual(got, expected) {
-		t.Fatalf("unexpected extras collected: %#v", got)
 	}
 }
 
@@ -1264,14 +1264,16 @@ func avaliadorValueForField(field string) string {
 	}
 }
 
-func expectedAvaliadorInfo() types.AvaliadorInfo {
-	avaliador := types.AvaliadorInfo{}
+func expectedAvaliador() types.Avaliador {
+	avaliador := types.Avaliador{}
 	rv := reflect.ValueOf(&avaliador).Elem()
 	for _, field := range types.AvaliadorFields() {
-		if field.JSONName == "extras" {
+		if field.JSONName == "extras" || field.JSONName == "id" {
 			continue
 		}
-		rv.Field(field.Index).SetString(avaliadorValueForField(field.JSONName))
+		if field.Kind == reflect.String {
+			rv.Field(field.Index).SetString(avaliadorValueForField(field.JSONName))
+		}
 	}
 	return avaliador
 }
@@ -1279,7 +1281,7 @@ func expectedAvaliadorInfo() types.AvaliadorInfo {
 func avaliadorExpectedDBValues() map[string]string {
 	expected := make(map[string]string)
 	for _, field := range types.AvaliadorFields() {
-		if !field.Persist {
+		if !field.Persist || field.JSONName == "id" {
 			continue
 		}
 		if field.JSONName == "extras" {
@@ -1304,10 +1306,10 @@ func mappableCandidateFields() []string {
 }
 
 func mappableAvaliadorFields() []string {
-	fields := types.JSONFieldNames(types.AvaliadorInfo{})
+	fields := types.JSONFieldNames(types.Avaliador{})
 	filtered := make([]string, 0, len(fields))
 	for _, field := range fields {
-		if field == "extras" {
+		if field == "extras" || field == "id" {
 			continue
 		}
 		filtered = append(filtered, field)
