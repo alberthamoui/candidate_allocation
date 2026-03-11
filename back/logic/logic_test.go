@@ -416,7 +416,7 @@ func TestBuildUsuariosWithMapping(t *testing.T) {
 	}
 }
 
-func TestBuildUsuariosWithMappingRejectsNegativeIndex(t *testing.T) {
+func TestBuildUsuariosWithMappingSkipsNegativeIndex(t *testing.T) {
 	workbook := createWorkbook(t, testSheet{
 		name: "Candidatos",
 		rows: [][]interface{}{
@@ -429,9 +429,17 @@ func TestBuildUsuariosWithMappingRejectsNegativeIndex(t *testing.T) {
 		{NomeColuna: "Nome", Indice: -1, Variavel: "nome"},
 	}
 
-	_, err := BuildUsuariosWithMapping(workbook, 0, mappingItems)
-	if err == nil || !strings.Contains(err.Error(), "indice invalido") {
-		t.Fatalf("expected invalid index error, got %v", err)
+	resp, err := BuildUsuariosWithMapping(workbook, 0, mappingItems)
+	if err != nil {
+		t.Fatalf("BuildUsuariosWithMapping returned error: %v", err)
+	}
+
+	if len(resp.Usuarios) != 1 {
+		t.Fatalf("expected 1 user, got %d", len(resp.Usuarios))
+	}
+
+	if resp.Usuarios[1].Usuario.Nome != "" {
+		t.Fatalf("expected empty name for unmapped index, got %q", resp.Usuarios[1].Usuario.Nome)
 	}
 }
 
@@ -479,7 +487,7 @@ func TestBuildAvaliadoresWithMappingSupportsCurrentSchema(t *testing.T) {
 	})
 }
 
-func TestBuildAvaliadoresWithMappingRejectsNegativeIndex(t *testing.T) {
+func TestBuildAvaliadoresWithMappingSkipsNegativeIndex(t *testing.T) {
 	workbook := createWorkbook(t,
 		testSheet{name: "Candidatos", rows: [][]interface{}{{"A"}}},
 		testSheet{
@@ -493,11 +501,24 @@ func TestBuildAvaliadoresWithMappingRejectsNegativeIndex(t *testing.T) {
 
 	mappingItems := []types.MappingItem{
 		{NomeColuna: "Nome", Indice: -1, Variavel: "nome"},
+		{NomeColuna: "Email", Indice: 1, Variavel: "email"},
 	}
 
-	_, err := BuildAvaliadoresWithMapping(workbook, mappingItems)
-	if err == nil || !strings.Contains(err.Error(), "indice invalido") {
-		t.Fatalf("expected invalid index error, got %v", err)
+	resp, err := BuildAvaliadoresWithMapping(workbook, mappingItems)
+	if err != nil {
+		t.Fatalf("BuildAvaliadoresWithMapping returned error: %v", err)
+	}
+
+	if len(resp.Avaliadores) != 1 {
+		t.Fatalf("expected 1 avaliador, got %d", len(resp.Avaliadores))
+	}
+
+	av := resp.Avaliadores[1].Avaliador
+	if av.Nome != "" {
+		t.Fatalf("expected empty name for unmapped index, got %q", av.Nome)
+	}
+	if av.Email != "ana@insper.edu.br" {
+		t.Fatalf("expected correct email, got %q", av.Email)
 	}
 }
 
@@ -668,7 +689,7 @@ func TestBuildRestricoesWithMappingIgnoresUnusedColumns(t *testing.T) {
 	}
 }
 
-func TestBuildRestricoesWithMappingRejectsNegativeIndex(t *testing.T) {
+func TestBuildRestricoesWithMappingSkipsNegativeIndex(t *testing.T) {
 	workbook := createWorkbook(t,
 		testSheet{name: "Candidatos", rows: [][]interface{}{{"A"}}},
 		testSheet{name: "Avaliadores", rows: [][]interface{}{{"B"}}},
@@ -683,11 +704,23 @@ func TestBuildRestricoesWithMappingRejectsNegativeIndex(t *testing.T) {
 
 	mappingItems := []types.MappingItem{
 		{NomeColuna: "Candidato", Indice: -1, Variavel: "candidato"},
+		{NomeColuna: "Nao Posso", Indice: 1, Variavel: "naoPosso"},
 	}
 
-	_, err := BuildRestricoesWithMapping(workbook, mappingItems)
-	if err == nil || !strings.Contains(err.Error(), "indice invalido") {
-		t.Fatalf("expected invalid index error, got %v", err)
+	got, err := BuildRestricoesWithMapping(workbook, mappingItems)
+	if err != nil {
+		t.Fatalf("BuildRestricoesWithMapping returned error: %v", err)
+	}
+
+	if len(got) != 1 {
+		t.Fatalf("expected 1 restricao, got %d", len(got))
+	}
+
+	if got[0].Candidato != "" {
+		t.Fatalf("expected empty candidate for unmapped index, got %q", got[0].Candidato)
+	}
+	if got[0].NaoPosso != "AB" {
+		t.Fatalf("expected correct NaoPosso, got %q", got[0].NaoPosso)
 	}
 }
 

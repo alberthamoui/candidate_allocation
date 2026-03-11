@@ -111,7 +111,8 @@ export default function MappingResticoesPage({
 
 	async function onConfirm() {
 		console.log(items, " : mapping");
-		const restricoes = await BuildRestricoesWithMapping(items);
+		const filteredItems = items.filter((it) => it.indice !== -1);
+		const restricoes = await BuildRestricoesWithMapping(filteredItems);
 		setRestricoes(restricoes);
 		navigate("/verify");
 	}

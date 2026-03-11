@@ -150,8 +150,9 @@ export default function MappingPage({
 	}
 
 	async function onConfirm() {
+		const filteredItems = items.filter((it) => it.indice !== -1);
 		const { usuarios, duplicates, duplicateFields } =
-			await BuildUsuariosWithMapping(items);
+			await BuildUsuariosWithMapping(filteredItems);
 		setUsers(usuarios);
 		setDuplicatas(duplicates);
 		setDuplicateFields(duplicateFields ?? []);

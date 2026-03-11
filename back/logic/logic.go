@@ -818,11 +818,7 @@ func typeSupportsExtrasField[T any]() bool {
 }
 
 func validateMappingItems(mappingItems []types.MappingItem) error {
-	for _, mapping := range mappingItems {
-		if mapping.Indice < 0 {
-			return fmt.Errorf("indice invalido para mapping %q: %d", mapping.Variavel, mapping.Indice)
-		}
-	}
+	// Permitimos índices negativos, eles serão ignorados durante o processamento
 	return nil
 }
 

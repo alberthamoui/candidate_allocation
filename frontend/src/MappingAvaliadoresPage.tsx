@@ -141,7 +141,8 @@ export default function MappingAvaliadoresPage({
 	}
 
 	async function onConfirm() {
-		const resp = await BuildAvaliadoresWithMapping(items);
+		const filteredItems = items.filter((it) => it.indice !== -1);
+		const resp = await BuildAvaliadoresWithMapping(filteredItems);
 		setAvaliadores(resp.avaliadores);
 		setDuplicatas(resp.duplicates);
 		setDuplicateFields(resp.duplicateFields);

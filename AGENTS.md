@@ -11,8 +11,8 @@ Sempre que você fizer uma função crie um teste para essa função tbm
 ### Workflow de Importação e Verificação
 O processo de importação segue uma sequência rigorosa para garantir a integridade dos dados:
 1.  **Mapeamento Interativo (CLI/Frontend)**: O usuário associa colunas do Excel aos campos da struct alvo. Na CLI, o sistema sugere um mapeamento e permite a personalização manual.
-2.  **Mapeamento de Candidatos**: Associação de colunas aos campos de `Candidato`.
-3.  **Mapeamento de Avaliadores**: Associação de colunas aos campos de `Avaliador`.
+2.  **Mapeamento de Candidatos**: Associação de colunas aos campos de `Candidato`. Campos não associados (ex: ao trocar colunas ou adicionar extras sem definir coluna) recebem o índice `-1` e são ignorados no processamento final.
+3.  **Mapeamento de Avaliadores**: Associação de colunas aos campos de `Avaliador`. Assim como em candidatos, o índice `-1` indica campo não mapeado.
 4.  **Mapeamento de Restrições**: Mapeamento de restrições entre candidatos e avaliadores.
 5.  **Verificação Manual**: No frontend, interface para resolver duplicatas e corrigir erros. Na CLI, o processamento segue filtrando inválidos e duplicados automaticamente com base no mapeamento definido.
 6.  **Sucesso**: Persistência final no banco de dados SQLite.
