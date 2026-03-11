@@ -306,9 +306,9 @@ func TestSuggestMappingForSheet(t *testing.T) {
 		},
 	)
 
-	got, err := suggestMappingForSheet(workbook, 1, []string{"nome", "email", "sigla"})
+	got, err := SuggestMappingForSheet(workbook, 1, []string{"nome", "email", "sigla"})
 	if err != nil {
-		t.Fatalf("suggestMappingForSheet returned error: %v", err)
+		t.Fatalf("SuggestMappingForSheet returned error: %v", err)
 	}
 
 	assertSuggestedColumn(t, got, "email", "Email", 0)
@@ -416,6 +416,25 @@ func TestBuildUsuariosWithMapping(t *testing.T) {
 	}
 }
 
+func TestBuildUsuariosWithMappingRejectsNegativeIndex(t *testing.T) {
+	workbook := createWorkbook(t, testSheet{
+		name: "Candidatos",
+		rows: [][]interface{}{
+			{"Nome"},
+			{"Maria"},
+		},
+	})
+
+	mappingItems := []types.MappingItem{
+		{NomeColuna: "Nome", Indice: -1, Variavel: "nome"},
+	}
+
+	_, err := BuildUsuariosWithMapping(workbook, 0, mappingItems)
+	if err == nil || !strings.Contains(err.Error(), "indice invalido") {
+		t.Fatalf("expected invalid index error, got %v", err)
+	}
+}
+
 func TestBuildAvaliadoresWithMappingSupportsCurrentSchema(t *testing.T) {
 	withTempWorkingDir(t, func(tmpDir string) {
 		db := createTestDB(t, tmpDir)
@@ -460,7 +479,29 @@ func TestBuildAvaliadoresWithMappingSupportsCurrentSchema(t *testing.T) {
 	})
 }
 
-func TestBuildUsuariosWithMappingStoresUnusedColumnsInExtras(t *testing.T) {
+func TestBuildAvaliadoresWithMappingRejectsNegativeIndex(t *testing.T) {
+	workbook := createWorkbook(t,
+		testSheet{name: "Candidatos", rows: [][]interface{}{{"A"}}},
+		testSheet{
+			name: "Avaliadores",
+			rows: [][]interface{}{
+				{"Nome", "Email", "Sigla"},
+				{"Ana", "ana@insper.edu.br", "AN"},
+			},
+		},
+	)
+
+	mappingItems := []types.MappingItem{
+		{NomeColuna: "Nome", Indice: -1, Variavel: "nome"},
+	}
+
+	_, err := BuildAvaliadoresWithMapping(workbook, mappingItems)
+	if err == nil || !strings.Contains(err.Error(), "indice invalido") {
+		t.Fatalf("expected invalid index error, got %v", err)
+	}
+}
+
+func TestBuildUsuariosWithMappingOnlyStoresMappedExtras(t *testing.T) {
 	workbook := createWorkbook(t, testSheet{
 		name: "Candidatos",
 		rows: [][]interface{}{
@@ -469,11 +510,12 @@ func TestBuildUsuariosWithMappingStoresUnusedColumnsInExtras(t *testing.T) {
 		},
 	})
 
+	// Agora apenas o que estiver explicitamente mapeado em "extras" ou em chaves customizadas deve ser importado.
 	mappingItems := []types.MappingItem{
 		{NomeColuna: "Nome", Indice: 0, Variavel: "nome"},
 		{NomeColuna: "CPF", Indice: 1, Variavel: "cpf"},
 		{NomeColuna: "Observacao", Indice: 2, Variavel: "obs"},
-		{NomeColuna: "Github", Indice: 3, Variavel: "git"},
+		// Github não está mapeado, não deve aparecer em lugar nenhum.
 	}
 
 	resp, err := BuildUsuariosWithMapping(workbook, 0, mappingItems)
@@ -484,14 +526,41 @@ func TestBuildUsuariosWithMappingStoresUnusedColumnsInExtras(t *testing.T) {
 	got := resp.Usuarios[1].Usuario.Extras
 	expected := map[string]string{
 		"obs": "Aluna destaque",
-		"git": "github.com/maria",
 	}
 	if !reflect.DeepEqual(got, expected) {
-		t.Fatalf("unexpected extras: %#v", got)
+		t.Fatalf("unexpected extras (should only contain explicitly mapped): %#v", got)
 	}
 }
 
-func TestBuildAvaliadoresWithMappingStoresUnusedColumnsInExtras(t *testing.T) {
+func TestBuildUsuariosWithMappingPreservesExtrasKeyCase(t *testing.T) {
+	workbook := createWorkbook(t, testSheet{
+		name: "Candidatos",
+		rows: [][]interface{}{
+			{"Nome", "Quarta Opcao"},
+			{"Maria", "Qui 10h"},
+		},
+	})
+
+	mappingItems := []types.MappingItem{
+		{NomeColuna: "Nome", Indice: 0, Variavel: "nome"},
+		{NomeColuna: "Quarta Opcao", Indice: 1, Variavel: "Banana"},
+	}
+
+	resp, err := BuildUsuariosWithMapping(workbook, 0, mappingItems)
+	if err != nil {
+		t.Fatalf("BuildUsuariosWithMapping returned error: %v", err)
+	}
+
+	got := resp.Usuarios[1].Usuario.Extras
+	expected := map[string]string{
+		"Banana": "Qui 10h",
+	}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected extras (should preserve key case): %#v", got)
+	}
+}
+
+func TestBuildAvaliadoresWithMappingOnlyStoresMappedExtras(t *testing.T) {
 	withTempWorkingDir(t, func(tmpDir string) {
 		_ = createTestDB(t, tmpDir)
 
@@ -506,6 +575,7 @@ func TestBuildAvaliadoresWithMappingStoresUnusedColumnsInExtras(t *testing.T) {
 			},
 		)
 
+		// Apenas 'LinkedIn' mapeado como 'link'.
 		mappingItems := []types.MappingItem{
 			{NomeColuna: "Nome", Indice: 0, Variavel: "nome"},
 			{NomeColuna: "Email", Indice: 1, Variavel: "email"},
@@ -595,6 +665,55 @@ func TestBuildRestricoesWithMappingIgnoresUnusedColumns(t *testing.T) {
 	expected := []types.Restricao{{Candidato: "Maria", NaoPosso: "AB", PrefiroNao: "CD"}}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected restricoes ignoring extras: %#v", got)
+	}
+}
+
+func TestBuildRestricoesWithMappingRejectsNegativeIndex(t *testing.T) {
+	workbook := createWorkbook(t,
+		testSheet{name: "Candidatos", rows: [][]interface{}{{"A"}}},
+		testSheet{name: "Avaliadores", rows: [][]interface{}{{"B"}}},
+		testSheet{
+			name: "Restricoes",
+			rows: [][]interface{}{
+				{"Candidato", "Nao Posso"},
+				{"Maria", "AB"},
+			},
+		},
+	)
+
+	mappingItems := []types.MappingItem{
+		{NomeColuna: "Candidato", Indice: -1, Variavel: "candidato"},
+	}
+
+	_, err := BuildRestricoesWithMapping(workbook, mappingItems)
+	if err == nil || !strings.Contains(err.Error(), "indice invalido") {
+		t.Fatalf("expected invalid index error, got %v", err)
+	}
+}
+
+func TestBuildRestricoesWithMappingRejectsExtrasMapping(t *testing.T) {
+	workbook := createWorkbook(t,
+		testSheet{name: "Candidatos", rows: [][]interface{}{{"A"}}},
+		testSheet{name: "Avaliadores", rows: [][]interface{}{{"B"}}},
+		testSheet{
+			name: "Restricoes",
+			rows: [][]interface{}{
+				{"Candidato", "Nao Posso", "Prefiro Nao", "Observacao"},
+				{"Maria", "AB", "CD", "ignorar"},
+			},
+		},
+	)
+
+	mappingItems := []types.MappingItem{
+		{NomeColuna: "Candidato", Indice: 0, Variavel: "candidato"},
+		{NomeColuna: "Nao Posso", Indice: 1, Variavel: "naoPosso"},
+		{NomeColuna: "Prefiro Nao", Indice: 2, Variavel: "prefiroNao"},
+		{NomeColuna: "Observacao", Indice: 3, Variavel: "extras"},
+	}
+
+	_, err := BuildRestricoesWithMapping(workbook, mappingItems)
+	if err == nil || !strings.Contains(err.Error(), "extras") {
+		t.Fatalf("expected extras mapping error, got %v", err)
 	}
 }
 
@@ -713,9 +832,9 @@ func TestGetRowsFromSheet(t *testing.T) {
 		testSheet{name: "Avaliadores", rows: [][]interface{}{{"Nome"}, {"Ana"}}},
 	)
 
-	rows, err := getRowsFromSheet(workbook, 1)
+	rows, err := GetRowsFromSheet(workbook, 1)
 	if err != nil {
-		t.Fatalf("getRowsFromSheet returned error: %v", err)
+		t.Fatalf("GetRowsFromSheet returned error: %v", err)
 	}
 
 	expected := [][]string{{"Nome"}, {"Ana"}}
@@ -725,7 +844,7 @@ func TestGetRowsFromSheet(t *testing.T) {
 }
 
 func TestGetAvaliadorFields(t *testing.T) {
-	got := getAvaliadorFields()
+	got := GetAvaliadorFields()
 	expected := mappableAvaliadorFields()
 
 	if !reflect.DeepEqual(got, expected) {
@@ -734,7 +853,7 @@ func TestGetAvaliadorFields(t *testing.T) {
 }
 
 func TestGetRestricaoFields(t *testing.T) {
-	got := getRestricaoFields()
+	got := GetRestricaoFields()
 	expected := []string{"candidato", "naoPosso", "prefiroNao"}
 
 	if !reflect.DeepEqual(got, expected) {
@@ -939,6 +1058,23 @@ func TestBuildCandidateFromRowSupportsCurrentCandidateSchema(t *testing.T) {
 	}
 }
 
+func TestBuildCandidateFromRowSupportsExtrasMappedColumn(t *testing.T) {
+	header := append(candidateHeaders(2), "Observacao")
+	row := append(candidateRowValues(2), "observacao extra")
+	mapping := expectedMappingItems(header, append(candidateMappingVariables(2), "extras"))
+
+	got, err := buildCandidateFromRow(row, header, 2, mapping)
+	if err != nil {
+		t.Fatalf("buildCandidateFromRow returned error: %v", err)
+	}
+
+	expected := expectedCandidateForBuild()
+	expected.Extras = map[string]string{"Observacao": "observacao extra"}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected candidate built with mapped extras: %#v", got)
+	}
+}
+
 func TestBuildStructFromRow(t *testing.T) {
 	row := []string{"Maria", "AN, BR", "BR"}
 	mapping := []types.MappingItem{
@@ -955,6 +1091,20 @@ func TestBuildStructFromRow(t *testing.T) {
 	expected := types.Restricao{Candidato: "Maria", NaoPosso: "AN, BR", PrefiroNao: "BR"}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected struct built from row: %#v", got)
+	}
+}
+
+func TestBuildStructFromRowRejectsExtrasMappingWithoutField(t *testing.T) {
+	row := []string{"Maria", "AB", "CD"}
+	mapping := []types.MappingItem{
+		{Indice: 0, Variavel: "candidato"},
+		{Indice: 1, Variavel: "naoPosso"},
+		{Indice: 2, Variavel: "extras"},
+	}
+
+	_, err := buildStructFromRow[types.Restricao](row, mapping)
+	if err == nil || !strings.Contains(err.Error(), "extras") {
+		t.Fatalf("expected extras mapping rejection, got %v", err)
 	}
 }
 
@@ -983,6 +1133,34 @@ func TestBuildStructFromRowWithExtras(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected struct built with extras: %#v", got)
+	}
+}
+
+func TestBuildStructFromRowWithExtrasSupportsExplicitExtrasMapping(t *testing.T) {
+	row := []string{"Ana", "ana@insper.edu.br", "AN", "Observacao"}
+	header := []string{"Nome", "Email", "Sigla", "Observacao"}
+	mapping := []types.MappingItem{
+		{Indice: 0, Variavel: "nome"},
+		{Indice: 1, Variavel: "email"},
+		{Indice: 2, Variavel: "sigla"},
+		{Indice: 3, Variavel: "extras"},
+	}
+
+	got, err := buildStructFromRowWithExtras[types.Avaliador](row, header, mapping)
+	if err != nil {
+		t.Fatalf("buildStructFromRowWithExtras returned error: %v", err)
+	}
+
+	expected := types.Avaliador{
+		Nome:  "Ana",
+		Email: "ana@insper.edu.br",
+		Sigla: "AN",
+		Extras: map[string]string{
+			"Observacao": "Observacao",
+		},
+	}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected struct built with explicit extras: %#v", got)
 	}
 }
 
@@ -1021,7 +1199,7 @@ func TestIsStructZeroValue(t *testing.T) {
 }
 
 func TestGetRowsFromSheetInvalidWorkbook(t *testing.T) {
-	_, err := getRowsFromSheet(bytes.Repeat([]byte("x"), 10), 0)
+	_, err := GetRowsFromSheet(bytes.Repeat([]byte("x"), 10), 0)
 	if err == nil {
 		t.Fatal("expected invalid workbook to return an error")
 	}

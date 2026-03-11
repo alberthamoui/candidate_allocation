@@ -56,25 +56,25 @@ type UsuariosResponse struct {
 // SuggestMapping lê a aba de candidatos e sugere um mapeamento inicial com
 // base na similaridade entre os nomes das colunas e os campos esperados.
 func SuggestMapping(data []byte, quantidadeOpcoes int) ([]types.MappingItem, error) {
-	return suggestMappingForSheet(data, 0, getUsuarioFields(quantidadeOpcoes))
+	return SuggestMappingForSheet(data, 0, GetUsuarioFields(quantidadeOpcoes))
 }
 
 // SuggestMappingAvaliador faz a sugestão de mapeamento da aba de avaliadores
 // usando a similaridade com os campos do tipo Avaliador.
 func SuggestMappingAvaliador(data []byte) ([]types.MappingItem, error) {
-	return suggestMappingForSheet(data, 1, getAvaliadorFields())
+	return SuggestMappingForSheet(data, 1, GetAvaliadorFields())
 }
 
 // SuggestMappingRestricao sugere o mapeamento da aba de restrições usando a
 // similaridade entre cabeçalhos e campos do tipo Restricao.
 func SuggestMappingRestricao(data []byte) ([]types.MappingItem, error) {
-	return suggestMappingForSheet(data, 2, getRestricaoFields())
+	return SuggestMappingForSheet(data, 2, GetRestricaoFields())
 }
 
 // suggestMappingForSheet concentra a lógica genérica de sugestão de mapping
 // para qualquer aba a partir do índice da planilha e da lista de variáveis.
-func suggestMappingForSheet(data []byte, sheetIndex int, variables []string) ([]types.MappingItem, error) {
-	rows, err := getRowsFromSheet(data, sheetIndex)
+func SuggestMappingForSheet(data []byte, sheetIndex int, variables []string) ([]types.MappingItem, error) {
+	rows, err := GetRowsFromSheet(data, sheetIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +89,9 @@ func suggestMappingForSheet(data []byte, sheetIndex int, variables []string) ([]
 // BuildUsuariosWithMapping percorre a aba de candidatos, aplica o mapping
 // definido na interface e devolve os candidatos já validados e agrupados.
 func BuildUsuariosWithMapping(data []byte, nOpcoes int, mappingItems []types.MappingItem) (UsuariosResponse, error) {
+	if err := validateMappingItems(mappingItems); err != nil {
+		return UsuariosResponse{}, err
+	}
 	// Abre o arquivo Excel a partir dos dados em []byte
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
@@ -128,6 +131,9 @@ func BuildUsuariosWithMapping(data []byte, nOpcoes int, mappingItems []types.Map
 // BuildAvaliadoresWithMapping monta os avaliadores a partir da segunda aba,
 // ignora linhas vazias e retorna a resposta com validação e duplicados.
 func BuildAvaliadoresWithMapping(data []byte, mappingItems []types.MappingItem) (AvaliadoresResponse, error) {
+	if err := validateMappingItems(mappingItems); err != nil {
+		return AvaliadoresResponse{}, err
+	}
 
 	if data == nil {
 		return AvaliadoresResponse{}, fmt.Errorf("dados do Excel ainda não carregados")
@@ -184,7 +190,10 @@ func BuildAvaliadoresWithMapping(data []byte, mappingItems []types.MappingItem) 
 // BuildRestricoesWithMapping converte a aba de restrições em structs prontos
 // para uso posterior no salvamento e na etapa de alocação.
 func BuildRestricoesWithMapping(data []byte, mappingItems []types.MappingItem) ([]types.Restricao, error) {
-	rows, err := getRowsFromSheet(data, 2)
+	if err := validateMappingItems(mappingItems); err != nil {
+		return nil, err
+	}
+	rows, err := GetRowsFromSheet(data, 2)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao ler excel: %w", err)
 	}
@@ -281,7 +290,7 @@ func ProcessMapping(items []string) ([]types.MappingItem, error) {
 
 // getRowsFromSheet abre uma planilha em memória e retorna todas as linhas da
 // aba indicada, validando se o índice realmente existe.
-func getRowsFromSheet(data []byte, sheetIndex int) ([][]string, error) {
+func GetRowsFromSheet(data []byte, sheetIndex int) ([][]string, error) {
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
 	if err != nil {
@@ -303,7 +312,7 @@ func getRowsFromSheet(data []byte, sheetIndex int) ([][]string, error) {
 
 // getUsuarioFields lista os campos mapeáveis do tipo Candidato e expande o
 // campo virtual de opções conforme a quantidade pedida.
-func getUsuarioFields(quantidadeOpcoes int) []string {
+func GetUsuarioFields(quantidadeOpcoes int) []string {
 	var fields []string
 	for _, tag := range types.JSONFieldNames(types.Candidato{}) {
 		if tag == "extras" {
@@ -322,7 +331,7 @@ func getUsuarioFields(quantidadeOpcoes int) []string {
 
 // getAvaliadorFields devolve os nomes JSON dos campos que podem ser mapeados
 // para avaliadores.
-func getAvaliadorFields() []string {
+func GetAvaliadorFields() []string {
 	var fields []string
 	for _, tag := range types.JSONFieldNames(types.Avaliador{}) {
 		if tag == "extras" || tag == "id" {
@@ -334,7 +343,7 @@ func getAvaliadorFields() []string {
 }
 
 // getRestricaoFields devolve os nomes JSON usados no mapeamento de restrições.
-func getRestricaoFields() []string {
+func GetRestricaoFields() []string {
 	return types.RestricaoFieldNames()
 }
 
@@ -661,15 +670,14 @@ func Save(data interface{}) error {
 func buildCandidateFromRow(row []string, header []string, nOpcoes int, mappingItems []types.MappingItem) (types.Candidato, error) {
 	record := make(map[string]interface{})
 	record["opcoes"] = make([]string, nOpcoes)
-	extras := make(map[string]string)
-
+	extrasFromMapping := make(map[string]string)
 	coreFields := make(map[string]bool)
 	for _, tag := range types.JSONFieldNames(types.Candidato{}) {
 		coreFields[tag] = true
 	}
 
 	for _, mItem := range mappingItems {
-		if mItem.Indice >= len(row) {
+		if mItem.Indice < 0 || mItem.Indice >= len(row) {
 			continue
 		}
 
@@ -685,15 +693,22 @@ func buildCandidateFromRow(row []string, header []string, nOpcoes int, mappingIt
 			continue
 		}
 
+		if mItem.Variavel == "extras" {
+			columnName := headerNameAt(header, mItem.Indice)
+			key := extraColumnKey(columnName, mItem.Indice, extrasFromMapping)
+			extrasFromMapping[key] = cell
+			continue
+		}
+
 		if coreFields[mItem.Variavel] {
 			record[mItem.Variavel] = cell
 		} else if mItem.Variavel != "" {
-			extras[mItem.Variavel] = cell
+			extrasFromMapping[mItem.Variavel] = cell
 		}
 	}
 
-	if len(extras) > 0 {
-		record["extras"] = extras
+	if len(extrasFromMapping) > 0 {
+		record["extras"] = extrasFromMapping
 	}
 
 	return decodeMapToStruct[types.Candidato](record)
@@ -702,9 +717,14 @@ func buildCandidateFromRow(row []string, header []string, nOpcoes int, mappingIt
 // buildStructFromRow monta qualquer struct baseada em tags JSON a partir de uma
 // linha da planilha e do mapping configurado.
 func buildStructFromRow[T any](row []string, mappingItems []types.MappingItem) (T, error) {
+	var zero T
+	if mappingIncludesExtras(mappingItems) && !typeSupportsExtrasField[T]() {
+		return zero, fmt.Errorf("mapeamento para extras só é permitido para structs com campo \"extras\"")
+	}
+
 	record := make(map[string]interface{})
 	for _, mapping := range mappingItems {
-		if mapping.Indice >= len(row) || mapping.Variavel == "" {
+		if mapping.Indice < 0 || mapping.Indice >= len(row) || mapping.Variavel == "" {
 			continue
 		}
 		record[mapping.Variavel] = strings.TrimSpace(row[mapping.Indice])
@@ -725,10 +745,16 @@ func buildStructFromRowWithExtras[T any](row []string, header []string, mappingI
 	}
 
 	for _, mapping := range mappingItems {
-		if mapping.Indice >= len(row) {
+		if mapping.Indice < 0 || mapping.Indice >= len(row) {
 			continue
 		}
 		value := strings.TrimSpace(row[mapping.Indice])
+		if mapping.Variavel == "extras" {
+			columnName := headerNameAt(header, mapping.Indice)
+			key := extraColumnKey(columnName, mapping.Indice, extras)
+			extras[key] = value
+			continue
+		}
 		if coreFields[mapping.Variavel] {
 			record[mapping.Variavel] = value
 		} else if mapping.Variavel != "" {
@@ -764,4 +790,78 @@ func decodeMapToStruct[T any](record map[string]interface{}) (T, error) {
 // valores zero, o que ajuda a ignorar linhas vazias.
 func isStructZeroValue[T any](value T) bool {
 	return reflect.DeepEqual(value, *new(T))
+}
+
+func headerNameAt(header []string, index int) string {
+	if index >= 0 && index < len(header) {
+		return header[index]
+	}
+	return ""
+}
+
+func mappingIncludesExtras(mappingItems []types.MappingItem) bool {
+	for _, mapping := range mappingItems {
+		if mapping.Variavel == "extras" {
+			return true
+		}
+	}
+	return false
+}
+
+func typeSupportsExtrasField[T any]() bool {
+	for _, field := range types.JSONFieldNames(*new(T)) {
+		if field == "extras" {
+			return true
+		}
+	}
+	return false
+}
+
+func validateMappingItems(mappingItems []types.MappingItem) error {
+	for _, mapping := range mappingItems {
+		if mapping.Indice < 0 {
+			return fmt.Errorf("indice invalido para mapping %q: %d", mapping.Variavel, mapping.Indice)
+		}
+	}
+	return nil
+}
+
+func collectUnusedColumnExtras(row []string, header []string, mappingItems []types.MappingItem) map[string]string {
+	usedColumns := make(map[int]bool, len(mappingItems))
+	for _, item := range mappingItems {
+		if item.Indice >= 0 && item.Indice < len(header) {
+			usedColumns[item.Indice] = true
+		}
+	}
+
+	extras := make(map[string]string)
+	for index, columnName := range header {
+		if usedColumns[index] || index >= len(row) {
+			continue
+		}
+
+		value := strings.TrimSpace(row[index])
+		if value == "" {
+			continue
+		}
+
+		key := extraColumnKey(columnName, index, extras)
+		extras[key] = value
+	}
+
+	if len(extras) == 0 {
+		return nil
+	}
+	return extras
+}
+
+func extraColumnKey(columnName string, index int, existing map[string]string) string {
+	base := strings.TrimSpace(columnName)
+	if base == "" {
+		base = fmt.Sprintf("coluna_%d", index)
+	}
+	if _, exists := existing[base]; !exists {
+		return base
+	}
+	return fmt.Sprintf("%s_%d", base, index)
 }

@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"bufio"
 	"candidate_alocator/back/allocation"
 	dbpkg "candidate_alocator/back/db"
 	"candidate_alocator/back/logic"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -50,20 +52,28 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 	if err != nil {
 		return fmt.Errorf("erro ao sugerir mapeamento de candidatos: %w", err)
 	}
+	candidateMapping, err = getInteractiveMapping("Candidatos", data, 0, candidateMapping)
+	if err != nil {
+		return err
+	}
 
 	avaliadorMapping, err := logic.SuggestMappingAvaliador(data)
 	if err != nil {
 		return fmt.Errorf("erro ao sugerir mapeamento de avaliadores: %w", err)
+	}
+	avaliadorMapping, err = getInteractiveMapping("Avaliadores", data, 1, avaliadorMapping)
+	if err != nil {
+		return err
 	}
 
 	restricaoMapping, err := logic.SuggestMappingRestricao(data)
 	if err != nil {
 		return fmt.Errorf("erro ao sugerir mapeamento de restricoes: %w", err)
 	}
-
-	printMapping("candidatos", candidateMapping)
-	printMapping("avaliadores", avaliadorMapping)
-	printMapping("restricoes", restricaoMapping)
+	restricaoMapping, err = getInteractiveMapping("Restricoes", data, 2, restricaoMapping)
+	if err != nil {
+		return err
+	}
 
 	usuariosResp, err := logic.BuildUsuariosWithMapping(data, optionCount, candidateMapping)
 	if err != nil {
@@ -109,15 +119,114 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 	return nil
 }
 
-func printMapping(label string, items []types.MappingItem) {
-	fmt.Printf("\n---- MAPEAMENTO %s ----\n", strings.ToUpper(label))
-	for _, item := range items {
-		columnName := item.NomeColuna
-		if strings.TrimSpace(columnName) == "" {
-			columnName = "<sem coluna>"
-		}
-		fmt.Printf("%s <- coluna %d (%s)\n", item.Variavel, item.Indice, columnName)
+func getInteractiveMapping(label string, data []byte, sheetIndex int, currentMapping []types.MappingItem) ([]types.MappingItem, error) {
+	fmt.Printf("\n---- CONFIGURAÇÃO DE MAPEAMENTO: %s ----\n", strings.ToUpper(label))
+
+	rows, err := logic.GetRowsFromSheet(data, sheetIndex)
+	if err != nil {
+		return nil, err
 	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("aba %s sem dados", label)
+	}
+	header := rows[0]
+
+	fmt.Println("Colunas detectadas no Excel:")
+	for i, col := range header {
+		fmt.Printf("[%d] %s | ", i, col)
+		if (i+1)%4 == 0 {
+			fmt.Println()
+		}
+	}
+	fmt.Println("\n")
+
+	fmt.Println("Sugestão de mapeamento atual:")
+	for _, item := range currentMapping {
+		colName := item.NomeColuna
+		if colName == "" {
+			colName = "<não mapeado>"
+		}
+		fmt.Printf("  %s -> [%d] %s\n", item.Variavel, item.Indice, colName)
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("\nDeseja personalizar este mapeamento? (s/N): ")
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(strings.ToLower(answer))
+
+	if answer != "s" {
+		// Se não quiser personalizar, removemos os itens que não têm coluna associada
+		// (conforme a regra de que só o que estiver explicitamente mapeado será importado)
+		var filtered []types.MappingItem
+		for _, item := range currentMapping {
+			if item.NomeColuna != "" {
+				filtered = append(filtered, item)
+			}
+		}
+		return filtered, nil
+	}
+
+	var newMapping []types.MappingItem
+	for _, item := range currentMapping {
+		fmt.Printf("Campo '%s' [atual: %d (%s)]. Novo índice (Enter p/ manter, -1 p/ ignorar): ",
+			item.Variavel, item.Indice, item.NomeColuna)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+
+		if input == "" {
+			if item.NomeColuna != "" {
+				newMapping = append(newMapping, item)
+			}
+			continue
+		}
+
+		idx, err := strconv.Atoi(input)
+		if err != nil || idx < 0 {
+			fmt.Printf("Campo '%s' ignorado.\n", item.Variavel)
+			continue
+		}
+
+		if idx < len(header) {
+			newMapping = append(newMapping, types.MappingItem{
+				NomeColuna: header[idx],
+				Indice:     idx,
+				Variavel:   item.Variavel,
+			})
+		} else {
+			fmt.Println("Índice inválido, campo ignorado.")
+		}
+	}
+
+	for {
+		fmt.Print("\nDeseja adicionar um campo extra? (s/N): ")
+		extraAns, _ := reader.ReadString('\n')
+		if strings.TrimSpace(strings.ToLower(extraAns)) != "s" {
+			break
+		}
+
+		fmt.Print("Índice da coluna no Excel: ")
+		idxStr, _ := reader.ReadString('\n')
+		idx, err := strconv.Atoi(strings.TrimSpace(idxStr))
+		if err != nil || idx < 0 || idx >= len(header) {
+			fmt.Println("Índice inválido.")
+			continue
+		}
+
+		fmt.Print("Nome para este campo (chave no banco): ")
+		key, _ := reader.ReadString('\n')
+		key = strings.TrimSpace(key)
+		if key == "" {
+			key = header[idx]
+		}
+
+		newMapping = append(newMapping, types.MappingItem{
+			NomeColuna: header[idx],
+			Indice:     idx,
+			Variavel:   key,
+		})
+	}
+
+	return newMapping, nil
 }
 
 func buildCandidatesForCLI(resp logic.UsuariosResponse) ([]types.Candidato, cliCandidateSummary) {

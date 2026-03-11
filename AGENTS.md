@@ -10,17 +10,17 @@ Sempre que você fizer uma função crie um teste para essa função tbm
 
 ### Workflow de Importação e Verificação
 O processo de importação segue uma sequência rigorosa para garantir a integridade dos dados:
-1.  **Mapeamento de Candidatos**: O usuário associa colunas do Excel aos campos da struct `Candidato`.
-2.  **Mapeamento de Avaliadores**: O usuário associa colunas do Excel aos campos da struct `Avaliador`.
-3.  **Mapeamento de Restrições**: O usuário mapeia as restrições entre candidatos e avaliadores.
-4.  **Verificação Manual de Candidatos**: Interface para resolver duplicatas e corrigir erros de validação dos candidatos.
-5.  **Verificação Manual de Avaliadores**: Interface para resolver duplicatas e corrigir erros de validação dos avaliadores.
+1.  **Mapeamento Interativo (CLI/Frontend)**: O usuário associa colunas do Excel aos campos da struct alvo. Na CLI, o sistema sugere um mapeamento e permite a personalização manual.
+2.  **Mapeamento de Candidatos**: Associação de colunas aos campos de `Candidato`.
+3.  **Mapeamento de Avaliadores**: Associação de colunas aos campos de `Avaliador`.
+4.  **Mapeamento de Restrições**: Mapeamento de restrições entre candidatos e avaliadores.
+5.  **Verificação Manual**: No frontend, interface para resolver duplicatas e corrigir erros. Na CLI, o processamento segue filtrando inválidos e duplicados automaticamente com base no mapeamento definido.
 6.  **Sucesso**: Persistência final no banco de dados SQLite.
 
 ### Lógica de Mapeamento e Campos Extras
 - **Similaridade**: A sugestão automática de mapeamento usa o algoritmo de Levenshtein com um threshold de **20%**. Colunas que não atingem esse nível de similaridade com campos principais são sugeridas como campos "Extras".
 - **Remapeação Numérica**: A lógica de similaridade normaliza variações numéricas (ex: "1", "um", "primeira") para facilitar a associação automática de colunas como "1opcao" ou "primeira opcao".
-- **Controle Total**: Todas as colunas do Excel são incluídas na lista de mapeamento. O preenchimento automático de extras foi removido; apenas o que estiver explicitamente mapeado na interface será importado.
+- **Controle Total**: Apenas o que estiver explicitamente mapeado (seja como campo principal ou como "extra" definido pelo usuário) será importado. O preenchimento automático de colunas não mapeadas para o campo "Extras" foi desativado tanto no frontend quanto na CLI para evitar poluição de dados.
 - **Edição**: Na interface de mapeamento, campos extras podem ser renomeados (alterando a chave no map `Extras`) ou removidos (ignorando a coluna).
 
 ### Deduplicação e Verificação
