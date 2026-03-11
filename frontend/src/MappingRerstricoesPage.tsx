@@ -111,11 +111,13 @@ export default function MappingResticoesPage({
 
 	async function onConfirm() {
 		console.log(items, " : mapping");
-		const filteredItems = items.filter((it) => it.indice !== -1);
+		const filteredItems = items.filter((it) => it.indice !== -1 && it.variavel !== "");
 		const restricoes = await BuildRestricoesWithMapping(filteredItems);
 		setRestricoes(restricoes);
 		navigate("/verify");
 	}
+
+	const unmappedItems = items.filter((it) => it.variavel === "" && it.indice !== -1);
 
 	return (
 		<div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-100 flex flex-col items-center py-12 px-4">
@@ -141,71 +143,111 @@ export default function MappingResticoesPage({
 							</tr>
 						</thead>
 						<tbody>
-							{items.map((item, index) => (
-								<tr
-									key={index}
-									className={`border-b border-gray-200 transition-colors ${
-										dragOverIndex === index
-											? "bg-blue-100"
-											: ""
-									}`}
-								>
-									<td className="px-6 py-4 font-medium text-gray-700">
-										{item.variavel}
-									</td>
-									<td className="px-6 py-4">
-										<motion.div
-											draggable
-											onDragStart={(
-												e: React.DragEvent<HTMLDivElement>
-											) => onDragStart(e, index)}
-											onDragOver={(
-												e: React.DragEvent<HTMLDivElement>
-											) => onDragOver(e, index)}
-											onDragLeave={(
-												e: React.DragEvent<HTMLDivElement>
-											) => onDragLeave(e)}
-											onDrop={(
-												e: React.DragEvent<HTMLDivElement>
-											) => onDrop(e, index)}
-											onDragEnd={onDragEnd}
-											whileHover={{ scale: 1.02 }}
-											whileTap={{ scale: 0.98 }}
-											className={`
-                                                py-2 px-4 
-                                                cursor-move 
-                                                text-center 
-                                                bg-white 
-                                                rounded-lg 
-                                                border-2 
-                                                shadow-sm
-                                                transition-all
-                                            `}
-										>
-											<div className="flex items-center justify-between">
-												<span>{item.nomeColuna}</span>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													className="h-5 w-5 text-gray-400"
-													fill="none"
-													viewBox="0 0 24 24"
-													stroke="currentColor"
-												>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														strokeWidth={2}
-														d="M4 6h16M4 12h16M4 18h16"
-													/>
-												</svg>
-											</div>
-										</motion.div>
-									</td>
-								</tr>
-							))}
+							{items.map((item, index) => {
+								if (item.variavel === "") return null;
+								return (
+									<tr
+										key={index}
+										className={`border-b border-gray-200 transition-colors ${
+											dragOverIndex === index
+												? "bg-blue-100"
+												: ""
+										}`}
+									>
+										<td className="px-6 py-4 font-medium text-gray-700">
+											{item.variavel}
+										</td>
+										<td className="px-6 py-4">
+											<motion.div
+												draggable
+												onDragStart={(
+													e: React.DragEvent<HTMLDivElement>
+												) => onDragStart(e, index)}
+												onDragOver={(
+													e: React.DragEvent<HTMLDivElement>
+												) => onDragOver(e, index)}
+												onDragLeave={(
+													e: React.DragEvent<HTMLDivElement>
+												) => onDragLeave(e)}
+												onDrop={(
+													e: React.DragEvent<HTMLDivElement>
+												) => onDrop(e, index)}
+												onDragEnd={onDragEnd}
+												whileHover={{ scale: 1.02 }}
+												whileTap={{ scale: 0.98 }}
+												className={`
+	                                                py-2 px-4 
+	                                                cursor-move 
+	                                                text-center 
+	                                                bg-white 
+	                                                rounded-lg 
+	                                                border-2 
+	                                                shadow-sm
+	                                                transition-all
+	                                            `}
+											>
+												<div className="flex items-center justify-between">
+													<span>{item.nomeColuna}</span>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														className="h-5 w-5 text-gray-400"
+														fill="none"
+														viewBox="0 0 24 24"
+														stroke="currentColor"
+													>
+														<path
+															strokeLinecap="round"
+															strokeLinejoin="round"
+															strokeWidth={2}
+															d="M4 6h16M4 12h16M4 18h16"
+														/>
+													</svg>
+												</div>
+											</motion.div>
+										</td>
+									</tr>
+								);
+							})}
 						</tbody>
 					</table>
 				</div>
+
+				{/* Unmapped Columns Section */}
+				{unmappedItems.length > 0 && (
+					<section className="mt-8">
+						<h2 className="text-lg font-semibold text-gray-600 mb-4 border-b pb-2">
+							Colunas Disponíveis (Não Mapeadas)
+						</h2>
+						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+							{items.map((item, index) => {
+								if (item.variavel !== "" || item.indice === -1) return null;
+								return (
+									<div
+										key={index}
+										className={`p-4 rounded-lg border-2 transition-all cursor-move flex items-center justify-between ${
+											dragOverIndex === index
+												? "bg-gray-200 border-gray-400"
+												: "bg-gray-50 border-gray-200 hover:bg-gray-100"
+										}`}
+										draggable
+										onDragStart={(e) => onDragStart(e, index)}
+										onDragOver={(e) => onDragOver(e, index)}
+										onDragLeave={onDragLeave}
+										onDrop={(e) => onDrop(e, index)}
+										onDragEnd={onDragEnd}
+									>
+										<span className="text-sm font-medium text-gray-600 truncate mr-2">
+											{item.nomeColuna}
+										</span>
+										<svg className="h-4 w-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+										</svg>
+									</div>
+								);
+							})}
+						</div>
+					</section>
+				)}
 			</div>
 
 			<motion.button

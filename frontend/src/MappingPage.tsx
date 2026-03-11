@@ -111,9 +111,9 @@ export default function MappingPage({
 		newMapping[draggedIndex].indice = newMapping[dropIndex].indice;
 		newMapping[dropIndex].indice = tempIndice;
 
-		// Remove extra fields that are now unmapped
+		// Remove extra fields that are now unmapped, but keep any item that has a column (indice !== -1)
 		const filteredMapping = newMapping.filter(
-			(item) => isCoreField(item.variavel) || item.nomeColuna !== ""
+			(item) => isCoreField(item.variavel) || item.indice !== -1 || item.variavel !== ""
 		);
 
 		setItems(filteredMapping);
@@ -135,7 +135,15 @@ export default function MappingPage({
 	}
 
 	function removeMapping(index: number) {
-		setItems(items.filter((_, i) => i !== index));
+		const newItems = [...items];
+		if (newItems[index].indice !== -1) {
+			// If it has a column, just "unmap" it by clearing the variable
+			newItems[index].variavel = "";
+			setItems(newItems);
+		} else {
+			// If it's just an empty placeholder, remove it
+			setItems(items.filter((_, i) => i !== index));
+		}
 	}
 
 	function addExtraMapping() {
@@ -150,7 +158,7 @@ export default function MappingPage({
 	}
 
 	async function onConfirm() {
-		const filteredItems = items.filter((it) => it.indice !== -1);
+		const filteredItems = items.filter((it) => it.indice !== -1 && it.variavel !== "");
 		const { usuarios, duplicates, duplicateFields } =
 			await BuildUsuariosWithMapping(filteredItems);
 		setUsers(usuarios);
@@ -160,7 +168,8 @@ export default function MappingPage({
 	}
 
 	const coreItems = items.filter((it) => isCoreField(it.variavel));
-	const extraItems = items.filter((it) => !isCoreField(it.variavel));
+	const extraItems = items.filter((it) => !isCoreField(it.variavel) && it.variavel !== "");
+	const unmappedItems = items.filter((it) => !isCoreField(it.variavel) && it.variavel === "" && it.indice !== -1);
 
 	return (
 		<div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-100 flex flex-col items-center py-12 px-4">
@@ -261,7 +270,7 @@ export default function MappingPage({
 								</thead>
 								<tbody>
 									{items.map((item, index) => {
-										if (isCoreField(item.variavel)) return null;
+										if (isCoreField(item.variavel) || item.variavel === "") return null;
 										return (
 											<tr
 												key={index}
@@ -310,6 +319,43 @@ export default function MappingPage({
 							</table>
 						</div>
 					</section>
+
+					{/* Unmapped Columns Section */}
+					{unmappedItems.length > 0 && (
+						<section>
+							<h2 className="text-lg font-semibold text-gray-600 mb-4 border-b pb-2">
+								Colunas Disponíveis (Não Mapeadas)
+							</h2>
+							<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+								{items.map((item, index) => {
+									if (isCoreField(item.variavel) || item.variavel !== "" || item.indice === -1) return null;
+									return (
+										<div
+											key={index}
+											className={`p-4 rounded-lg border-2 transition-all cursor-move flex items-center justify-between ${
+												dragOverIndex === index
+													? "bg-gray-200 border-gray-400"
+													: "bg-gray-50 border-gray-200 hover:bg-gray-100"
+											}`}
+											draggable
+											onDragStart={(e) => onDragStart(e, index)}
+											onDragOver={(e) => onDragOver(e, index)}
+											onDragLeave={onDragLeave}
+											onDrop={(e) => onDrop(e, index)}
+											onDragEnd={onDragEnd}
+										>
+											<span className="text-sm font-medium text-gray-600 truncate mr-2">
+												{item.nomeColuna}
+											</span>
+											<svg className="h-4 w-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+											</svg>
+										</div>
+									);
+								})}
+							</div>
+						</section>
+					)}
 				</div>
 			</div>
 

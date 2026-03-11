@@ -443,6 +443,33 @@ func TestBuildUsuariosWithMappingSkipsNegativeIndex(t *testing.T) {
 	}
 }
 
+func TestBuildUsuariosWithMappingIgnoresEmptyVariable(t *testing.T) {
+	workbook := createWorkbook(t, testSheet{
+		name: "Candidatos",
+		rows: [][]interface{}{
+			{"Nome", "CPF", "Observacao"},
+			{"Maria", "12345678901", "Aluna destaque"},
+		},
+	})
+
+	// "Observacao" tem índice válido mas variável vazia (estado desmapeado no front)
+	mappingItems := []types.MappingItem{
+		{NomeColuna: "Nome", Indice: 0, Variavel: "nome"},
+		{NomeColuna: "CPF", Indice: 1, Variavel: "cpf"},
+		{NomeColuna: "Observacao", Indice: 2, Variavel: ""},
+	}
+
+	resp, err := BuildUsuariosWithMapping(workbook, 0, mappingItems)
+	if err != nil {
+		t.Fatalf("BuildUsuariosWithMapping returned error: %v", err)
+	}
+
+	got := resp.Usuarios[1].Usuario.Extras
+	if len(got) != 0 {
+		t.Fatalf("expected 0 extras, got %#v", got)
+	}
+}
+
 func TestBuildAvaliadoresWithMappingSupportsCurrentSchema(t *testing.T) {
 	withTempWorkingDir(t, func(tmpDir string) {
 		db := createTestDB(t, tmpDir)
