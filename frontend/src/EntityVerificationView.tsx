@@ -51,7 +51,7 @@ export default function EntityVerificationView({
 
 	const cloneEntity = (entity: MapUsuario): MapUsuario => ({
 		...entity,
-		opcoes: Array.isArray(entity.opcoes) ? [...entity.opcoes] : undefined,
+		...(Array.isArray(entity.opcoes) ? { opcoes: [...entity.opcoes] } : {}),
 		extras: cloneExtras(entity.extras),
 	});
 

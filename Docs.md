@@ -81,6 +81,9 @@ Ele é usado para:
 
 As restrições usam esse mesmo componente com `allowExtras={false}`.
 
+Regra importante da revisão:
+- o card só deve renderizar campos realmente presentes na entidade; campos opcionais ausentes, como `opcoes` em avaliadores e restrições, não podem ser materializados com `undefined` no clone do estado
+
 Os `EditableCell` também interceptam o teclado da edição para evitar navegação acidental do browser com `Backspace` quando o usuário está digitando.
 
 ## Pontos de Atenção

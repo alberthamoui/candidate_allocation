@@ -77,7 +77,9 @@ export function UserCard({
 }: UserCardProps) {
 	const hasErrors = errors.length > 0;
 	const extras = user.extras ?? {};
-	const coreEntries = Object.entries(user).filter(([field]) => field !== "extras");
+	const coreEntries = Object.entries(user).filter(
+		([field, value]) => field !== "extras" && value !== undefined
+	);
 
 	return (
 		<motion.div
