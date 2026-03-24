@@ -670,13 +670,27 @@ func Save(data interface{}) error {
 func buildCandidateFromRow(row []string, header []string, nOpcoes int, mappingItems []types.MappingItem) (types.Candidato, error) {
 	record := make(map[string]interface{})
 	record["opcoes"] = make([]string, nOpcoes)
-	extrasFromMapping := make(map[string]string)
+	extrasFromMapping := make(map[string]interface{})
+	extraKeys := make(map[string]bool)
 	coreFields := make(map[string]bool)
+	rowHasContent := rowHasAnyContent(row)
 	for _, tag := range types.JSONFieldNames(types.Candidato{}) {
 		coreFields[tag] = true
 	}
 
 	for _, mItem := range mappingItems {
+		if mItem.Indice < 0 {
+			if rowHasContent &&
+				mItem.IncludeWhenUnmapped &&
+				mItem.Variavel != "" &&
+				!strings.HasPrefix(mItem.Variavel, "opcao") &&
+				mItem.Variavel != "extras" &&
+				!coreFields[mItem.Variavel] {
+				extrasFromMapping[mItem.Variavel] = nil
+				extraKeys[mItem.Variavel] = true
+			}
+			continue
+		}
 		if mItem.Indice < 0 || mItem.Indice >= len(row) {
 			continue
 		}
@@ -695,8 +709,9 @@ func buildCandidateFromRow(row []string, header []string, nOpcoes int, mappingIt
 
 		if mItem.Variavel == "extras" {
 			columnName := headerNameAt(header, mItem.Indice)
-			key := extraColumnKey(columnName, mItem.Indice, extrasFromMapping)
+			key := extraColumnKey(columnName, mItem.Indice, extraKeys)
 			extrasFromMapping[key] = cell
+			extraKeys[key] = true
 			continue
 		}
 
@@ -704,6 +719,7 @@ func buildCandidateFromRow(row []string, header []string, nOpcoes int, mappingIt
 			record[mItem.Variavel] = cell
 		} else if mItem.Variavel != "" {
 			extrasFromMapping[mItem.Variavel] = cell
+			extraKeys[mItem.Variavel] = true
 		}
 	}
 
@@ -737,28 +753,43 @@ func buildStructFromRow[T any](row []string, mappingItems []types.MappingItem) (
 // consumidas pelo mapping ao campo extras, quando ele existir no tipo alvo.
 func buildStructFromRowWithExtras[T any](row []string, header []string, mappingItems []types.MappingItem) (T, error) {
 	record := make(map[string]interface{})
-	extras := make(map[string]string)
+	extras := make(map[string]interface{})
+	extraKeys := make(map[string]bool)
 
 	coreFields := make(map[string]bool)
+	rowHasContent := rowHasAnyContent(row)
 	for _, tag := range types.JSONFieldNames(*new(T)) {
 		coreFields[tag] = true
 	}
 
 	for _, mapping := range mappingItems {
+		if mapping.Indice < 0 {
+			if rowHasContent &&
+				mapping.IncludeWhenUnmapped &&
+				mapping.Variavel != "" &&
+				mapping.Variavel != "extras" &&
+				!coreFields[mapping.Variavel] {
+				extras[mapping.Variavel] = nil
+				extraKeys[mapping.Variavel] = true
+			}
+			continue
+		}
 		if mapping.Indice < 0 || mapping.Indice >= len(row) {
 			continue
 		}
 		value := strings.TrimSpace(row[mapping.Indice])
 		if mapping.Variavel == "extras" {
 			columnName := headerNameAt(header, mapping.Indice)
-			key := extraColumnKey(columnName, mapping.Indice, extras)
+			key := extraColumnKey(columnName, mapping.Indice, extraKeys)
 			extras[key] = value
+			extraKeys[key] = true
 			continue
 		}
 		if coreFields[mapping.Variavel] {
 			record[mapping.Variavel] = value
 		} else if mapping.Variavel != "" {
 			extras[mapping.Variavel] = value
+			extraKeys[mapping.Variavel] = true
 		}
 	}
 
@@ -831,6 +862,7 @@ func collectUnusedColumnExtras(row []string, header []string, mappingItems []typ
 	}
 
 	extras := make(map[string]string)
+	extraKeys := make(map[string]bool)
 	for index, columnName := range header {
 		if usedColumns[index] || index >= len(row) {
 			continue
@@ -841,8 +873,9 @@ func collectUnusedColumnExtras(row []string, header []string, mappingItems []typ
 			continue
 		}
 
-		key := extraColumnKey(columnName, index, extras)
+		key := extraColumnKey(columnName, index, extraKeys)
 		extras[key] = value
+		extraKeys[key] = true
 	}
 
 	if len(extras) == 0 {
@@ -851,13 +884,22 @@ func collectUnusedColumnExtras(row []string, header []string, mappingItems []typ
 	return extras
 }
 
-func extraColumnKey(columnName string, index int, existing map[string]string) string {
+func extraColumnKey(columnName string, index int, existing map[string]bool) string {
 	base := strings.TrimSpace(columnName)
 	if base == "" {
 		base = fmt.Sprintf("coluna_%d", index)
 	}
-	if _, exists := existing[base]; !exists {
+	if !existing[base] {
 		return base
 	}
 	return fmt.Sprintf("%s_%d", base, index)
+}
+
+func rowHasAnyContent(row []string) bool {
+	for _, cell := range row {
+		if strings.TrimSpace(cell) != "" {
+			return true
+		}
+	}
+	return false
 }

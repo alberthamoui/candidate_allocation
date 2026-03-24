@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
-import type { MappingFieldInfo, MappingItem } from "./importTypes";
+import {
+	ExclamationTriangleIcon,
+	PlusIcon,
+	TrashIcon,
+} from "@heroicons/react/24/outline";
+import type { MappingDraft, MappingFieldInfo, MappingItem } from "./importTypes";
 
 interface MappingEditorPageProps {
 	title: string;
 	description: string;
-	mapping: MappingItem[] | null;
-	setMapping: (items: MappingItem[]) => void;
+	mapping: MappingDraft[] | null;
+	setMapping: (items: MappingDraft[]) => void;
 	fieldInfos: MappingFieldInfo[];
 	onConfirm: (items: MappingItem[]) => Promise<void>;
 	confirmLabel: string;
@@ -27,23 +31,16 @@ export default function MappingEditorPage({
 	const dragActiveRef = useRef(false);
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 	const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-	const [items, setItems] = useState<MappingItem[]>([]);
+	const [items, setItems] = useState<MappingDraft[]>([]);
+	const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
 	const fieldInfoMap = Object.fromEntries(
 		fieldInfos.map((fieldInfo) => [fieldInfo.variavel, fieldInfo])
 	);
 
-	const isCoreField = (variable: string) => variable in fieldInfoMap;
-
 	useEffect(() => {
-		const normalizedItems = (mapping ?? []).map((item) => {
-			if (allowExtraFields || isCoreField(item.variavel) || item.variavel === "") {
-				return item;
-			}
-			return { ...item, variavel: "" };
-		});
-		setItems(normalizedItems);
-	}, [allowExtraFields, fieldInfos, mapping]);
+		setItems(mapping ?? []);
+	}, [mapping]);
 
 	useEffect(() => {
 		const handleAutoScroll = (event: DragEvent) => {
@@ -64,7 +61,23 @@ export default function MappingEditorPage({
 		return () => window.removeEventListener("dragover", handleAutoScroll);
 	}, []);
 
-	function updateItems(nextItems: MappingItem[]) {
+	const isCoreField = (variable: string) => variable in fieldInfoMap;
+
+	const normalizeExtraKey = (raw: string) =>
+		raw
+			.normalize("NFD")
+			.replace(/[\u0300-\u036f]/g, "")
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "_")
+			.replace(/^_+|_+$/g, "");
+
+	const createClientId = () =>
+		typeof crypto !== "undefined" && "randomUUID" in crypto
+			? crypto.randomUUID()
+			: `${Date.now()}-${Math.random()}`;
+
+	function updateItems(nextItems: MappingDraft[]) {
 		setItems(nextItems);
 		setMapping(nextItems);
 	}
@@ -146,18 +159,23 @@ export default function MappingEditorPage({
 		updateItems(nextItems);
 	}
 
-	function removeMapping(index: number) {
+	function removeExtra(index: number) {
 		const nextItems = [...items];
-		if (nextItems[index].indice !== -1) {
-			nextItems[index] = {
-				...nextItems[index],
+		const removedItem = nextItems[index];
+		nextItems.splice(index, 1);
+
+		if (removedItem.indice >= 0) {
+			nextItems.push({
+				nomeColuna: removedItem.nomeColuna,
+				indice: removedItem.indice,
 				variavel: "",
-			};
-			updateItems(nextItems);
-			return;
+				includeWhenUnmapped: false,
+				clientId: createClientId(),
+				manualExtra: false,
+			});
 		}
 
-		updateItems(nextItems.filter((_, itemIndex) => itemIndex !== index));
+		updateItems(nextItems);
 	}
 
 	function addExtraMapping() {
@@ -166,32 +184,96 @@ export default function MappingEditorPage({
 			{
 				nomeColuna: "",
 				indice: -1,
-				variavel: "novo_campo_extra",
+				variavel: "",
+				includeWhenUnmapped: true,
+				clientId: createClientId(),
+				manualExtra: true,
 			},
 		]);
 	}
 
-	async function handleConfirm() {
-		const filteredItems = items.filter((item) => {
-			if (item.indice === -1 || item.variavel === "") {
-				return false;
-			}
-			if (!allowExtraFields && !isCoreField(item.variavel)) {
-				return false;
-			}
-			return true;
-		});
+	function buildPayload(): MappingItem[] | null {
+		const normalizedExtras = new Map<string, string>();
 
-		updateItems(items);
-		await onConfirm(filteredItems);
+		for (const item of items) {
+			if (!item.manualExtra) {
+				continue;
+			}
+
+			const rawName = item.variavel.trim();
+			if (rawName === "") {
+				setErrorMsg(
+					"Todo campo extra criado manualmente precisa ter um nome antes de seguir."
+				);
+				return null;
+			}
+
+			const normalized = normalizeExtraKey(rawName);
+			if (!normalized) {
+				setErrorMsg("O nome do campo extra precisa gerar uma chave válida.");
+				return null;
+			}
+			if (isCoreField(normalized)) {
+				setErrorMsg(
+					`O campo extra "${rawName}" conflita com um campo principal.`
+				);
+				return null;
+			}
+			if (normalizedExtras.has(normalized)) {
+				setErrorMsg(
+					`Os campos extras "${normalizedExtras.get(normalized)}" e "${rawName}" geram a mesma chave.`
+				);
+				return null;
+			}
+
+			normalizedExtras.set(normalized, rawName);
+		}
+
+		return items
+			.filter((item) => {
+				if (item.manualExtra) {
+					return true;
+				}
+				if (item.variavel === "") {
+					return false;
+				}
+				return item.indice >= 0;
+			})
+			.map((item) => ({
+				nomeColuna: item.nomeColuna,
+				indice: item.indice,
+				variavel: item.manualExtra ? normalizeExtraKey(item.variavel) : item.variavel,
+				includeWhenUnmapped: item.manualExtra && item.indice === -1,
+			}));
 	}
 
-	function renderBadges(variable: string) {
+	async function handleConfirm() {
+		const payload = buildPayload();
+		if (!payload) {
+			return;
+		}
+		await onConfirm(payload);
+	}
+
+	function renderBadges(variable: string, manualExtra: boolean) {
+		if (manualExtra) {
+			return (
+				<div className="flex flex-wrap gap-2">
+					<span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+						Extra
+					</span>
+					<span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
+						Null se sem coluna
+					</span>
+				</div>
+			);
+		}
+
 		const fieldInfo = fieldInfoMap[variable];
 		if (!fieldInfo) {
 			return (
 				<span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-					Extra
+					Disponivel
 				</span>
 			);
 		}
@@ -216,12 +298,40 @@ export default function MappingEditorPage({
 		);
 	}
 
-	const unmappedItems = items.filter(
-		(item) => !isCoreField(item.variavel) && item.variavel === "" && item.indice !== -1
+	const coreItems = items.filter(
+		(item) => !item.manualExtra && isCoreField(item.variavel)
+	);
+	const extraItems = items.filter((item) => item.manualExtra);
+	const availableItems = items.filter(
+		(item) => !item.manualExtra && item.variavel === "" && item.indice !== -1
 	);
 
 	return (
 		<div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-100 flex flex-col items-center py-12 px-4">
+			{errorMsg && (
+				<div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+					<motion.div
+						initial={{ scale: 0.9, opacity: 0 }}
+						animate={{ scale: 1, opacity: 1 }}
+						className="bg-white p-6 rounded-xl shadow-2xl max-w-md mx-4"
+					>
+						<div className="flex items-center space-x-3 mb-4">
+							<ExclamationTriangleIcon className="w-6 h-6 text-red-500" />
+							<h3 className="font-semibold text-gray-900">
+								Erro no mapeamento
+							</h3>
+						</div>
+						<p className="text-gray-700 mb-6">{errorMsg}</p>
+						<button
+							className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+							onClick={() => setErrorMsg(null)}
+						>
+							Entendido
+						</button>
+					</motion.div>
+				</div>
+			)}
+
 			<div className="max-w-5xl w-full bg-white rounded-xl shadow-lg p-8 mb-8">
 				<h1 className="text-3xl font-bold mb-2 text-center text-gray-800">
 					{title}
@@ -253,14 +363,14 @@ export default function MappingEditorPage({
 									</tr>
 								</thead>
 								<tbody>
-									{items.map((item, index) => {
-										if (!isCoreField(item.variavel)) {
-											return null;
-										}
+									{coreItems.map((item) => {
+										const index = items.findIndex(
+											(candidate) => candidate.clientId === item.clientId
+										);
 
 										return (
 											<tr
-												key={`${item.variavel}-${index}`}
+												key={item.clientId}
 												className={`border-b border-gray-200 transition-colors ${
 													dragOverIndex === index ? "bg-blue-100" : ""
 												}`}
@@ -269,7 +379,7 @@ export default function MappingEditorPage({
 													{item.variavel.replace(/_/g, " ")}
 												</td>
 												<td className="px-6 py-4">
-													{renderBadges(item.variavel)}
+													{renderBadges(item.variavel, false)}
 												</td>
 												<td className="px-6 py-4">
 													<div
@@ -338,14 +448,14 @@ export default function MappingEditorPage({
 										</tr>
 									</thead>
 									<tbody>
-										{items.map((item, index) => {
-											if (isCoreField(item.variavel) || item.variavel === "") {
-												return null;
-											}
+										{extraItems.map((item) => {
+											const index = items.findIndex(
+												(candidate) => candidate.clientId === item.clientId
+											);
 
 											return (
 												<tr
-													key={`${item.variavel}-${index}`}
+													key={item.clientId}
 													className={`border-b border-gray-200 transition-colors ${
 														dragOverIndex === index ? "bg-purple-100" : ""
 													}`}
@@ -357,10 +467,16 @@ export default function MappingEditorPage({
 															onChange={(event) =>
 																handleVariableChange(index, event.target.value)
 															}
+															onKeyDown={(event) => {
+																event.stopPropagation();
+															}}
 															className="w-full border border-gray-300 rounded-md px-3 py-1 focus:ring-purple-500 focus:border-purple-500 text-sm"
+															placeholder="Nome do campo extra"
 														/>
 													</td>
-													<td className="px-6 py-4">{renderBadges(item.variavel)}</td>
+													<td className="px-6 py-4">
+														{renderBadges(item.variavel, true)}
+													</td>
 													<td className="px-6 py-4">
 														<div
 															draggable
@@ -371,7 +487,7 @@ export default function MappingEditorPage({
 															onDragEnd={onDragEnd}
 															className="flex items-center justify-between py-2 px-4 cursor-move bg-purple-50 rounded-lg border-2 border-purple-200 shadow-sm hover:bg-purple-100 transition-all"
 														>
-															<span>{item.nomeColuna || "Clique e arraste uma coluna"}</span>
+															<span>{item.nomeColuna || "Sem coluna mapeada"}</span>
 															<svg
 																className="h-5 w-5 text-purple-400"
 																fill="none"
@@ -389,7 +505,7 @@ export default function MappingEditorPage({
 													</td>
 													<td className="px-6 py-4 text-center">
 														<button
-															onClick={() => removeMapping(index)}
+															onClick={() => removeExtra(index)}
 															className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors"
 														>
 															<TrashIcon className="h-5 w-5" />
@@ -404,20 +520,20 @@ export default function MappingEditorPage({
 						</section>
 					)}
 
-					{unmappedItems.length > 0 && (
+					{availableItems.length > 0 && (
 						<section>
 							<h2 className="text-lg font-semibold text-gray-600 mb-4 border-b pb-2">
 								Colunas Disponiveis
 							</h2>
 							<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-								{items.map((item, index) => {
-									if (isCoreField(item.variavel) || item.variavel !== "" || item.indice === -1) {
-										return null;
-									}
+								{availableItems.map((item) => {
+									const index = items.findIndex(
+										(candidate) => candidate.clientId === item.clientId
+									);
 
 									return (
 										<div
-											key={`${item.nomeColuna}-${index}`}
+											key={item.clientId}
 											className={`p-4 rounded-lg border-2 transition-all cursor-move flex items-center justify-between ${
 												dragOverIndex === index
 													? "bg-gray-200 border-gray-400"

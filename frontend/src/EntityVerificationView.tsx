@@ -44,7 +44,7 @@ export default function EntityVerificationView({
 		return Object.fromEntries(
 			Object.entries(extras as Record<string, unknown>).map(([key, value]) => [
 				key,
-				String(value ?? ""),
+				value === null ? null : String(value ?? ""),
 			])
 		);
 	};
@@ -94,14 +94,14 @@ export default function EntityVerificationView({
 	const makeUniqueExtraKey = (entity: MapUsuario) => {
 		const extras = entity.extras ?? {};
 		const base = "novo_campo";
-		if (!extras[base]) {
+		if (!(base in extras)) {
 			return base;
 		}
 
 		let counter = 2;
 		for (;;) {
 			const key = `${base}_${counter}`;
-			if (!extras[key]) {
+			if (!(key in extras)) {
 				return key;
 			}
 			counter++;
@@ -180,7 +180,7 @@ export default function EntityVerificationView({
 				return prev;
 			}
 
-			const currentValue = extras[currentKey] ?? "";
+			const currentValue = currentKey in extras ? extras[currentKey] : "";
 			delete extras[currentKey];
 			extras[normalizedKey] = currentValue;
 
@@ -235,13 +235,7 @@ export default function EntityVerificationView({
 		});
 	}
 
-	const firstEditedEntity = Object.values(editedEntities)[0];
-	const duplicateKeys =
-		duplicateFields.length > 0
-			? duplicateFields
-			: Object.keys(firstEditedEntity ?? {}).filter(
-					(field) => field === "cpf" || field === "nome" || field === "sigla" || field.startsWith("email")
-				);
+	const duplicateKeys = duplicateFields;
 
 	function acceptOne(group: number[], idAccepted: number) {
 		setAcceptedIds((s) => new Set(s).add(idAccepted));
@@ -315,7 +309,10 @@ export default function EntityVerificationView({
 	const sanitizeExtras = (entity: MapUsuario) =>
 		Object.fromEntries(
 			Object.entries(entity.extras ?? {})
-				.map(([key, value]) => [normalizeExtraKey(key), String(value ?? "")])
+				.map(([key, value]) => [
+					normalizeExtraKey(key),
+					value === null ? null : String(value ?? ""),
+				])
 				.filter(([key]) => {
 					if (!key) {
 						return false;

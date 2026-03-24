@@ -152,6 +152,18 @@ export namespace logic {
 
 export namespace types {
 	
+	export class NullableString {
+	
+	
+	    static createFrom(source: any = {}) {
+	        return new NullableString(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	
+	    }
+	}
 	export class Avaliador {
 	    id: number;
 	    nome: string;
@@ -224,6 +236,7 @@ export namespace types {
 	    nomeColuna: string;
 	    indice: number;
 	    variavel: string;
+	    includeWhenUnmapped: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new MappingItem(source);
@@ -234,6 +247,7 @@ export namespace types {
 	        this.nomeColuna = source["nomeColuna"];
 	        this.indice = source["indice"];
 	        this.variavel = source["variavel"];
+	        this.includeWhenUnmapped = source["includeWhenUnmapped"];
 	    }
 	}
 	export class Restricao {

@@ -10,12 +10,12 @@ import VerifyRestricoesPage from "./VerifyRestricoes";
 import MappingAvaliadoresPage from "./MappingAvaliadoresPage";
 import MappingResticoesPage from "./MappingRerstricoesPage";
 import SuccessPage from "./SuccessPage";
-import type { MappingFieldInfo, MappingItem } from "./importTypes";
+import type { MappingDraft, MappingFieldInfo } from "./importTypes";
 
 function Root() {
-	const [mappingData, setMappingData] = useState<MappingItem[] | null>(null);
-	const [mappingAvaliadores, setMappingAvaliadores] = useState<MappingItem[] | null>(null);
-	const [mappingRestricoes, setMappingRestricoes] = useState<MappingItem[] | null>(null);
+	const [mappingData, setMappingData] = useState<MappingDraft[] | null>(null);
+	const [mappingAvaliadores, setMappingAvaliadores] = useState<MappingDraft[] | null>(null);
+	const [mappingRestricoes, setMappingRestricoes] = useState<MappingDraft[] | null>(null);
 	const [candidateFieldInfos, setCandidateFieldInfos] = useState<MappingFieldInfo[]>([]);
 	const [avaliadorFieldInfos, setAvaliadorFieldInfos] = useState<MappingFieldInfo[]>([]);
 	const [restricaoFieldInfos, setRestricaoFieldInfos] = useState<MappingFieldInfo[]>([]);

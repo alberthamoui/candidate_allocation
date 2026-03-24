@@ -111,12 +111,31 @@ func ensureDynamicTable(db *sql.DB, table string, fields []types.FieldSchema) er
 		}
 	}
 
-	for _, field := range fields {
-		if !field.Persist || !field.Unique {
+	expectedUniqueIndexes := expectedUniqueIndexMap(table, fields)
+	existingIndexes, err := getExistingIndexes(db, table)
+	if err != nil {
+		return err
+	}
+
+	for indexName := range existingIndexes {
+		if !strings.HasPrefix(indexName, fmt.Sprintf("idx_%s_", table)) || !strings.HasSuffix(indexName, "_unique") {
+			continue
+		}
+		if _, shouldExist := expectedUniqueIndexes[indexName]; shouldExist {
 			continue
 		}
 
-		indexName := fmt.Sprintf("idx_%s_%s_unique", table, field.ColumnName)
+		dropStmt := fmt.Sprintf(`DROP INDEX IF EXISTS "%s"`, indexName)
+		if _, err := db.Exec(dropStmt); err != nil {
+			return fmt.Errorf("erro ao remover índice único obsoleto %s: %w", indexName, err)
+		}
+	}
+
+	for _, field := range fields {
+		indexName, ok := expectedUniqueIndexes[uniqueIndexNameForColumn(table, field.ColumnName)]
+		if !ok {
+			continue
+		}
 		stmt := fmt.Sprintf(
 			`CREATE UNIQUE INDEX IF NOT EXISTS "%s" ON "%s" ("%s") WHERE "%s" IS NOT NULL`,
 			indexName,
@@ -130,6 +149,18 @@ func ensureDynamicTable(db *sql.DB, table string, fields []types.FieldSchema) er
 	}
 
 	return nil
+}
+
+func expectedUniqueIndexMap(table string, fields []types.FieldSchema) map[string]string {
+	indexes := make(map[string]string)
+	for _, field := range fields {
+		if !field.Persist || !field.Unique {
+			continue
+		}
+		name := uniqueIndexNameForColumn(table, field.ColumnName)
+		indexes[name] = name
+	}
+	return indexes
 }
 
 func buildCreateTableStatement(table string, fields []types.FieldSchema) string {
@@ -177,4 +208,33 @@ func getExistingColumns(db *sql.DB, table string) (map[string]struct{}, error) {
 	}
 
 	return columns, rows.Err()
+}
+
+func getExistingIndexes(db *sql.DB, table string) (map[string]struct{}, error) {
+	rows, err := db.Query(fmt.Sprintf(`PRAGMA index_list("%s")`, table))
+	if err != nil {
+		return nil, fmt.Errorf("erro ao consultar índices da tabela %s: %w", table, err)
+	}
+	defer rows.Close()
+
+	indexes := make(map[string]struct{})
+	for rows.Next() {
+		var (
+			seq     int
+			name    string
+			unique  int
+			origin  string
+			partial int
+		)
+		if err := rows.Scan(&seq, &name, &unique, &origin, &partial); err != nil {
+			return nil, fmt.Errorf("erro ao ler índices da tabela %s: %w", table, err)
+		}
+		indexes[name] = struct{}{}
+	}
+
+	return indexes, rows.Err()
+}
+
+func uniqueIndexNameForColumn(table, column string) string {
+	return fmt.Sprintf("idx_%s_%s_unique", table, column)
 }

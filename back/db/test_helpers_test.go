@@ -127,6 +127,47 @@ func uniqueIndexName(table string, field types.FieldSchema) string {
 	return fmt.Sprintf("idx_%s_%s_unique", table, field.ColumnName)
 }
 
+func firstUniqueField(t *testing.T, fields []types.FieldSchema) types.FieldSchema {
+	t.Helper()
+
+	for _, field := range fields {
+		if field.Persist && field.Unique {
+			return field
+		}
+	}
+
+	t.Fatal("expected at least one unique field")
+	return types.FieldSchema{}
+}
+
+func firstNonUniqueField(t *testing.T, fields []types.FieldSchema) types.FieldSchema {
+	t.Helper()
+
+	for _, field := range fields {
+		if field.Persist && !field.Unique {
+			return field
+		}
+	}
+
+	t.Fatal("expected at least one non-unique field")
+	return types.FieldSchema{}
+}
+
+func createUniqueIndex(t *testing.T, db *sql.DB, table, column string) {
+	t.Helper()
+
+	stmt := fmt.Sprintf(
+		`CREATE UNIQUE INDEX "%s" ON "%s" ("%s") WHERE "%s" IS NOT NULL`,
+		fmt.Sprintf("idx_%s_%s_unique", table, column),
+		table,
+		column,
+		column,
+	)
+	if _, err := db.Exec(stmt); err != nil {
+		t.Fatalf("failed to create unique index %s.%s: %v", table, column, err)
+	}
+}
+
 func lastPersistedField(t *testing.T, fields []types.FieldSchema) types.FieldSchema {
 	t.Helper()
 
@@ -229,6 +270,20 @@ func setSyntheticFieldValue(t *testing.T, field types.FieldSchema, dest reflect.
 		dest.SetBool(true)
 		return "1"
 	case reflect.Map:
+		if dest.Type().Elem().Kind() == reflect.Ptr {
+			raw := fmt.Sprintf("valor_%d", idx)
+			nullable := types.NullableString(raw)
+			value := map[string]*types.NullableString{
+				fmt.Sprintf("%s_extra_%d", field.JSONName, idx): &nullable,
+			}
+			dest.Set(reflect.ValueOf(value))
+			payload, err := json.Marshal(value)
+			if err != nil {
+				t.Fatalf("failed to marshal synthetic map for %s: %v", field.GoName, err)
+			}
+			return string(payload)
+		}
+
 		value := map[string]string{
 			fmt.Sprintf("%s_extra_%d", field.JSONName, idx): fmt.Sprintf("valor_%d", idx),
 		}

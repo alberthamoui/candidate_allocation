@@ -13,11 +13,11 @@ interface ErrorItem {
 }
 
 export interface UserExtras {
-	[key: string]: string;
+	[key: string]: string | null;
 }
 
 export interface MapUsuario {
-	[key: string]: string | number | string[] | UserExtras | undefined;
+	[key: string]: string | number | string[] | UserExtras | null | undefined;
 	opcoes?: string[];
 	extras?: UserExtras;
 }
@@ -55,6 +55,9 @@ function displayValue(value: MapUsuario[string]) {
 	}
 	if (typeof value === "number" || typeof value === "string") {
 		return value;
+	}
+	if (value === null) {
+		return "";
 	}
 	return "";
 }

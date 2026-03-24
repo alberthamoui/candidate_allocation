@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PencilIcon } from "@heroicons/react/24/outline";
 /* Enhanced EditableCell Component */
 interface EditableCellProps {
-	value: string | number;
+	value: string | number | null;
 	onChange: (v: string) => void;
 	hasError?: boolean;
 }
@@ -13,11 +13,22 @@ export function EditableCell({
 	hasError = false,
 }: EditableCellProps) {
 	const [editing, setEditing] = useState(false);
-	const [temp, setTemp] = useState(String(value));
+	const [temp, setTemp] = useState(String(value ?? ""));
+
+	useEffect(() => {
+		if (!editing) {
+			setTemp(String(value ?? ""));
+		}
+	}, [editing, value]);
 
 	function commit() {
 		onChange(temp);
 		setEditing(false);
+	}
+
+	function startEditing() {
+		setTemp(String(value ?? ""));
+		setEditing(true);
 	}
 
 	if (editing) {
@@ -32,7 +43,16 @@ export function EditableCell({
 					value={temp}
 					onChange={(e) => setTemp(e.target.value)}
 					onBlur={commit}
-					onKeyDown={(e) => e.key === "Enter" && commit()}
+					onKeyDown={(e) => {
+						e.stopPropagation();
+						if (e.key === "Enter") {
+							commit();
+						}
+						if (e.key === "Escape") {
+							setTemp(String(value ?? ""));
+							setEditing(false);
+						}
+					}}
 					autoFocus
 				/>
 			</div>
@@ -46,7 +66,7 @@ export function EditableCell({
 					? "border-red-300 hover:border-red-400 hover:bg-red-50"
 					: "border-gray-300 hover:border-blue-400 hover:bg-blue-50"
 			}`}
-			onClick={() => setEditing(true)}
+			onClick={startEditing}
 		>
 			<div className="flex items-center justify-between">
 				<span

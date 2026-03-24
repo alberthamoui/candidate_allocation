@@ -26,6 +26,31 @@ func TestWailsModelsContainMappingFieldInfoFields(t *testing.T) {
 	})
 }
 
+func TestWailsModelsContainMappingItemFields(t *testing.T) {
+	assertWailsModelContainsJSONFields(t, "MappingItem", []string{
+		"nomeColuna",
+		"indice",
+		"variavel",
+		"includeWhenUnmapped",
+	})
+}
+
+func TestWailsModelsDoNotGenerateInvalidStringClass(t *testing.T) {
+	modelsPath := filepath.Join("frontend", "wailsjs", "go", "models.ts")
+	content, err := os.ReadFile(modelsPath)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", modelsPath, err)
+	}
+
+	source := string(content)
+	if strings.Contains(source, "export class string") {
+		t.Fatalf("unexpected invalid string class generated in %s", modelsPath)
+	}
+	if !strings.Contains(source, "export class NullableString") {
+		t.Fatalf("expected NullableString helper class to exist in %s", modelsPath)
+	}
+}
+
 func assertWailsModelContainsJSONFields(t *testing.T, className string, fields []string) {
 	t.Helper()
 

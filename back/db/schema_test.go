@@ -120,3 +120,53 @@ func TestEnsureAppSchemaAddsMissingAvaliadorColumnsToExistingDatabase(t *testing
 		}
 	}
 }
+
+func TestEnsureAppSchemaDropsObsoleteCandidateUniqueIndexes(t *testing.T) {
+	db := openTempSQLiteDB(t)
+	fields := persistedFields(types.CandidateFields())
+	nonUnique := firstNonUniqueField(t, fields)
+	unique := firstUniqueField(t, fields)
+
+	if _, err := db.Exec(buildLegacyCreateTableStatement("pessoa", fields, "")); err != nil {
+		t.Fatalf("failed to create legacy pessoa table: %v", err)
+	}
+	createUniqueIndex(t, db, "pessoa", nonUnique.ColumnName)
+	createUniqueIndex(t, db, "pessoa", unique.ColumnName)
+
+	if err := ensureDynamicTable(db, "pessoa", fields); err != nil {
+		t.Fatalf("ensureDynamicTable returned error: %v", err)
+	}
+
+	indexes := fetchIndexSet(t, db, "pessoa")
+	if _, ok := indexes[uniqueIndexName("pessoa", nonUnique)]; ok {
+		t.Fatalf("expected obsolete unique index for pessoa.%s to be removed", nonUnique.ColumnName)
+	}
+	if _, ok := indexes[uniqueIndexName("pessoa", unique)]; !ok {
+		t.Fatalf("expected unique index for pessoa.%s to exist", unique.ColumnName)
+	}
+}
+
+func TestEnsureAppSchemaDropsObsoleteAvaliadorUniqueIndexes(t *testing.T) {
+	db := openTempSQLiteDB(t)
+	fields := persistedFields(types.AvaliadorFields())
+	nonUnique := firstNonUniqueField(t, fields)
+	unique := firstUniqueField(t, fields)
+
+	if _, err := db.Exec(buildLegacyCreateTableStatement("avaliador", fields, "")); err != nil {
+		t.Fatalf("failed to create legacy avaliador table: %v", err)
+	}
+	createUniqueIndex(t, db, "avaliador", nonUnique.ColumnName)
+	createUniqueIndex(t, db, "avaliador", unique.ColumnName)
+
+	if err := ensureDynamicTable(db, "avaliador", fields); err != nil {
+		t.Fatalf("ensureDynamicTable returned error: %v", err)
+	}
+
+	indexes := fetchIndexSet(t, db, "avaliador")
+	if _, ok := indexes[uniqueIndexName("avaliador", nonUnique)]; ok {
+		t.Fatalf("expected obsolete unique index for avaliador.%s to be removed", nonUnique.ColumnName)
+	}
+	if _, ok := indexes[uniqueIndexName("avaliador", unique)]; !ok {
+		t.Fatalf("expected unique index for avaliador.%s to exist", unique.ColumnName)
+	}
+}

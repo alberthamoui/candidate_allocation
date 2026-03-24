@@ -393,7 +393,7 @@ func TestBuildUsuariosWithMapping(t *testing.T) {
 	if !reflect.DeepEqual(first.Usuario.Opcoes, []string{"Seg 10h", "Ter 10h"}) {
 		t.Fatalf("unexpected first user options: %#v", first.Usuario.Opcoes)
 	}
-	if !reflect.DeepEqual(first.Usuario.Extras, map[string]string{"linkedin": "linkedin.com/in/maria"}) {
+	if !reflect.DeepEqual(first.Usuario.Extras, nullableStringMap(map[string]string{"linkedin": "linkedin.com/in/maria"})) {
 		t.Fatalf("unexpected extras: %#v", first.Usuario.Extras)
 	}
 	if !containsErrorMessage(first.Erros, "semestre inválido") {
@@ -575,7 +575,7 @@ func TestBuildUsuariosWithMappingOnlyStoresMappedExtras(t *testing.T) {
 	expected := map[string]string{
 		"obs": "Aluna destaque",
 	}
-	if !reflect.DeepEqual(got, expected) {
+	if !reflect.DeepEqual(got, nullableStringMap(expected)) {
 		t.Fatalf("unexpected extras (should only contain explicitly mapped): %#v", got)
 	}
 }
@@ -603,7 +603,7 @@ func TestBuildUsuariosWithMappingPreservesExtrasKeyCase(t *testing.T) {
 	expected := map[string]string{
 		"Banana": "Qui 10h",
 	}
-	if !reflect.DeepEqual(got, expected) {
+	if !reflect.DeepEqual(got, nullableStringMap(expected)) {
 		t.Fatalf("unexpected extras (should preserve key case): %#v", got)
 	}
 }
@@ -644,9 +644,9 @@ func TestBuildAvaliadoresWithMappingOnlyStoresMappedExtras(t *testing.T) {
 			Nome:  "Ana",
 			Email: "ana@insper.edu.br",
 			Sigla: "AN",
-			Extras: map[string]string{
+			Extras: nullableStringMap(map[string]string{
 				"link": "linkedin.com/in/ana",
-			},
+			}),
 		}
 		if !reflect.DeepEqual(got, expected) {
 			t.Fatalf("unexpected avaliadores with extras: %#v", got)
@@ -1112,7 +1112,7 @@ func TestBuildCandidateFromRowSupportsCurrentCandidateSchema(t *testing.T) {
 	}
 
 	expected := expectedCandidateForBuild()
-	expected.Extras = map[string]string{"link": "linkedin.com/in/maria"}
+	expected.Extras = nullableStringMap(map[string]string{"link": "linkedin.com/in/maria"})
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected candidate built from row: %#v", got)
 	}
@@ -1129,9 +1129,31 @@ func TestBuildCandidateFromRowSupportsExtrasMappedColumn(t *testing.T) {
 	}
 
 	expected := expectedCandidateForBuild()
-	expected.Extras = map[string]string{"Observacao": "observacao extra"}
+	expected.Extras = nullableStringMap(map[string]string{"Observacao": "observacao extra"})
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected candidate built with mapped extras: %#v", got)
+	}
+}
+
+func TestBuildCandidateFromRowIncludesManualUnmappedExtraAsNull(t *testing.T) {
+	header := candidateHeaders(2)
+	row := candidateRowValues(2)
+	mapping := expectedMappingItems(header, candidateMappingVariables(2))
+	mapping = append(mapping, types.MappingItem{
+		Indice:              -1,
+		Variavel:            "linkedin",
+		IncludeWhenUnmapped: true,
+	})
+
+	got, err := buildCandidateFromRow(row, header, 2, mapping)
+	if err != nil {
+		t.Fatalf("buildCandidateFromRow returned error: %v", err)
+	}
+
+	expected := expectedCandidateForBuild()
+	expected.Extras = map[string]*types.NullableString{"linkedin": nil}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected candidate built with null extra: %#v", got)
 	}
 }
 
@@ -1187,9 +1209,9 @@ func TestBuildStructFromRowWithExtras(t *testing.T) {
 		Nome:  "Ana",
 		Email: "ana@insper.edu.br",
 		Sigla: "AN",
-		Extras: map[string]string{
+		Extras: nullableStringMap(map[string]string{
 			"link": "linkedin.com/in/ana",
-		},
+		}),
 	}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected struct built with extras: %#v", got)
@@ -1215,12 +1237,38 @@ func TestBuildStructFromRowWithExtrasSupportsExplicitExtrasMapping(t *testing.T)
 		Nome:  "Ana",
 		Email: "ana@insper.edu.br",
 		Sigla: "AN",
-		Extras: map[string]string{
+		Extras: nullableStringMap(map[string]string{
 			"Observacao": "Observacao",
-		},
+		}),
 	}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected struct built with explicit extras: %#v", got)
+	}
+}
+
+func TestBuildStructFromRowWithExtrasIncludesManualUnmappedExtraAsNull(t *testing.T) {
+	row := []string{"Ana", "ana@insper.edu.br", "AN"}
+	header := []string{"Nome", "Email", "Sigla"}
+	mapping := []types.MappingItem{
+		{Indice: 0, Variavel: "nome"},
+		{Indice: 1, Variavel: "email"},
+		{Indice: 2, Variavel: "sigla"},
+		{Indice: -1, Variavel: "area", IncludeWhenUnmapped: true},
+	}
+
+	got, err := buildStructFromRowWithExtras[types.Avaliador](row, header, mapping)
+	if err != nil {
+		t.Fatalf("buildStructFromRowWithExtras returned error: %v", err)
+	}
+
+	expected := types.Avaliador{
+		Nome:   "Ana",
+		Email:  "ana@insper.edu.br",
+		Sigla:  "AN",
+		Extras: map[string]*types.NullableString{"area": nil},
+	}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected struct built with null extra: %#v", got)
 	}
 }
 
@@ -1230,8 +1278,9 @@ func TestDecodeMapToStruct(t *testing.T) {
 		"nome":      "Maria",
 		"cpf":       "12345678901",
 		"opcoes":    []string{"Seg 10h"},
-		"extras": map[string]string{
+		"extras": map[string]interface{}{
 			"linkedin": "linkedin.com/in/maria",
+			"github":   nil,
 		},
 	})
 	if err != nil {
@@ -1244,8 +1293,20 @@ func TestDecodeMapToStruct(t *testing.T) {
 	if !reflect.DeepEqual(got.Opcoes, []string{"Seg 10h"}) {
 		t.Fatalf("unexpected decoded options: %#v", got.Opcoes)
 	}
-	if !reflect.DeepEqual(got.Extras, map[string]string{"linkedin": "linkedin.com/in/maria"}) {
+	if !reflect.DeepEqual(got.Extras, map[string]*types.NullableString{
+		"linkedin": stringPointer("linkedin.com/in/maria"),
+		"github":   nil,
+	}) {
 		t.Fatalf("unexpected decoded extras: %#v", got.Extras)
+	}
+}
+
+func TestRowHasAnyContent(t *testing.T) {
+	if rowHasAnyContent([]string{"", "   "}) {
+		t.Fatal("expected whitespace-only row to be treated as empty")
+	}
+	if !rowHasAnyContent([]string{"", " valor "}) {
+		t.Fatal("expected row with non-empty value to be treated as non-empty")
 	}
 }
 
@@ -1555,21 +1616,21 @@ func mappableAvaliadorFields() []string {
 	return filtered
 }
 
-func candidateExtrasPayload() map[string]string {
-	return map[string]string{
+func candidateExtrasPayload() map[string]*types.NullableString {
+	return nullableStringMap(map[string]string{
 		"linkedin":      "linkedin.com/in/maria",
 		"empresa_atual": "XP",
-	}
+	})
 }
 
 func candidateExtrasJSON() string {
 	return `{"empresa_atual":"XP","linkedin":"linkedin.com/in/maria"}`
 }
 
-func avaliadorExtrasPayload() map[string]string {
-	return map[string]string{
+func avaliadorExtrasPayload() map[string]*types.NullableString {
+	return nullableStringMap(map[string]string{
 		"area": "Financas",
-	}
+	})
 }
 
 func avaliadorExtrasJSON() string {
@@ -1580,6 +1641,19 @@ func interfaceSlice(values []string) []interface{} {
 	result := make([]interface{}, 0, len(values))
 	for _, value := range values {
 		result = append(result, value)
+	}
+	return result
+}
+
+func stringPointer(value string) *types.NullableString {
+	nullable := types.NullableString(value)
+	return &nullable
+}
+
+func nullableStringMap(values map[string]string) map[string]*types.NullableString {
+	result := make(map[string]*types.NullableString, len(values))
+	for key, value := range values {
+		result[key] = stringPointer(value)
 	}
 	return result
 }

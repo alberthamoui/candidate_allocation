@@ -1,24 +1,26 @@
 package types
 
+type NullableString string
+
 type Candidato struct {
-	Timestamp       string            `json:"timestamp" db:"type=TEXT"`
-	Nome            string            `json:"nome" db:"type=TEXT;required"`
-	CPF             string            `json:"cpf" db:"type=TEXT;required;unique" app:"duplicate"`
-	Numero          string            `json:"numero" db:"type=TEXT;required"`
-	Semestre        string            `json:"semestre" db:"type=INTEGER;required"`
-	Curso           string            `json:"curso" db:"type=TEXT;required"`
-	EmailSecundario string            `json:"email_secundario" db:"type=TEXT;required" app:"duplicate"`
-	EmailPessoal    string            `json:"email_pessoal" db:"type=TEXT;required" app:"duplicate"`
-	Opcoes          []string          `json:"opcoes" db:"-"`
-	Extras          map[string]string `json:"extras" db:"type=TEXT"`
+	Timestamp       string             `json:"timestamp" db:"type=TEXT"`
+	Nome            string             `json:"nome" db:"type=TEXT;required"`
+	CPF             string             `json:"cpf" db:"type=TEXT;required;unique" app:"duplicate"`
+	Numero          string             `json:"numero" db:"type=TEXT;required"`
+	Semestre        string             `json:"semestre" db:"type=INTEGER;required"`
+	Curso           string             `json:"curso" db:"type=TEXT;required"`
+	EmailSecundario string             `json:"email_secundario" db:"type=TEXT;required" app:"duplicate"`
+	EmailPessoal    string             `json:"email_pessoal" db:"type=TEXT;required" app:"duplicate"`
+	Opcoes          []string           `json:"opcoes" db:"-"`
+	Extras          map[string]*NullableString `json:"extras" db:"type=TEXT"`
 }
 
 type Avaliador struct {
-	ID     int               `json:"id" db:"-"`
-	Nome   string            `json:"nome" db:"type=TEXT;required;unique" app:"duplicate"`
-	Email  string            `json:"email" db:"type=TEXT;required;unique" app:"duplicate"`
-	Sigla  string            `json:"sigla" db:"type=TEXT;required;unique" app:"duplicate"`
-	Extras map[string]string `json:"extras" db:"type=TEXT"`
+	ID     int                `json:"id" db:"-"`
+	Nome   string             `json:"nome" db:"type=TEXT;required;unique" app:"duplicate"`
+	Email  string             `json:"email" db:"type=TEXT;required;unique" app:"duplicate"`
+	Sigla  string             `json:"sigla" db:"type=TEXT;required;unique" app:"duplicate"`
+	Extras map[string]*NullableString `json:"extras" db:"type=TEXT"`
 }
 
 type Restricao struct {
@@ -28,9 +30,10 @@ type Restricao struct {
 }
 
 type MappingItem struct {
-	NomeColuna string `json:"nomeColuna"`
-	Indice     int    `json:"indice"`
-	Variavel   string `json:"variavel"`
+	NomeColuna          string `json:"nomeColuna"`
+	Indice              int    `json:"indice"`
+	Variavel            string `json:"variavel"`
+	IncludeWhenUnmapped bool   `json:"includeWhenUnmapped"`
 }
 
 type MappingFieldInfo struct {

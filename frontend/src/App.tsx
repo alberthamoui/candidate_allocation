@@ -11,12 +11,12 @@ import {
 	SuggestMappingAvaliador,
 	SuggestMappingRestricao,
 } from "../wailsjs/go/main/App";
-import type { MappingFieldInfo, MappingItem } from "./importTypes";
+import type { MappingDraft, MappingFieldInfo, MappingItem } from "./importTypes";
 
 interface AppProps {
-	setMapping: (data: MappingItem[]) => void;
-	setMappingAvaliadores: (data: MappingItem[]) => void;
-	setMappingRestricoes: (data: MappingItem[]) => void;
+	setMapping: (data: MappingDraft[]) => void;
+	setMappingAvaliadores: (data: MappingDraft[]) => void;
+	setMappingRestricoes: (data: MappingDraft[]) => void;
 	setCandidateFieldInfos: (data: MappingFieldInfo[]) => void;
 	setAvaliadorFieldInfos: (data: MappingFieldInfo[]) => void;
 	setRestricaoFieldInfos: (data: MappingFieldInfo[]) => void;
@@ -48,6 +48,31 @@ function App({
 		if (!selected) return;
 		setFile(selected);
 	}
+
+	function makeDrafts(
+		items: MappingItem[],
+		fieldInfos: MappingFieldInfo[],
+		allowExtraFields: boolean
+	): MappingDraft[] {
+		const coreVariables = new Set(fieldInfos.map((fieldInfo) => fieldInfo.variavel));
+
+		return items.map((item) => {
+			const isCore = coreVariables.has(item.variavel);
+			const isAvailableSuggestion = allowExtraFields && !isCore;
+
+			return {
+				...item,
+				variavel: isAvailableSuggestion ? "" : item.variavel,
+				includeWhenUnmapped: item.includeWhenUnmapped ?? false,
+				clientId:
+					typeof crypto !== "undefined" && "randomUUID" in crypto
+						? crypto.randomUUID()
+						: `${Date.now()}-${Math.random()}`,
+				manualExtra: false,
+			};
+		});
+	}
+
 	async function handleFile() {
 		if (file) {
 			const reader = new FileReader();
@@ -60,9 +85,7 @@ function App({
 					}
 					// Converte o ArrayBuffer para Uint8Array
 					const data = new Uint8Array(fileData as ArrayBuffer);
-					const result = await SuggestMapping(Array.from(data), 5);
-					setMapping(result);
-
+					const mappingCandidatos = await SuggestMapping(Array.from(data), 5);
 					const [
 						candidateFieldInfos,
 						mappingAvaliadores,
@@ -77,10 +100,15 @@ function App({
 						GetRestricaoMappingFieldInfos(),
 					]);
 
+					setMapping(makeDrafts(mappingCandidatos, candidateFieldInfos, true));
 					setCandidateFieldInfos(candidateFieldInfos);
-					setMappingAvaliadores(mappingAvaliadores);
+					setMappingAvaliadores(
+						makeDrafts(mappingAvaliadores, avaliadorFieldInfos, true)
+					);
 					setAvaliadorFieldInfos(avaliadorFieldInfos);
-					setMappingRestricoes(mappingRestricoes);
+					setMappingRestricoes(
+						makeDrafts(mappingRestricoes, restricaoFieldInfos, false)
+					);
 					setRestricaoFieldInfos(restricaoFieldInfos);
 					navigate("/mapping");
 				} catch (error) {

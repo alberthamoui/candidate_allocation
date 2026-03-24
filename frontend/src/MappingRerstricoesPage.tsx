@@ -1,11 +1,11 @@
 import { useNavigate } from "react-router-dom";
 import { BuildRestricoesWithMapping } from "../wailsjs/go/main/App";
 import MappingEditorPage from "./MappingEditorPage";
-import type { MappingFieldInfo, MappingItem } from "./importTypes";
+import type { MappingDraft, MappingFieldInfo, MappingItem } from "./importTypes";
 
 interface MappingRestricoesPageProps {
-	mapping: MappingItem[] | null;
-	setMapping: (items: MappingItem[]) => void;
+	mapping: MappingDraft[] | null;
+	setMapping: (items: MappingDraft[]) => void;
 	fieldInfos: MappingFieldInfo[];
 	setRestricoes: (data: any) => void;
 }

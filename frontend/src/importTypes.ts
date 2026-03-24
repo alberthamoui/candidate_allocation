@@ -2,6 +2,7 @@ export interface MappingItem {
 	nomeColuna: string;
 	indice: number;
 	variavel: string;
+	includeWhenUnmapped: boolean;
 }
 
 export interface MappingFieldInfo {
@@ -9,4 +10,9 @@ export interface MappingFieldInfo {
 	required: boolean;
 	unique: boolean;
 	duplicate: boolean;
+}
+
+export interface MappingDraft extends MappingItem {
+	clientId: string;
+	manualExtra: boolean;
 }
