@@ -9,6 +9,12 @@ export function BuildRestricoesWithMapping(arg1:Array<types.MappingItem>):Promis
 
 export function BuildUsuariosWithMapping(arg1:Array<types.MappingItem>):Promise<logic.UsuariosResponse>;
 
+export function GetAvaliadorMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
+
+export function GetCandidateMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
+
+export function GetRestricaoMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
+
 export function Greet(arg1:string):Promise<string>;
 
 export function SaveAvaliadoresFromMaps(arg1:Array<Record<string, any>>):Promise<void>;

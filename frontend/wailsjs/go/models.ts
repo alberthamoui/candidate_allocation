@@ -202,6 +202,24 @@ export namespace types {
 	        this.extras = source["extras"];
 	    }
 	}
+	export class MappingFieldInfo {
+	    variavel: string;
+	    required: boolean;
+	    unique: boolean;
+	    duplicate: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new MappingFieldInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.variavel = source["variavel"];
+	        this.required = source["required"];
+	        this.unique = source["unique"];
+	        this.duplicate = source["duplicate"];
+	    }
+	}
 	export class MappingItem {
 	    nomeColuna: string;
 	    indice: number;

@@ -1,8 +1,5 @@
 import EntityVerificationView from "./EntityVerificationView";
-import {
-	SaveUsuariosFromMaps,
-	SaveRestricoesFromMaps,
-} from "../wailsjs/go/main/App";
+import { SaveUsuariosFromMaps } from "../wailsjs/go/main/App";
 
 interface ErrorItem {
 	field: string;
@@ -16,14 +13,12 @@ interface UserWrapper {
 
 interface VerifyUserPageProps {
 	usuarios: Record<number, UserWrapper>;
-	restricoes: any;
 	duplicates: number[][];
 	duplicateFields: string[];
 }
 
 export default function VerifyUserPage({
 	usuarios,
-	restricoes,
 	duplicates,
 	duplicateFields,
 }: VerifyUserPageProps) {
@@ -36,9 +31,8 @@ export default function VerifyUserPage({
 			duplicates={duplicates}
 			duplicateFields={duplicateFields}
 			onSave={SaveUsuariosFromMaps}
-			nextRoute="/verifyAvaliadores"
-			extraData={restricoes}
-			onSaveExtra={SaveRestricoesFromMaps}
+			nextRoute="/mappingRestricoes"
+			backRoute="/mapping"
 		/>
 	);
 }

@@ -49,6 +49,53 @@ func AvaliadorDuplicateFieldNames() []string {
 	return duplicates
 }
 
+func CandidateMappingFieldInfos(optionCount int) []MappingFieldInfo {
+	fields := CandidateFields()
+	infos := make([]MappingFieldInfo, 0, len(fields)+optionCount)
+
+	for _, field := range fields {
+		switch field.JSONName {
+		case "extras", "opcoes":
+			continue
+		default:
+			infos = append(infos, mappingFieldInfoFromSchema(field))
+		}
+	}
+
+	for i := 1; i <= optionCount; i++ {
+		infos = append(infos, MappingFieldInfo{
+			Variavel: fmt.Sprintf("opcao %d", i),
+		})
+	}
+
+	return infos
+}
+
+func AvaliadorMappingFieldInfos() []MappingFieldInfo {
+	fields := AvaliadorFields()
+	infos := make([]MappingFieldInfo, 0, len(fields))
+
+	for _, field := range fields {
+		if field.JSONName == "extras" {
+			continue
+		}
+		infos = append(infos, mappingFieldInfoFromSchema(field))
+	}
+
+	return infos
+}
+
+func RestricaoMappingFieldInfos() []MappingFieldInfo {
+	fieldNames := RestricaoFieldNames()
+	infos := make([]MappingFieldInfo, 0, len(fieldNames))
+
+	for _, fieldName := range fieldNames {
+		infos = append(infos, MappingFieldInfo{Variavel: fieldName})
+	}
+
+	return infos
+}
+
 func RestricaoFieldNames() []string {
 	return JSONFieldNames(Restricao{})
 }
@@ -204,5 +251,14 @@ func inferSQLiteType(typ reflect.Type) string {
 		return "INTEGER"
 	default:
 		return ""
+	}
+}
+
+func mappingFieldInfoFromSchema(field FieldSchema) MappingFieldInfo {
+	return MappingFieldInfo{
+		Variavel:  field.JSONName,
+		Required:  field.Required,
+		Unique:    field.Unique,
+		Duplicate: field.Duplicate,
 	}
 }

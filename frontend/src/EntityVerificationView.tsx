@@ -8,27 +8,17 @@ import {
 } from "@heroicons/react/24/outline";
 import { UserCard, type MapUsuario, type UserExtras } from "./UserCard";
 
-interface ErrorItem {
-	field: string;
-	msg: string;
-}
-
-interface EntityWrapper {
-	erros: ErrorItem[];
-	[key: string]: any; // This will hold the actual entity (usuario or avaliador)
-}
-
 interface EntityVerificationViewProps {
 	title: string;
 	subtitle: string;
-	entities: Record<number, any>; // Record<number, { erros: [], [entityKey]: entity }>
-	entityKey: string; // "usuario" or "avaliador"
+	entities?: Record<number, any> | null;
+	entityKey: string;
 	duplicates: number[][];
 	duplicateFields: string[];
 	onSave: (entities: any[]) => Promise<void>;
 	nextRoute: string;
-	extraData?: any; // To save alongside entities (like restricoes)
-	onSaveExtra?: (extra: any) => Promise<void>;
+	backRoute?: string;
+	allowExtras?: boolean;
 }
 
 export default function EntityVerificationView({
@@ -40,10 +30,11 @@ export default function EntityVerificationView({
 	duplicateFields,
 	onSave,
 	nextRoute,
-	extraData,
-	onSaveExtra,
+	backRoute,
+	allowExtras = true,
 }: EntityVerificationViewProps) {
 	const navigate = useNavigate();
+	const sourceEntities = entities ?? {};
 
 	const cloneExtras = (extras: unknown): UserExtras => {
 		if (!extras || typeof extras !== "object" || Array.isArray(extras)) {
@@ -66,7 +57,7 @@ export default function EntityVerificationView({
 
 	const makeEditableCopy = () =>
 		Object.fromEntries(
-			Object.entries(entities).map(([id, wrapper]) => [
+			Object.entries(sourceEntities).map(([id, wrapper]) => [
 				id,
 				cloneEntity(wrapper[entityKey]),
 			])
@@ -342,15 +333,19 @@ export default function EntityVerificationView({
 		}
 
 		const dataToSave = Object.values(editedEntities).map((ent) => ({
-			...ent,
-			extras: sanitizeExtras(ent),
+			...(allowExtras
+				? {
+						...ent,
+						extras: sanitizeExtras(ent),
+				  }
+				: (() => {
+						const { extras, ...rest } = ent;
+						return rest;
+				  })()),
 		}));
 
 		try {
 			await onSave(dataToSave);
-			if (onSaveExtra && extraData) {
-				await onSaveExtra(extraData);
-			}
 			navigate(nextRoute);
 		} catch (err) {
 			setErrorMsg("Erro ao salvar dados: " + (err as Error).message);
@@ -359,7 +354,7 @@ export default function EntityVerificationView({
 
 	const renderEntityCard = (entityId: number, extraBtn?: React.ReactNode) => {
 		const entity = editedEntities[entityId];
-		const errors = entities[entityId]?.erros ?? [];
+		const errors = sourceEntities[entityId]?.erros ?? [];
 
 		return (
 			<UserCard
@@ -373,6 +368,7 @@ export default function EntityVerificationView({
 				onAddExtraField={addExtraField}
 				onRemoveExtraField={removeExtraField}
 				extraBtn={extraBtn}
+				allowExtras={allowExtras}
 			/>
 		);
 	};
@@ -432,6 +428,14 @@ export default function EntityVerificationView({
 									únicos
 								</span>
 							</div>
+							{backRoute && (
+								<button
+									onClick={() => navigate(backRoute)}
+									className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-50"
+								>
+									Voltar ao mapeamento
+								</button>
+							)}
 						</div>
 					</div>
 				</div>

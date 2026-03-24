@@ -17,6 +17,15 @@ func TestWailsModelsContainAllAvaliadorJSONFields(t *testing.T) {
 	assertWailsModelContainsJSONFields(t, "Avaliador", types.JSONFieldNames(types.Avaliador{}))
 }
 
+func TestWailsModelsContainMappingFieldInfoFields(t *testing.T) {
+	assertWailsModelContainsJSONFields(t, "MappingFieldInfo", []string{
+		"variavel",
+		"required",
+		"unique",
+		"duplicate",
+	})
+}
+
 func assertWailsModelContainsJSONFields(t *testing.T, className string, fields []string) {
 	t.Helper()
 

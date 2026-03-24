@@ -31,7 +31,8 @@ export default function VerifyAvaliadoresPage({
 			duplicates={duplicates}
 			duplicateFields={duplicateFields}
 			onSave={SaveAvaliadoresFromMaps}
-			nextRoute="/success" // Final step after verifying evaluators
+			nextRoute="/success"
+			backRoute="/mappingAvaliadores"
 		/>
 	);
 }

@@ -14,6 +14,18 @@ export function BuildUsuariosWithMapping(arg1) {
   return window['go']['main']['App']['BuildUsuariosWithMapping'](arg1);
 }
 
+export function GetAvaliadorMappingFieldInfos() {
+  return window['go']['main']['App']['GetAvaliadorMappingFieldInfos']();
+}
+
+export function GetCandidateMappingFieldInfos() {
+  return window['go']['main']['App']['GetCandidateMappingFieldInfos']();
+}
+
+export function GetRestricaoMappingFieldInfos() {
+  return window['go']['main']['App']['GetRestricaoMappingFieldInfos']();
+}
+
 export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }

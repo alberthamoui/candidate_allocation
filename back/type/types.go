@@ -33,6 +33,13 @@ type MappingItem struct {
 	Variavel   string `json:"variavel"`
 }
 
+type MappingFieldInfo struct {
+	Variavel  string `json:"variavel"`
+	Required  bool   `json:"required"`
+	Unique    bool   `json:"unique"`
+	Duplicate bool   `json:"duplicate"`
+}
+
 type NaoAlocados struct {
 	Candidatos  []Candidato `json:"candidatos"`
 	Avaliadores []Avaliador `json:"avaliadores"`

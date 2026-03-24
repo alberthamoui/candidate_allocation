@@ -138,7 +138,7 @@ func getInteractiveMapping(label string, data []byte, sheetIndex int, currentMap
 			fmt.Println()
 		}
 	}
-	fmt.Println("\n")
+	fmt.Println()
 
 	fmt.Println("Sugestão de mapeamento atual:")
 	for _, item := range currentMapping {

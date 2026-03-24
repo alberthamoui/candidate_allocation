@@ -85,6 +85,18 @@ func (a *App) SuggestMappingRestricao() ([]types.MappingItem, error) {
 	return logic.SuggestMappingRestricao(a.excelData)
 }
 
+func (a *App) GetCandidateMappingFieldInfos() []types.MappingFieldInfo {
+	return types.CandidateMappingFieldInfos(a.nOpcoes)
+}
+
+func (a *App) GetAvaliadorMappingFieldInfos() []types.MappingFieldInfo {
+	return types.AvaliadorMappingFieldInfos()
+}
+
+func (a *App) GetRestricaoMappingFieldInfos() []types.MappingFieldInfo {
+	return types.RestricaoMappingFieldInfos()
+}
+
 func ProcessMapping(items []string) ([]types.MappingItem, error) {
 	return logic.ProcessMapping(items)
 }

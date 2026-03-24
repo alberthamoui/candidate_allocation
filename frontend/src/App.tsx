@@ -4,21 +4,31 @@ import wailsLogo from "./assets/wails.png";
 import "./App.css";
 import {
 	Greet,
+	GetAvaliadorMappingFieldInfos,
+	GetCandidateMappingFieldInfos,
+	GetRestricaoMappingFieldInfos,
 	SuggestMapping,
 	SuggestMappingAvaliador,
 	SuggestMappingRestricao,
 } from "../wailsjs/go/main/App";
+import type { MappingFieldInfo, MappingItem } from "./importTypes";
 
 interface AppProps {
-	setMapping: (data: any) => void;
-	setMappingAvaliadores: (data: any) => void;
-	setMappingRestricoes: (data: any) => void;
+	setMapping: (data: MappingItem[]) => void;
+	setMappingAvaliadores: (data: MappingItem[]) => void;
+	setMappingRestricoes: (data: MappingItem[]) => void;
+	setCandidateFieldInfos: (data: MappingFieldInfo[]) => void;
+	setAvaliadorFieldInfos: (data: MappingFieldInfo[]) => void;
+	setRestricaoFieldInfos: (data: MappingFieldInfo[]) => void;
 }
 
 function App({
 	setMapping,
 	setMappingAvaliadores,
 	setMappingRestricoes,
+	setCandidateFieldInfos,
+	setAvaliadorFieldInfos,
+	setRestricaoFieldInfos,
 }: AppProps) {
 	const [resultText, setResultText] = useState(
 		"Por favor, digite seu nome abaixo 👇"
@@ -50,15 +60,28 @@ function App({
 					}
 					// Converte o ArrayBuffer para Uint8Array
 					const data = new Uint8Array(fileData as ArrayBuffer);
-					// Chama a nova função que aceita os dados do arquivo.
 					const result = await SuggestMapping(Array.from(data), 5);
-					console.log(result, "resultado");
-					setMapping(result); // <-- joga pro pai
+					setMapping(result);
 
-					const mappingAvaliadores = await SuggestMappingAvaliador();
+					const [
+						candidateFieldInfos,
+						mappingAvaliadores,
+						avaliadorFieldInfos,
+						mappingRestricoes,
+						restricaoFieldInfos,
+					] = await Promise.all([
+						GetCandidateMappingFieldInfos(),
+						SuggestMappingAvaliador(),
+						GetAvaliadorMappingFieldInfos(),
+						SuggestMappingRestricao(),
+						GetRestricaoMappingFieldInfos(),
+					]);
+
+					setCandidateFieldInfos(candidateFieldInfos);
 					setMappingAvaliadores(mappingAvaliadores);
-					const mappingRestricoes = await SuggestMappingRestricao();
+					setAvaliadorFieldInfos(avaliadorFieldInfos);
 					setMappingRestricoes(mappingRestricoes);
+					setRestricaoFieldInfos(restricaoFieldInfos);
 					navigate("/mapping");
 				} catch (error) {
 					setFileResult("Erro ao processar o arquivo: " + error);

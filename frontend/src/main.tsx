@@ -6,14 +6,19 @@ import MappingPage from "./MappingPage";
 import "./index.css";
 import VerifyUserPage from "./VerifyUsers";
 import VerifyAvaliadoresPage from "./VerifyAvaliadores";
+import VerifyRestricoesPage from "./VerifyRestricoes";
 import MappingAvaliadoresPage from "./MappingAvaliadoresPage";
 import MappingResticoesPage from "./MappingRerstricoesPage";
 import SuccessPage from "./SuccessPage";
+import type { MappingFieldInfo, MappingItem } from "./importTypes";
 
 function Root() {
-	const [mappingData, setMappingData] = useState<any>(null);
-	const [mappingAvaliadores, setMappingAvaliadores] = useState<any>(null);
-	const [mappingRestricoes, setMappingRestricoes] = useState<any>(null);
+	const [mappingData, setMappingData] = useState<MappingItem[] | null>(null);
+	const [mappingAvaliadores, setMappingAvaliadores] = useState<MappingItem[] | null>(null);
+	const [mappingRestricoes, setMappingRestricoes] = useState<MappingItem[] | null>(null);
+	const [candidateFieldInfos, setCandidateFieldInfos] = useState<MappingFieldInfo[]>([]);
+	const [avaliadorFieldInfos, setAvaliadorFieldInfos] = useState<MappingFieldInfo[]>([]);
+	const [restricaoFieldInfos, setRestricaoFieldInfos] = useState<MappingFieldInfo[]>([]);
 
 	const [users, setUsers] = useState<any>(null);
 	const [avaliadores, setAvaliadores] = useState<any>(null);
@@ -36,6 +41,9 @@ function Root() {
 								setMapping={setMappingData}
 								setMappingAvaliadores={setMappingAvaliadores}
 								setMappingRestricoes={setMappingRestricoes}
+								setCandidateFieldInfos={setCandidateFieldInfos}
+								setAvaliadorFieldInfos={setAvaliadorFieldInfos}
+								setRestricaoFieldInfos={setRestricaoFieldInfos}
 							/>
 						}
 					/>
@@ -44,6 +52,8 @@ function Root() {
 						element={
 							<MappingPage
 								mapping={mappingData}
+								setMapping={setMappingData}
+								fieldInfos={candidateFieldInfos}
 								setUsers={setUsers}
 								setDuplicatas={setDuplicatas}
 								setDuplicateFields={setDuplicateFields}
@@ -55,6 +65,8 @@ function Root() {
 						element={
 							<MappingAvaliadoresPage
 								mapping={mappingAvaliadores}
+								setMapping={setMappingAvaliadores}
+								fieldInfos={avaliadorFieldInfos}
 								setAvaliadores={setAvaliadores}
 								setDuplicatas={setAvaliadoresDuplicatas}
 								setDuplicateFields={setAvaliadoresDuplicateFields}
@@ -66,6 +78,8 @@ function Root() {
 						element={
 							<MappingResticoesPage
 								mapping={mappingRestricoes}
+								setMapping={setMappingRestricoes}
+								fieldInfos={restricaoFieldInfos}
 								setRestricoes={setRestricoes}
 							/>
 						}
@@ -75,11 +89,14 @@ function Root() {
 						element={
 							<VerifyUserPage
 								usuarios={users}
-								restricoes={restricoes}
 								duplicates={duplicatas}
 								duplicateFields={duplicateFields}
 							/>
 						}
+					/>
+					<Route
+						path="/verifyRestricoes"
+						element={<VerifyRestricoesPage restricoes={restricoes} />}
 					/>
 					<Route
 						path="/verifyAvaliadores"
