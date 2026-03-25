@@ -1,1 +1,8 @@
 anotacoes.txt
+
+*.db
+*.db-journal
+*.db3
+*.sqlite
+*.sqlite3
+*.sqlite-journal
