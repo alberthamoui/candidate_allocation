@@ -56,33 +56,9 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 	if err != nil {
 		return err
 	}
-
-	avaliadorMapping, err := logic.SuggestMappingAvaliador(data)
-	if err != nil {
-		return fmt.Errorf("erro ao sugerir mapeamento de avaliadores: %w", err)
-	}
-	avaliadorMapping, err = getInteractiveMapping("Avaliadores", data, 1, avaliadorMapping)
-	if err != nil {
-		return err
-	}
-
-	restricaoMapping, err := logic.SuggestMappingRestricao(data)
-	if err != nil {
-		return fmt.Errorf("erro ao sugerir mapeamento de restricoes: %w", err)
-	}
-	restricaoMapping, err = getInteractiveMapping("Restricoes", data, 2, restricaoMapping)
-	if err != nil {
-		return err
-	}
-
 	usuariosResp, err := logic.BuildUsuariosWithMapping(data, optionCount, candidateMapping)
 	if err != nil {
 		return fmt.Errorf("erro ao construir candidatos: %w", err)
-	}
-
-	restricoes, err := logic.BuildRestricoesWithMapping(data, restricaoMapping)
-	if err != nil {
-		return fmt.Errorf("erro ao construir restricoes: %w", err)
 	}
 
 	candidatos, summary := buildCandidatesForCLI(usuariosResp)
@@ -93,6 +69,28 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 
 	if err := logic.Save(candidatos); err != nil {
 		return fmt.Errorf("erro ao salvar candidatos: %w", err)
+	}
+
+	restricaoMapping, err := logic.SuggestMappingRestricao(data)
+	if err != nil {
+		return fmt.Errorf("erro ao sugerir mapeamento de restricoes: %w", err)
+	}
+	restricaoMapping, err = getInteractiveMapping("Restricoes", data, 2, restricaoMapping)
+	if err != nil {
+		return err
+	}
+	restricoes, err := logic.BuildRestricoesWithMapping(data, restricaoMapping)
+	if err != nil {
+		return fmt.Errorf("erro ao construir restricoes: %w", err)
+	}
+
+	avaliadorMapping, err := logic.SuggestMappingAvaliador(data)
+	if err != nil {
+		return fmt.Errorf("erro ao sugerir mapeamento de avaliadores: %w", err)
+	}
+	avaliadorMapping, err = getInteractiveMapping("Avaliadores", data, 1, avaliadorMapping)
+	if err != nil {
+		return err
 	}
 
 	avaliadoresResp, err := logic.BuildAvaliadoresWithMapping(data, avaliadorMapping)
