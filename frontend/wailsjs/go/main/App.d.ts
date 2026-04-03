@@ -9,6 +9,12 @@ export function BuildRestricoesWithMapping(arg1:Array<types.MappingItem>):Promis
 
 export function BuildUsuariosWithMapping(arg1:Array<types.MappingItem>):Promise<logic.UsuariosResponse>;
 
+export function DefaultAllocationParams():Promise<types.AllocationParams>;
+
+export function DetectUniqueCandidateColumnValues(arg1:Array<types.Candidato>,arg2:string):Promise<Array<types.UniqueValueDetection>>;
+
+export function DetectUniquePreferenceValues(arg1:Array<types.Candidato>):Promise<Array<types.UniqueValueDetection>>;
+
 export function GetAvaliadorMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
 
 export function GetCandidateMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
@@ -16,6 +22,10 @@ export function GetCandidateMappingFieldInfos():Promise<Array<types.MappingField
 export function GetRestricaoMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
 
 export function Greet(arg1:string):Promise<string>;
+
+export function ListCandidateCriterionColumns(arg1:Array<types.Candidato>):Promise<Array<types.CandidateCriterionColumn>>;
+
+export function NormalizeSoftCriteria(arg1:Array<types.SoftCriterion>):Promise<Array<types.SoftCriterion>>;
 
 export function SaveAvaliadoresFromMaps(arg1:Array<Record<string, any>>):Promise<void>;
 
@@ -28,3 +38,9 @@ export function SuggestMapping(arg1:Array<number>,arg2:number):Promise<Array<typ
 export function SuggestMappingAvaliador():Promise<Array<types.MappingItem>>;
 
 export function SuggestMappingRestricao():Promise<Array<types.MappingItem>>;
+
+export function ValidateAllocationParams(arg1:types.AllocationParams,arg2:Array<types.Candidato>):Promise<void>;
+
+export function ValidatePreferenceScheduleMappings(arg1:Array<types.PreferenceScheduleMapping>):Promise<void>;
+
+export function ValidateSoftCriteria(arg1:Array<types.SoftCriterion>,arg2:Array<types.Candidato>):Promise<void>;

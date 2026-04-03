@@ -184,6 +184,22 @@ export namespace types {
 	        this.extras = source["extras"];
 	    }
 	}
+	export class CandidateCriterionColumn {
+	    key: string;
+	    label: string;
+	    isExtra: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CandidateCriterionColumn(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.label = source["label"];
+	        this.isExtra = source["isExtra"];
+	    }
+	}
 	export class Candidato {
 	    timestamp: string;
 	    nome: string;
@@ -213,6 +229,94 @@ export namespace types {
 	        this.opcoes = source["opcoes"];
 	        this.extras = source["extras"];
 	    }
+	}
+	export class UniqueValueDetection {
+	    valorOriginal: string;
+	    valorNormalizado: string;
+	    ocorrencias: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new UniqueValueDetection(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.valorOriginal = source["valorOriginal"];
+	        this.valorNormalizado = source["valorNormalizado"];
+	        this.ocorrencias = source["ocorrencias"];
+	    }
+	}
+	export class PreferenceScheduleMapping {
+	    valorPreferencia: string;
+	    dia: string;
+	    hora: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PreferenceScheduleMapping(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.valorPreferencia = source["valorPreferencia"];
+	        this.dia = source["dia"];
+	        this.hora = source["hora"];
+	    }
+	}
+	export class SoftCriterion {
+	    type: string;
+	    columnKey: string;
+	    selectedValues: string[];
+	    threshold: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SoftCriterion(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.columnKey = source["columnKey"];
+	        this.selectedValues = source["selectedValues"];
+	        this.threshold = source["threshold"];
+	    }
+	}
+	export class AllocationParams {
+	    gruposPorHorario: number;
+	    minPessoasPorGrupo: number;
+	    maxPessoasPorGrupo: number;
+	    avaliadoresPorGrupo: number;
+	    softCriteria: SoftCriterion[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AllocationParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.gruposPorHorario = source["gruposPorHorario"];
+	        this.minPessoasPorGrupo = source["minPessoasPorGrupo"];
+	        this.maxPessoasPorGrupo = source["maxPessoasPorGrupo"];
+	        this.avaliadoresPorGrupo = source["avaliadoresPorGrupo"];
+	        this.softCriteria = this.convertValues(source["softCriteria"], SoftCriterion);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class MappingFieldInfo {
 	    variavel: string;
@@ -268,4 +372,3 @@ export namespace types {
 	}
 
 }
-

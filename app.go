@@ -125,6 +125,38 @@ func (a *App) SaveAvaliadoresFromMaps(avaliadorMaps []map[string]interface{}) er
 	return logic.SaveAvaliadoresFromMaps(avaliadorMaps)
 }
 
+func (a *App) DetectUniquePreferenceValues(candidatos []types.Candidato) []types.UniqueValueDetection {
+	return logic.DetectUniquePreferenceValues(candidatos)
+}
+
+func (a *App) ListCandidateCriterionColumns(candidatos []types.Candidato) []types.CandidateCriterionColumn {
+	return logic.ListCandidateCriterionColumns(candidatos)
+}
+
+func (a *App) DetectUniqueCandidateColumnValues(candidatos []types.Candidato, columnKey string) ([]types.UniqueValueDetection, error) {
+	return logic.DetectUniqueCandidateColumnValues(candidatos, columnKey)
+}
+
+func (a *App) DefaultAllocationParams() types.AllocationParams {
+	return logic.DefaultAllocationParams()
+}
+
+func (a *App) NormalizeSoftCriteria(criteria []types.SoftCriterion) []types.SoftCriterion {
+	return logic.NormalizeSoftCriteria(criteria)
+}
+
+func (a *App) ValidatePreferenceScheduleMappings(mappings []types.PreferenceScheduleMapping) error {
+	return logic.ValidatePreferenceScheduleMappings(mappings)
+}
+
+func (a *App) ValidateSoftCriteria(criteria []types.SoftCriterion, candidatos []types.Candidato) error {
+	return logic.ValidateSoftCriteria(criteria, candidatos)
+}
+
+func (a *App) ValidateAllocationParams(params types.AllocationParams, candidatos []types.Candidato) error {
+	return logic.ValidateAllocationParams(params, candidatos)
+}
+
 func writeWailsSmokeSentinel() {
 	path := os.Getenv("CANDIDATE_ALLOCATOR_WAILS_SMOKE_FILE")
 	if path == "" {

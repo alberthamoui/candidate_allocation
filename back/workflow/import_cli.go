@@ -2,13 +2,13 @@ package workflow
 
 import (
 	"bufio"
-	"candidate_alocator/back/allocation"
 	dbpkg "candidate_alocator/back/db"
 	"candidate_alocator/back/logic"
 	types "candidate_alocator/back/type"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -110,9 +110,17 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 	}
 	fmt.Printf("Restricoes processadas: %d\n", len(restricoes))
 
-	if err := allocation.Run(db); err != nil {
-		return fmt.Errorf("erro ao executar alocacao: %w", err)
+	setup, err := collectAllocationSetup(os.Stdin, os.Stdout, candidatos)
+	if err != nil {
+		return err
 	}
+	fmt.Printf("\nSetup de alocacao preparado: %d preferencias, %d criterios soft, %d grupos por horario\n",
+		len(setup.PreferenceMappings), len(setup.Params.SoftCriteria), setup.Params.GruposPorHorario)
+
+	// A alocacao final permanece desativada nesta etapa.
+	// if err := allocation.Run(db); err != nil {
+	// 	return fmt.Errorf("erro ao executar alocacao: %w", err)
+	// }
 
 	return nil
 }
@@ -296,6 +304,423 @@ func printCandidateSummary(summary cliCandidateSummary, resp logic.UsuariosRespo
 	if len(resp.Duplicates) > 0 {
 		fmt.Printf("Duplicados detectados: %v\n", resp.Duplicates)
 	}
+}
+
+func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Candidato) (types.AllocationSetup, error) {
+	reader := bufio.NewReader(in)
+	detections := logic.DetectUniquePreferenceValues(candidatos)
+
+	fmt.Fprintln(out, "\n---- PASSO 5: MAPEAMENTO DE PREFERENCIAS ----")
+	if len(detections) == 0 {
+		fmt.Fprintln(out, "Nenhuma preferencia foi detectada nos candidatos.")
+	}
+
+	mappings := make([]types.PreferenceScheduleMapping, 0, len(detections))
+	for _, detection := range detections {
+		fmt.Fprintf(out, "\nPreferencia detectada: %s (%s, %d ocorrencias)\n",
+			detection.ValorOriginal, detection.ValorNormalizado, detection.Ocorrencias)
+
+		dia, err := promptLineWithDefault(reader, out, "Dia real", "segunda")
+		if err != nil {
+			return types.AllocationSetup{}, err
+		}
+		hora, err := promptLineWithDefault(reader, out, "Hora real", "08:00")
+		if err != nil {
+			return types.AllocationSetup{}, err
+		}
+
+		mappings = append(mappings, types.PreferenceScheduleMapping{
+			ValorPreferencia: detection.ValorNormalizado,
+			Dia:              dia,
+			Hora:             hora,
+		})
+	}
+
+	if err := logic.ValidatePreferenceScheduleMappings(mappings); err != nil {
+		return types.AllocationSetup{}, err
+	}
+
+	defaults := logic.DefaultAllocationParams()
+	params := defaults
+
+	fmt.Fprintln(out, "\n---- PASSO 6: PARAMETROS DE ALOCACAO ----")
+	fmt.Fprintf(out, "Grupos por horario [%d]: ", defaults.GruposPorHorario)
+	if value, err := readOptionalLine(reader); err != nil {
+		return types.AllocationSetup{}, err
+	} else if value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return types.AllocationSetup{}, fmt.Errorf("grupos por horario invalido: %w", err)
+		}
+		params.GruposPorHorario = parsed
+	}
+
+	fmt.Fprintf(out, "Minimo de pessoas por grupo [%d]: ", defaults.MinPessoasPorGrupo)
+	if value, err := readOptionalLine(reader); err != nil {
+		return types.AllocationSetup{}, err
+	} else if value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return types.AllocationSetup{}, fmt.Errorf("minimo de pessoas por grupo invalido: %w", err)
+		}
+		params.MinPessoasPorGrupo = parsed
+	}
+
+	fmt.Fprintf(out, "Maximo de pessoas por grupo [%d]: ", defaults.MaxPessoasPorGrupo)
+	if value, err := readOptionalLine(reader); err != nil {
+		return types.AllocationSetup{}, err
+	} else if value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return types.AllocationSetup{}, fmt.Errorf("maximo de pessoas por grupo invalido: %w", err)
+		}
+		params.MaxPessoasPorGrupo = parsed
+	}
+
+	fmt.Fprintf(out, "Avaliadores por grupo [%d]: ", defaults.AvaliadoresPorGrupo)
+	if value, err := readOptionalLine(reader); err != nil {
+		return types.AllocationSetup{}, err
+	} else if value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return types.AllocationSetup{}, fmt.Errorf("avaliadores por grupo invalido: %w", err)
+		}
+		params.AvaliadoresPorGrupo = parsed
+	}
+
+	criteria, err := collectSoftCriteria(reader, out, candidatos)
+	if err != nil {
+		return types.AllocationSetup{}, err
+	}
+	params.SoftCriteria = criteria
+
+	params.SoftCriteria = logic.NormalizeSoftCriteria(params.SoftCriteria)
+	if err := logic.ValidateAllocationParams(params, candidatos); err != nil {
+		return types.AllocationSetup{}, err
+	}
+
+	setup := types.AllocationSetup{
+		DetectedPreferences: detections,
+		PreferenceMappings:  mappings,
+		Params:              params,
+	}
+
+	fmt.Fprintln(out, "\n---- RESUMO DA CONFIGURACAO ----")
+	fmt.Fprintf(out, "Preferencias detectadas: %d\n", len(setup.DetectedPreferences))
+	for _, mapping := range setup.PreferenceMappings {
+		fmt.Fprintf(out, "  %s -> %s %s\n", mapping.ValorPreferencia, mapping.Dia, mapping.Hora)
+	}
+	fmt.Fprintf(out, "Grupos por horario: %d\n", setup.Params.GruposPorHorario)
+	fmt.Fprintf(out, "Min/Max por grupo: %d/%d\n", setup.Params.MinPessoasPorGrupo, setup.Params.MaxPessoasPorGrupo)
+	fmt.Fprintf(out, "Avaliadores por grupo: %d\n", setup.Params.AvaliadoresPorGrupo)
+	fmt.Fprintf(out, "Criterios soft: %d\n", len(setup.Params.SoftCriteria))
+	for _, criterion := range setup.Params.SoftCriteria {
+		fmt.Fprintf(out, "  - %s\n", formatSoftCriterion(criterion))
+	}
+
+	return setup, nil
+}
+
+type softCriterionOption struct {
+	Type        types.SoftCriterionType
+	Label       string
+	Description string
+}
+
+func collectSoftCriteria(reader *bufio.Reader, out io.Writer, candidatos []types.Candidato) ([]types.SoftCriterion, error) {
+	options := []softCriterionOption{
+		{Type: types.SoftCriterionMinValue, Label: "Minimo por valor unico", Description: "Se existe o valor selecionado no grupo, garanta pelo menos N"},
+		{Type: types.SoftCriterionAtLeastOneEach, Label: "Pelo menos 1 de cada valor", Description: "Garanta representacao para os valores selecionados"},
+		{Type: types.SoftCriterionBalancedDistribution, Label: "Distribuicao equilibrada", Description: "Espalhe os valores selecionados entre os grupos"},
+		{Type: types.SoftCriterionGroupTogether, Label: "Agrupamento", Description: "Prefira manter os valores selecionados juntos"},
+		{Type: types.SoftCriterionMaxValue, Label: "Maximo por valor unico", Description: "Limite o numero de pessoas do valor selecionado por grupo"},
+	}
+	columns := logic.ListCandidateCriterionColumns(candidatos)
+	if len(columns) == 0 {
+		return []types.SoftCriterion{}, nil
+	}
+
+	criteria := make([]types.SoftCriterion, 0)
+	fmt.Fprintln(out, "\nConfiguracao de criterios soft:")
+	for {
+		addMore, err := promptYesNo(reader, out, "Deseja adicionar um criterio soft? (s/N): ")
+		if err != nil {
+			return nil, err
+		}
+		if !addMore {
+			return criteria, nil
+		}
+
+		fmt.Fprintln(out, "\nTipos de criterio disponiveis:")
+		for i, option := range options {
+			fmt.Fprintf(out, "[%d] %s - %s\n", i+1, option.Label, option.Description)
+		}
+		optionIndex, err := promptChoiceIndex(reader, out, "Tipo do criterio: ", len(options))
+		if err != nil {
+			return nil, err
+		}
+		selectedOption := options[optionIndex]
+
+		fmt.Fprintln(out, "\nColunas elegiveis:")
+		for i, column := range columns {
+			fmt.Fprintf(out, "[%d] %s\n", i+1, column.Label)
+		}
+		columnIndex, err := promptChoiceIndex(reader, out, "Coluna do criterio: ", len(columns))
+		if err != nil {
+			return nil, err
+		}
+		selectedColumn := columns[columnIndex]
+
+		detections, err := logic.DetectUniqueCandidateColumnValues(candidatos, selectedColumn.Key)
+		if err != nil {
+			return nil, err
+		}
+		if len(detections) == 0 {
+			return nil, fmt.Errorf("a coluna %q nao possui valores unicos selecionaveis", selectedColumn.Key)
+		}
+
+		fmt.Fprintf(out, "\nValores unicos de %s:\n", selectedColumn.Label)
+		for i, detection := range detections {
+			fmt.Fprintf(out, "[%d] %s (%d ocorrencias)\n", i+1, detection.ValorOriginal, detection.Ocorrencias)
+		}
+
+		var selectedValues []string
+		switch selectedOption.Type {
+		case types.SoftCriterionMinValue, types.SoftCriterionMaxValue:
+			valueIndex, err := promptChoiceIndex(reader, out, "Valor selecionado: ", len(detections))
+			if err != nil {
+				return nil, err
+			}
+			selectedValues = []string{detections[valueIndex].ValorNormalizado}
+		default:
+			selectedIndices, err := promptMultiChoiceIndices(reader, out, "Valores selecionados (ex.: 1,3): ", len(detections))
+			if err != nil {
+				return nil, err
+			}
+			selectedValues = make([]string, 0, len(selectedIndices))
+			for _, index := range selectedIndices {
+				selectedValues = append(selectedValues, detections[index].ValorNormalizado)
+			}
+		}
+
+		criterion := types.SoftCriterion{
+			Type:           selectedOption.Type,
+			ColumnKey:      selectedColumn.Key,
+			SelectedValues: selectedValues,
+		}
+
+		if selectedOption.Type == types.SoftCriterionMinValue || selectedOption.Type == types.SoftCriterionMaxValue {
+			threshold, err := promptPositiveInt(reader, out, "Numero N: ")
+			if err != nil {
+				return nil, err
+			}
+			criterion.Threshold = threshold
+		}
+
+		criterion = logic.NormalizeSoftCriteria([]types.SoftCriterion{criterion})[0]
+		if err := logic.ValidateSoftCriteria([]types.SoftCriterion{criterion}, candidatos); err != nil {
+			return nil, err
+		}
+
+		fmt.Fprintf(out, "Resumo do criterio: %s\n", formatSoftCriterion(criterion))
+		confirm, err := promptYesNo(reader, out, "Confirmar criterio? (s/N): ")
+		if err != nil {
+			return nil, err
+		}
+		if confirm {
+			criteria = append(criteria, criterion)
+		}
+	}
+}
+
+func formatSoftCriterion(criterion types.SoftCriterion) string {
+	values := joinSoftCriterionValues(criterion.SelectedValues)
+	switch criterion.Type {
+	case types.SoftCriterionMinValue:
+		value := values
+		return fmt.Sprintf("Se houver pelo menos uma pessoa de %s em um grupo, tente manter pelo menos %d %s de %s nesse grupo.", value, criterion.Threshold, personNoun(criterion.Threshold), value)
+	case types.SoftCriterionAtLeastOneEach:
+		return fmt.Sprintf("Garanta representacao de todos os valores selecionados em %s: %s.", humanizeSoftCriterionColumn(criterion.ColumnKey), values)
+	case types.SoftCriterionBalancedDistribution:
+		return fmt.Sprintf("Distribua os valores selecionados em %s de forma equilibrada entre os grupos: %s.", humanizeSoftCriterionColumn(criterion.ColumnKey), values)
+	case types.SoftCriterionGroupTogether:
+		return fmt.Sprintf("Se possivel, mantenha no mesmo grupo as pessoas com os valores selecionados em %s: %s.", humanizeSoftCriterionColumn(criterion.ColumnKey), values)
+	case types.SoftCriterionMaxValue:
+		value := values
+		return fmt.Sprintf("Se houver pessoas de %s em um grupo, tente manter no maximo %d %s de %s nesse grupo.", value, criterion.Threshold, personNoun(criterion.Threshold), value)
+	default:
+		return fmt.Sprintf("%s [%s]", criterion.Type, values)
+	}
+}
+
+func humanizeSoftCriterionColumn(key string) string {
+	return strings.ReplaceAll(strings.TrimSpace(key), "_", " ")
+}
+
+func personNoun(count int) string {
+	if count == 1 {
+		return "pessoa"
+	}
+	return "pessoas"
+}
+
+func joinSoftCriterionValues(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+
+	displayValues := make([]string, 0, len(values))
+	for _, value := range values {
+		displayValues = append(displayValues, formatSoftCriterionValue(value))
+	}
+
+	switch len(displayValues) {
+	case 1:
+		return displayValues[0]
+	case 2:
+		return displayValues[0] + " e " + displayValues[1]
+	default:
+		return strings.Join(displayValues[:len(displayValues)-1], ", ") + " e " + displayValues[len(displayValues)-1]
+	}
+}
+
+func formatSoftCriterionValue(value string) string {
+	cleaned := strings.TrimSpace(value)
+	if cleaned == "" {
+		return cleaned
+	}
+
+	parts := strings.Fields(cleaned)
+	for i, part := range parts {
+		if part == strings.ToLower(part) && len(part) <= 4 {
+			parts[i] = strings.ToUpper(part)
+			continue
+		}
+		if len(part) == 1 {
+			parts[i] = strings.ToUpper(part)
+			continue
+		}
+		parts[i] = strings.ToUpper(part[:1]) + strings.ToLower(part[1:])
+	}
+	return strings.Join(parts, " ")
+}
+
+func promptYesNo(reader *bufio.Reader, out io.Writer, label string) (bool, error) {
+	fmt.Fprint(out, label)
+	value, err := readOptionalLine(reader)
+	if err != nil {
+		return false, err
+	}
+	value = strings.ToLower(strings.TrimSpace(value))
+	return value == "s" || value == "sim" || value == "y" || value == "yes", nil
+}
+
+func promptChoiceIndex(reader *bufio.Reader, out io.Writer, label string, max int) (int, error) {
+	for {
+		fmt.Fprint(out, label)
+		value, err := readOptionalLine(reader)
+		if err != nil {
+			return 0, err
+		}
+		index, err := strconv.Atoi(value)
+		if err == nil && index >= 1 && index <= max {
+			return index - 1, nil
+		}
+		fmt.Fprintln(out, "Escolha invalida.")
+	}
+}
+
+func promptMultiChoiceIndices(reader *bufio.Reader, out io.Writer, label string, max int) ([]int, error) {
+	for {
+		fmt.Fprint(out, label)
+		value, err := readOptionalLine(reader)
+		if err != nil {
+			return nil, err
+		}
+		parts := strings.Split(value, ",")
+		indices := make([]int, 0, len(parts))
+		seen := make(map[int]struct{})
+		valid := true
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			index, err := strconv.Atoi(part)
+			if err != nil || index < 1 || index > max {
+				valid = false
+				break
+			}
+			normalizedIndex := index - 1
+			if _, ok := seen[normalizedIndex]; ok {
+				continue
+			}
+			seen[normalizedIndex] = struct{}{}
+			indices = append(indices, normalizedIndex)
+		}
+		if valid && len(indices) > 0 {
+			return indices, nil
+		}
+		fmt.Fprintln(out, "Selecao invalida.")
+	}
+}
+
+func promptPositiveInt(reader *bufio.Reader, out io.Writer, label string) (int, error) {
+	for {
+		fmt.Fprint(out, label)
+		value, err := readOptionalLine(reader)
+		if err != nil {
+			return 0, err
+		}
+		parsed, err := strconv.Atoi(value)
+		if err == nil && parsed > 0 {
+			return parsed, nil
+		}
+		fmt.Fprintln(out, "Numero invalido.")
+	}
+}
+
+func promptLineWithDefault(reader *bufio.Reader, out io.Writer, label, defaultValue string) (string, error) {
+	for {
+		fmt.Fprintf(out, "%s [%s]: ", label, defaultValue)
+		value, err := readOptionalLine(reader)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return defaultValue, nil
+			}
+			return "", err
+		}
+		if value == "" {
+			return defaultValue, nil
+		}
+		return value, nil
+	}
+}
+
+func promptRequiredLine(reader *bufio.Reader, out io.Writer, label string) (string, error) {
+	for {
+		fmt.Fprint(out, label)
+		value, err := readOptionalLine(reader)
+		if err != nil {
+			return "", err
+		}
+		if value != "" {
+			return value, nil
+		}
+		fmt.Fprintln(out, "Valor obrigatorio.")
+	}
+}
+
+func readOptionalLine(reader *bufio.Reader) (string, error) {
+	value, err := reader.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+	trimmed := strings.TrimSpace(value)
+	if errors.Is(err, io.EOF) && trimmed == "" {
+		return "", io.EOF
+	}
+	return trimmed, nil
 }
 
 func buildAvaliadoresForCLI(resp logic.AvaliadoresResponse) []types.Avaliador {

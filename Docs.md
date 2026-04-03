@@ -86,6 +86,47 @@ Regra importante da revisão:
 
 Os `EditableCell` também interceptam o teclado da edição para evitar navegação acidental do browser com `Backspace` quando o usuário está digitando.
 
+## Nova Etapa de Configuração
+Depois que candidatos, restrições e avaliadores são salvos, o fluxo do CLI passa a preparar uma configuração intermediária de alocação antes de qualquer execução do algoritmo.
+
+Responsabilidades dessa etapa:
+- detectar os valores únicos encontrados em todas as colunas de preferência
+- mapear cada valor para um `dia + hora` reais
+- coletar parâmetros editáveis com defaults
+- coletar critérios soft estruturados por tipo, coluna e valores únicos, sem aplicá-los ao algoritmo ainda
+
+Fontes principais dessa regra:
+- [`back/logic/preference_logic.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/logic/preference_logic.go)
+- [`back/logic/allocation_config_logic.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/logic/allocation_config_logic.go)
+- [`back/workflow/import_cli.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/workflow/import_cli.go)
+
+Defaults atuais da configuração:
+- `gruposPorHorario = 2`
+- `minPessoasPorGrupo = 4`
+- `maxPessoasPorGrupo = 8`
+- `avaliadoresPorGrupo = 3`
+- `softCriteria = []`
+
+Detalhe de usabilidade no CLI:
+- os prompts de dia e hora usam defaults editáveis, então `Enter` aceita os valores padrão durante testes
+- os resumos dos critérios soft são escritos em linguagem natural para deixar explícita a intenção da regra
+- o critério `min_value` descreve o comportamento como tentativa de manter pelo menos `N` pessoas do valor selecionado quando ele aparece no grupo
+- o critério `max_value` descreve o comportamento como tentativa de limitar a `N` pessoas do valor selecionado quando ele aparece no grupo
+
+O `RunCLI` agora monta essa estrutura em memória e deixa a chamada final de alocação comentada/desativada nesta etapa.
+
+Os critérios soft deixaram de ser texto livre e passaram a ser regras estruturadas com:
+- tipo fixo (`min_value`, `at_least_one_each`, `balanced_distribution`, `group_together`, `max_value`)
+- coluna alvo do candidato
+- subconjunto de valores únicos selecionados nessa coluna
+- `threshold` apenas para os tipos mínimo e máximo
+
+As colunas elegíveis incluem todos os campos não-opção do candidato e também as chaves presentes em `Extras`. A detecção de valores únicos foi generalizada, então a mesma base atende:
+- o passo 5 de preferências
+- a seleção de valores para critérios soft por coluna
+
+O contrato do backend para o futuro Wails foi preparado em [`app.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/app.go), expondo os helpers de listagem de colunas, detecção de valores únicos, normalização e validação.
+
 ## Pontos de Atenção
 - Se mudar o schema de candidatos, avaliadores ou restrições, atualize as structs e confirme os testes de metadata em [`back/type/metadata_test.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/type/metadata_test.go).
 - Se mudar `required`, `unique` ou `duplicate` nas tags das structs, a UI de mapeamento, a revisão de duplicados e a sincronização de índices do banco devem se ajustar sem precisar de regra nova no frontend.

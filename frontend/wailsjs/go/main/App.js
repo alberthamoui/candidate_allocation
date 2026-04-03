@@ -14,6 +14,18 @@ export function BuildUsuariosWithMapping(arg1) {
   return window['go']['main']['App']['BuildUsuariosWithMapping'](arg1);
 }
 
+export function DefaultAllocationParams() {
+  return window['go']['main']['App']['DefaultAllocationParams']();
+}
+
+export function DetectUniqueCandidateColumnValues(arg1, arg2) {
+  return window['go']['main']['App']['DetectUniqueCandidateColumnValues'](arg1, arg2);
+}
+
+export function DetectUniquePreferenceValues(arg1) {
+  return window['go']['main']['App']['DetectUniquePreferenceValues'](arg1);
+}
+
 export function GetAvaliadorMappingFieldInfos() {
   return window['go']['main']['App']['GetAvaliadorMappingFieldInfos']();
 }
@@ -28,6 +40,14 @@ export function GetRestricaoMappingFieldInfos() {
 
 export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
+}
+
+export function ListCandidateCriterionColumns(arg1) {
+  return window['go']['main']['App']['ListCandidateCriterionColumns'](arg1);
+}
+
+export function NormalizeSoftCriteria(arg1) {
+  return window['go']['main']['App']['NormalizeSoftCriteria'](arg1);
 }
 
 export function SaveAvaliadoresFromMaps(arg1) {
@@ -52,4 +72,16 @@ export function SuggestMappingAvaliador() {
 
 export function SuggestMappingRestricao() {
   return window['go']['main']['App']['SuggestMappingRestricao']();
+}
+
+export function ValidateAllocationParams(arg1, arg2) {
+  return window['go']['main']['App']['ValidateAllocationParams'](arg1, arg2);
+}
+
+export function ValidatePreferenceScheduleMappings(arg1) {
+  return window['go']['main']['App']['ValidatePreferenceScheduleMappings'](arg1);
+}
+
+export function ValidateSoftCriteria(arg1, arg2) {
+  return window['go']['main']['App']['ValidateSoftCriteria'](arg1, arg2);
 }
