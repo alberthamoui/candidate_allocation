@@ -138,6 +138,80 @@ type AllocationConfiguration struct {
 	Result      AllocationExecutionResult `json:"result"`
 }
 
+type AllocationProblem struct {
+	Candidates       []SolverCandidate      `json:"candidates"`
+	Groups           []SolverGroup          `json:"groups"`
+	HardRestrictions SolverHardRestrictions `json:"hardRestrictions"`
+	SoftRules        SolverSoftRules        `json:"softRules"`
+}
+
+type SolverCandidate struct {
+	ID                    int                         `json:"id"`
+	Name                  string                      `json:"name"`
+	PreferredGroupIDs     []int                       `json:"preferredGroupIds"`
+	Attributes            map[string]string           `json:"attributes"`
+	EvaluatorRestrictions SolverCandidateRestrictions `json:"evaluatorRestrictions"`
+}
+
+type SolverCandidateRestrictions struct {
+	ForbiddenEvaluatorIDs []int `json:"forbiddenEvaluatorIds"`
+	AvoidEvaluatorIDs     []int `json:"avoidEvaluatorIds"`
+}
+
+type SolverGroup struct {
+	ID            int    `json:"id"`
+	Label         string `json:"label"`
+	EvaluatorIDs  []int  `json:"evaluatorIds"`
+	MinCandidates int    `json:"minCandidates"`
+	MaxCandidates int    `json:"maxCandidates"`
+}
+
+type SolverHardRestrictions struct {
+	AllCandidatesMustBeAssigned         bool `json:"allCandidatesMustBeAssigned"`
+	RespectCandidatePreferences         bool `json:"respectCandidatePreferences"`
+	EnforceGroupCapacity                bool `json:"enforceGroupCapacity"`
+	EnforceForbiddenEvaluators          bool `json:"enforceForbiddenEvaluators"`
+	EnforceMinCandidatesOnCompleteState bool `json:"enforceMinCandidatesOnCompleteState"`
+}
+
+type SolverSoftRules struct {
+	PreferencePenaltyByRank []int           `json:"preferencePenaltyByRank"`
+	AvoidEvaluatorPenalty   int             `json:"avoidEvaluatorPenalty"`
+	Criteria                []SoftCriterion `json:"criteria"`
+}
+
+type PartialAllocationState struct {
+	Assignments  map[int]int   `json:"assignments"`
+	GroupMembers map[int][]int `json:"groupMembers"`
+}
+
+type HardConstraintViolation struct {
+	Code        string `json:"code"`
+	Message     string `json:"message"`
+	CandidateID int    `json:"candidateId"`
+	GroupID     int    `json:"groupId"`
+	EvaluatorID int    `json:"evaluatorId"`
+}
+
+type SoftScoreComponent struct {
+	Code    string `json:"code"`
+	Penalty int    `json:"penalty"`
+	Message string `json:"message"`
+}
+
+type SoftScoreBreakdown struct {
+	TotalPenalty int                  `json:"totalPenalty"`
+	Components   []SoftScoreComponent `json:"components"`
+}
+
+type SolverResult struct {
+	Status          string                    `json:"status"`
+	Assignments     map[int]int               `json:"assignments"`
+	Score           SoftScoreBreakdown        `json:"score"`
+	HardViolations  []HardConstraintViolation `json:"hardViolations"`
+	RejectionReason string                    `json:"rejectionReason"`
+}
+
 type MappingItem struct {
 	NomeColuna          string `json:"nomeColuna"`
 	Indice              int    `json:"indice"`

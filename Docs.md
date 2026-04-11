@@ -179,6 +179,79 @@ As colunas elegíveis incluem todos os campos não-opção do candidato e també
 
 O contrato do backend para o futuro Wails foi preparado em [`app.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/app.go), expondo os helpers de listagem de colunas, detecção de valores únicos, normalização, validação e montagem final de `AllocationConfiguration`.
 
+## Base do Solver
+O pacote [`back/allocation`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/allocation) agora contém a base determinística do solver separada da coleta do CLI e da persistência em banco.
+
+### Contrato do solver
+O contrato único de entrada do núcleo é `types.AllocationProblem`.
+
+Ele representa o problema já pronto para decisão e não replica o contrato de UI/CLI:
+- `Candidates`: candidatos com `PreferredGroupIDs`, `Attributes` normalizados e restrições por avaliador
+- `Groups`: grupos materializados, com `EvaluatorIDs`, capacidade mínima e máxima
+- `HardRestrictions`: flags explícitas das regras obrigatórias da fase 1
+- `SoftRules`: penalidades de preferência, penalidade de `PrefiroNao` e critérios soft
+
+Diferença importante:
+- `AllocationConfiguration` continua sendo o contrato de coleta, validação e debug
+- `AllocationProblem` é o contrato de decisão do solver
+
+### Camada adaptadora
+A transformação entre configuração normalizada e contrato do solver fica em [`back/allocation/problem_builder.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/allocation/problem_builder.go).
+
+Responsabilidades do builder:
+- ler `config.Normalized`
+- materializar grupos de solver a partir de `PreferenceMappings`
+- distribuir avaliadores de forma determinística entre grupos
+- transformar preferências dos candidatos em `PreferredGroupIDs`
+- copiar atributos normalizados usados pelos critérios soft
+- converter `NaoPosso` em `ForbiddenEvaluatorIDs`
+- converter `PrefiroNao` em `AvoidEvaluatorIDs`
+
+Nesta fase, a distribuição de avaliadores é determinística e serve como base verificável do núcleo. A busca exata e estratégias mais avançadas ficam para fases futuras.
+
+### Hard constraints
+As regras hard ficam em [`back/allocation/hard_constraints.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/allocation/hard_constraints.go).
+
+API principal:
+- `CheckHardConstraints`
+- `IsStateViable`
+- `IsCompleteState`
+
+Regras cobertas na fase 1:
+- candidato não pode aparecer duas vezes
+- IDs de candidato e grupo precisam existir
+- candidato só pode ser alocado em grupo permitido por preferência
+- grupo não pode exceder `MaxCandidates`
+- candidato não pode cair com avaliador em `ForbiddenEvaluatorIDs`
+- estado completo exige todos os candidatos alocados
+- estado completo exige que grupos usados respeitem `MinCandidates`
+
+As violações são retornadas de forma estruturada em `HardConstraintViolation`, com `Code` estável para teste e depuração.
+
+### Soft scorer
+O scorer fica em [`back/allocation/soft_score.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/allocation/soft_score.go).
+
+Convenção da fase 1:
+- menor penalidade é melhor
+- o scorer é determinístico
+- a saída inclui breakdown explicável por componente
+
+Componentes atuais:
+- rank da preferência do candidato
+- penalidade por `PrefiroNao` (`AvoidEvaluatorIDs`)
+- penalidades dos critérios soft:
+  - `min_value`
+  - `max_value`
+  - `at_least_one_each`
+  - `balanced_distribution`
+  - `group_together`
+
+### Fases do algoritmo
+Separação atual:
+- fase 1: contrato do solver, builder, hard checker, soft scorer e testes
+- fase 2: busca exata com poda usando `AllocationProblem`, `PartialAllocationState` e `SoftScoreBreakdown`
+- fase 3: otimizações e paralelização opcional
+
 ## Pontos de Atenção
 - Se mudar o schema de candidatos, avaliadores ou restrições, atualize as structs e confirme os testes de metadata em [`back/type/metadata_test.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/type/metadata_test.go).
 - Se mudar `required`, `unique` ou `duplicate` nas tags das structs, a UI de mapeamento, a revisão de duplicados e a sincronização de índices do banco devem se ajustar sem precisar de regra nova no frontend.
