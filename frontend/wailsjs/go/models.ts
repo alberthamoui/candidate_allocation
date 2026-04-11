@@ -318,6 +318,260 @@ export namespace types {
 		    return a;
 		}
 	}
+	export class ValidationMessage {
+	    level: string;
+	    code: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ValidationMessage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.level = source["level"];
+	        this.code = source["code"];
+	        this.message = source["message"];
+	    }
+	}
+	export class HumanSummary {
+	    detectedPreferences: string[];
+	    mappedPreferences: string[];
+	    allocationParameters: string[];
+	    softCriteria: string[];
+	    normalizedValues: string[];
+	    validationObservations: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new HumanSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.detectedPreferences = source["detectedPreferences"];
+	        this.mappedPreferences = source["mappedPreferences"];
+	        this.allocationParameters = source["allocationParameters"];
+	        this.softCriteria = source["softCriteria"];
+	        this.normalizedValues = source["normalizedValues"];
+	        this.validationObservations = source["validationObservations"];
+	    }
+	}
+	export class NormalizedAllocationInput {
+	    preferenceMappings: PreferenceScheduleMapping[];
+	    params: AllocationParams;
+	
+	    static createFrom(source: any = {}) {
+	        return new NormalizedAllocationInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.preferenceMappings = this.convertValues(source["preferenceMappings"], PreferenceScheduleMapping);
+	        this.params = this.convertValues(source["params"], AllocationParams);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PreferenceMappingDiagnostic {
+	    detectedValue: UniqueValueDetection;
+	    originalMapping: PreferenceScheduleMapping;
+	    normalizedMapping: PreferenceScheduleMapping;
+	
+	    static createFrom(source: any = {}) {
+	        return new PreferenceMappingDiagnostic(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.detectedValue = this.convertValues(source["detectedValue"], UniqueValueDetection);
+	        this.originalMapping = this.convertValues(source["originalMapping"], PreferenceScheduleMapping);
+	        this.normalizedMapping = this.convertValues(source["normalizedMapping"], PreferenceScheduleMapping);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SoftCriterionDiagnostic {
+	    originalCriterion: SoftCriterion;
+	    normalizedCriterion: SoftCriterion;
+	    summary: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SoftCriterionDiagnostic(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.originalCriterion = this.convertValues(source["originalCriterion"], SoftCriterion);
+	        this.normalizedCriterion = this.convertValues(source["normalizedCriterion"], SoftCriterion);
+	        this.summary = source["summary"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AllocationDiagnostics {
+	    detectedPreferences: UniqueValueDetection[];
+	    originalMappings: PreferenceScheduleMapping[];
+	    normalizedMappings: PreferenceScheduleMapping[];
+	    originalParams: AllocationParams;
+	    normalizedParams: AllocationParams;
+	    preferenceMappings: PreferenceMappingDiagnostic[];
+	    softCriteria: SoftCriterionDiagnostic[];
+	    validationMessages: ValidationMessage[];
+	    hasErrors: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AllocationDiagnostics(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.detectedPreferences = this.convertValues(source["detectedPreferences"], UniqueValueDetection);
+	        this.originalMappings = this.convertValues(source["originalMappings"], PreferenceScheduleMapping);
+	        this.normalizedMappings = this.convertValues(source["normalizedMappings"], PreferenceScheduleMapping);
+	        this.originalParams = this.convertValues(source["originalParams"], AllocationParams);
+	        this.normalizedParams = this.convertValues(source["normalizedParams"], AllocationParams);
+	        this.preferenceMappings = this.convertValues(source["preferenceMappings"], PreferenceMappingDiagnostic);
+	        this.softCriteria = this.convertValues(source["softCriteria"], SoftCriterionDiagnostic);
+	        this.validationMessages = this.convertValues(source["validationMessages"], ValidationMessage);
+	        this.hasErrors = source["hasErrors"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AllocationExecutionResult {
+	    status: string;
+	    allocation?: Allocation;
+	    notes: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AllocationExecutionResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.allocation = this.convertValues(source["allocation"], Allocation);
+	        this.notes = source["notes"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AllocationConfiguration {
+	    summary: HumanSummary;
+	    normalized: NormalizedAllocationInput;
+	    diagnostics: AllocationDiagnostics;
+	    result: AllocationExecutionResult;
+	
+	    static createFrom(source: any = {}) {
+	        return new AllocationConfiguration(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.summary = this.convertValues(source["summary"], HumanSummary);
+	        this.normalized = this.convertValues(source["normalized"], NormalizedAllocationInput);
+	        this.diagnostics = this.convertValues(source["diagnostics"], AllocationDiagnostics);
+	        this.result = this.convertValues(source["result"], AllocationExecutionResult);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class MappingFieldInfo {
 	    variavel: string;
 	    required: boolean;

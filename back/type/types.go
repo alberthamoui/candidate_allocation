@@ -74,10 +74,68 @@ type AllocationParams struct {
 	SoftCriteria        []SoftCriterion `json:"softCriteria"`
 }
 
-type AllocationSetup struct {
-	DetectedPreferences []UniqueValueDetection      `json:"detectedPreferences"`
-	PreferenceMappings  []PreferenceScheduleMapping `json:"preferenceMappings"`
-	Params              AllocationParams            `json:"params"`
+type ValidationMessageLevel string
+
+const (
+	ValidationMessageLevelError   ValidationMessageLevel = "error"
+	ValidationMessageLevelWarning ValidationMessageLevel = "warning"
+)
+
+type ValidationMessage struct {
+	Level   ValidationMessageLevel `json:"level"`
+	Code    string                 `json:"code"`
+	Message string                 `json:"message"`
+}
+
+type HumanSummary struct {
+	DetectedPreferences    []string `json:"detectedPreferences"`
+	MappedPreferences      []string `json:"mappedPreferences"`
+	AllocationParameters   []string `json:"allocationParameters"`
+	SoftCriteria           []string `json:"softCriteria"`
+	NormalizedValues       []string `json:"normalizedValues"`
+	ValidationObservations []string `json:"validationObservations"`
+}
+
+type NormalizedAllocationInput struct {
+	PreferenceMappings []PreferenceScheduleMapping `json:"preferenceMappings"`
+	Params             AllocationParams            `json:"params"`
+}
+
+type PreferenceMappingDiagnostic struct {
+	DetectedValue     UniqueValueDetection      `json:"detectedValue"`
+	OriginalMapping   PreferenceScheduleMapping `json:"originalMapping"`
+	NormalizedMapping PreferenceScheduleMapping `json:"normalizedMapping"`
+}
+
+type SoftCriterionDiagnostic struct {
+	OriginalCriterion   SoftCriterion `json:"originalCriterion"`
+	NormalizedCriterion SoftCriterion `json:"normalizedCriterion"`
+	Summary             string        `json:"summary"`
+}
+
+type AllocationDiagnostics struct {
+	DetectedPreferences []UniqueValueDetection        `json:"detectedPreferences"`
+	OriginalMappings    []PreferenceScheduleMapping   `json:"originalMappings"`
+	NormalizedMappings  []PreferenceScheduleMapping   `json:"normalizedMappings"`
+	OriginalParams      AllocationParams              `json:"originalParams"`
+	NormalizedParams    AllocationParams              `json:"normalizedParams"`
+	PreferenceMappings  []PreferenceMappingDiagnostic `json:"preferenceMappings"`
+	SoftCriteria        []SoftCriterionDiagnostic     `json:"softCriteria"`
+	ValidationMessages  []ValidationMessage           `json:"validationMessages"`
+	HasErrors           bool                          `json:"hasErrors"`
+}
+
+type AllocationExecutionResult struct {
+	Status     string      `json:"status"`
+	Allocation *Allocation `json:"allocation,omitempty"`
+	Notes      []string    `json:"notes"`
+}
+
+type AllocationConfiguration struct {
+	Summary     HumanSummary              `json:"summary"`
+	Normalized  NormalizedAllocationInput `json:"normalized"`
+	Diagnostics AllocationDiagnostics     `json:"diagnostics"`
+	Result      AllocationExecutionResult `json:"result"`
 }
 
 type MappingItem struct {

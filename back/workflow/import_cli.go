@@ -6,6 +6,7 @@ import (
 	"candidate_alocator/back/logic"
 	types "candidate_alocator/back/type"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -109,13 +110,15 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 		return fmt.Errorf("erro ao salvar restricoes: %w", err)
 	}
 	fmt.Printf("Restricoes processadas: %d\n", len(restricoes))
-
-	setup, err := collectAllocationSetup(os.Stdin, os.Stdout, candidatos)
+	config, err := collectAllocationSetup(os.Stdin, os.Stdout, candidatos)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\nSetup de alocacao preparado: %d preferencias, %d criterios soft, %d grupos por horario\n",
-		len(setup.PreferenceMappings), len(setup.Params.SoftCriteria), setup.Params.GruposPorHorario)
+	configJSON, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("erro ao serializar configuracao em JSON: %w", err)
+	}
+	fmt.Println(string(configJSON))
 
 	// A alocacao final permanece desativada nesta etapa.
 	// if err := allocation.Run(db); err != nil {
@@ -306,7 +309,7 @@ func printCandidateSummary(summary cliCandidateSummary, resp logic.UsuariosRespo
 	}
 }
 
-func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Candidato) (types.AllocationSetup, error) {
+func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Candidato) (types.AllocationConfiguration, error) {
 	reader := bufio.NewReader(in)
 	detections := logic.DetectUniquePreferenceValues(candidatos)
 
@@ -322,11 +325,11 @@ func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Cand
 
 		dia, err := promptLineWithDefault(reader, out, "Dia real", "segunda")
 		if err != nil {
-			return types.AllocationSetup{}, err
+			return types.AllocationConfiguration{}, err
 		}
 		hora, err := promptLineWithDefault(reader, out, "Hora real", "08:00")
 		if err != nil {
-			return types.AllocationSetup{}, err
+			return types.AllocationConfiguration{}, err
 		}
 
 		mappings = append(mappings, types.PreferenceScheduleMapping{
@@ -337,7 +340,7 @@ func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Cand
 	}
 
 	if err := logic.ValidatePreferenceScheduleMappings(mappings); err != nil {
-		return types.AllocationSetup{}, err
+		return types.AllocationConfiguration{}, err
 	}
 
 	defaults := logic.DefaultAllocationParams()
@@ -346,79 +349,63 @@ func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Cand
 	fmt.Fprintln(out, "\n---- PASSO 6: PARAMETROS DE ALOCACAO ----")
 	fmt.Fprintf(out, "Grupos por horario [%d]: ", defaults.GruposPorHorario)
 	if value, err := readOptionalLine(reader); err != nil {
-		return types.AllocationSetup{}, err
+		return types.AllocationConfiguration{}, err
 	} else if value != "" {
 		parsed, err := strconv.Atoi(value)
 		if err != nil {
-			return types.AllocationSetup{}, fmt.Errorf("grupos por horario invalido: %w", err)
+			return types.AllocationConfiguration{}, fmt.Errorf("grupos por horario invalido: %w", err)
 		}
 		params.GruposPorHorario = parsed
 	}
 
 	fmt.Fprintf(out, "Minimo de pessoas por grupo [%d]: ", defaults.MinPessoasPorGrupo)
 	if value, err := readOptionalLine(reader); err != nil {
-		return types.AllocationSetup{}, err
+		return types.AllocationConfiguration{}, err
 	} else if value != "" {
 		parsed, err := strconv.Atoi(value)
 		if err != nil {
-			return types.AllocationSetup{}, fmt.Errorf("minimo de pessoas por grupo invalido: %w", err)
+			return types.AllocationConfiguration{}, fmt.Errorf("minimo de pessoas por grupo invalido: %w", err)
 		}
 		params.MinPessoasPorGrupo = parsed
 	}
 
 	fmt.Fprintf(out, "Maximo de pessoas por grupo [%d]: ", defaults.MaxPessoasPorGrupo)
 	if value, err := readOptionalLine(reader); err != nil {
-		return types.AllocationSetup{}, err
+		return types.AllocationConfiguration{}, err
 	} else if value != "" {
 		parsed, err := strconv.Atoi(value)
 		if err != nil {
-			return types.AllocationSetup{}, fmt.Errorf("maximo de pessoas por grupo invalido: %w", err)
+			return types.AllocationConfiguration{}, fmt.Errorf("maximo de pessoas por grupo invalido: %w", err)
 		}
 		params.MaxPessoasPorGrupo = parsed
 	}
 
 	fmt.Fprintf(out, "Avaliadores por grupo [%d]: ", defaults.AvaliadoresPorGrupo)
 	if value, err := readOptionalLine(reader); err != nil {
-		return types.AllocationSetup{}, err
+		return types.AllocationConfiguration{}, err
 	} else if value != "" {
 		parsed, err := strconv.Atoi(value)
 		if err != nil {
-			return types.AllocationSetup{}, fmt.Errorf("avaliadores por grupo invalido: %w", err)
+			return types.AllocationConfiguration{}, fmt.Errorf("avaliadores por grupo invalido: %w", err)
 		}
 		params.AvaliadoresPorGrupo = parsed
 	}
 
 	criteria, err := collectSoftCriteria(reader, out, candidatos)
 	if err != nil {
-		return types.AllocationSetup{}, err
+		return types.AllocationConfiguration{}, err
 	}
 	params.SoftCriteria = criteria
 
-	params.SoftCriteria = logic.NormalizeSoftCriteria(params.SoftCriteria)
-	if err := logic.ValidateAllocationParams(params, candidatos); err != nil {
-		return types.AllocationSetup{}, err
-	}
-
-	setup := types.AllocationSetup{
-		DetectedPreferences: detections,
-		PreferenceMappings:  mappings,
-		Params:              params,
+	config, err := logic.BuildAllocationConfiguration(detections, mappings, params, candidatos)
+	if err != nil {
+		return config, err
 	}
 
 	fmt.Fprintln(out, "\n---- RESUMO DA CONFIGURACAO ----")
-	fmt.Fprintf(out, "Preferencias detectadas: %d\n", len(setup.DetectedPreferences))
-	for _, mapping := range setup.PreferenceMappings {
-		fmt.Fprintf(out, "  %s -> %s %s\n", mapping.ValorPreferencia, mapping.Dia, mapping.Hora)
-	}
-	fmt.Fprintf(out, "Grupos por horario: %d\n", setup.Params.GruposPorHorario)
-	fmt.Fprintf(out, "Min/Max por grupo: %d/%d\n", setup.Params.MinPessoasPorGrupo, setup.Params.MaxPessoasPorGrupo)
-	fmt.Fprintf(out, "Avaliadores por grupo: %d\n", setup.Params.AvaliadoresPorGrupo)
-	fmt.Fprintf(out, "Criterios soft: %d\n", len(setup.Params.SoftCriteria))
-	for _, criterion := range setup.Params.SoftCriteria {
-		fmt.Fprintf(out, "  - %s\n", formatSoftCriterion(criterion))
-	}
+	printHumanSummary(out, config.Summary)
 
-	return setup, nil
+	return config, nil
 }
 
 type softCriterionOption struct {
@@ -534,75 +521,30 @@ func collectSoftCriteria(reader *bufio.Reader, out io.Writer, candidatos []types
 }
 
 func formatSoftCriterion(criterion types.SoftCriterion) string {
-	values := joinSoftCriterionValues(criterion.SelectedValues)
-	switch criterion.Type {
-	case types.SoftCriterionMinValue:
-		value := values
-		return fmt.Sprintf("Se houver pelo menos uma pessoa de %s em um grupo, tente manter pelo menos %d %s de %s nesse grupo.", value, criterion.Threshold, personNoun(criterion.Threshold), value)
-	case types.SoftCriterionAtLeastOneEach:
-		return fmt.Sprintf("Garanta representacao de todos os valores selecionados em %s: %s.", humanizeSoftCriterionColumn(criterion.ColumnKey), values)
-	case types.SoftCriterionBalancedDistribution:
-		return fmt.Sprintf("Distribua os valores selecionados em %s de forma equilibrada entre os grupos: %s.", humanizeSoftCriterionColumn(criterion.ColumnKey), values)
-	case types.SoftCriterionGroupTogether:
-		return fmt.Sprintf("Se possivel, mantenha no mesmo grupo as pessoas com os valores selecionados em %s: %s.", humanizeSoftCriterionColumn(criterion.ColumnKey), values)
-	case types.SoftCriterionMaxValue:
-		value := values
-		return fmt.Sprintf("Se houver pessoas de %s em um grupo, tente manter no maximo %d %s de %s nesse grupo.", value, criterion.Threshold, personNoun(criterion.Threshold), value)
-	default:
-		return fmt.Sprintf("%s [%s]", criterion.Type, values)
-	}
+	return logic.DescribeSoftCriterion(criterion)
 }
 
-func humanizeSoftCriterionColumn(key string) string {
-	return strings.ReplaceAll(strings.TrimSpace(key), "_", " ")
-}
-
-func personNoun(count int) string {
-	if count == 1 {
-		return "pessoa"
+func printHumanSummary(out io.Writer, summary types.HumanSummary) {
+	fmt.Fprintf(out, "Preferencias detectadas: %d\n", len(summary.DetectedPreferences))
+	for _, line := range summary.DetectedPreferences {
+		fmt.Fprintf(out, "  - %s\n", line)
 	}
-	return "pessoas"
-}
-
-func joinSoftCriterionValues(values []string) string {
-	if len(values) == 0 {
-		return ""
+	fmt.Fprintf(out, "Preferencias mapeadas: %d\n", len(summary.MappedPreferences))
+	for _, line := range summary.MappedPreferences {
+		fmt.Fprintf(out, "  - %s\n", line)
 	}
-
-	displayValues := make([]string, 0, len(values))
-	for _, value := range values {
-		displayValues = append(displayValues, formatSoftCriterionValue(value))
+	fmt.Fprintln(out, "Parametros de alocacao:")
+	for _, line := range summary.AllocationParameters {
+		fmt.Fprintf(out, "  - %s\n", line)
 	}
-
-	switch len(displayValues) {
-	case 1:
-		return displayValues[0]
-	case 2:
-		return displayValues[0] + " e " + displayValues[1]
-	default:
-		return strings.Join(displayValues[:len(displayValues)-1], ", ") + " e " + displayValues[len(displayValues)-1]
+	fmt.Fprintf(out, "Criterios soft: %d\n", len(summary.SoftCriteria))
+	for _, line := range summary.SoftCriteria {
+		fmt.Fprintf(out, "  - %s\n", line)
 	}
-}
-
-func formatSoftCriterionValue(value string) string {
-	cleaned := strings.TrimSpace(value)
-	if cleaned == "" {
-		return cleaned
+	fmt.Fprintln(out, "Observacoes de validacao:")
+	for _, line := range summary.ValidationObservations {
+		fmt.Fprintf(out, "  - %s\n", line)
 	}
-
-	parts := strings.Fields(cleaned)
-	for i, part := range parts {
-		if part == strings.ToLower(part) && len(part) <= 4 {
-			parts[i] = strings.ToUpper(part)
-			continue
-		}
-		if len(part) == 1 {
-			parts[i] = strings.ToUpper(part)
-			continue
-		}
-		parts[i] = strings.ToUpper(part[:1]) + strings.ToLower(part[1:])
-	}
-	return strings.Join(parts, " ")
 }
 
 func promptYesNo(reader *bufio.Reader, out io.Writer, label string) (bool, error) {

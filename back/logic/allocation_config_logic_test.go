@@ -2,6 +2,7 @@ package logic
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	types "candidate_alocator/back/type"
@@ -20,6 +21,20 @@ func TestDefaultAllocationParams(t *testing.T) {
 
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected default params: %#v", got)
+	}
+}
+
+func TestNormalizePreferenceScheduleMappings(t *testing.T) {
+	got := NormalizePreferenceScheduleMappings([]types.PreferenceScheduleMapping{
+		{ValorPreferencia: " Seg 10H ", Dia: "  segunda  feira ", Hora: " 08:00 "},
+	})
+
+	expected := []types.PreferenceScheduleMapping{
+		{ValorPreferencia: "seg 10h", Dia: "segunda feira", Hora: "08:00"},
+	}
+
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("unexpected normalized mappings: %#v", got)
 	}
 }
 
@@ -43,6 +58,22 @@ func TestNormalizeSoftCriteria(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("unexpected normalized soft criteria: %#v", got)
+	}
+}
+
+func TestNormalizeAllocationParams(t *testing.T) {
+	got := NormalizeAllocationParams(types.AllocationParams{
+		GruposPorHorario:    2,
+		MinPessoasPorGrupo:  4,
+		MaxPessoasPorGrupo:  8,
+		AvaliadoresPorGrupo: 3,
+		SoftCriteria: []types.SoftCriterion{
+			{Type: " MIN_VALUE ", ColumnKey: "curso", SelectedValues: []string{" ADM "}, Threshold: 1},
+		},
+	})
+
+	if got.SoftCriteria[0].Type != types.SoftCriterionMinValue {
+		t.Fatalf("expected criterion type to be normalized, got %#v", got.SoftCriteria)
 	}
 }
 
@@ -182,4 +213,114 @@ func TestValidateAllocationParams(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDescribeSoftCriterion(t *testing.T) {
+	got := DescribeSoftCriterion(types.SoftCriterion{
+		Type:           types.SoftCriterionBalancedDistribution,
+		ColumnKey:      "curso",
+		SelectedValues: []string{"adm", "eco"},
+	})
+
+	want := "Distribua os valores selecionados em curso de forma equilibrada entre os grupos: ADM e ECO."
+	if got != want {
+		t.Fatalf("unexpected soft criterion summary: %q", got)
+	}
+}
+
+func TestBuildAllocationConfiguration(t *testing.T) {
+	candidatos := []types.Candidato{
+		{Opcoes: []string{"Seg 10h", "Ter 14h"}, Curso: "ADM"},
+		{Opcoes: []string{"Seg 10h", "Qua 16h"}, Curso: "ECO"},
+	}
+
+	detections := DetectUniquePreferenceValues(candidatos)
+	mappings := []types.PreferenceScheduleMapping{
+		{ValorPreferencia: " Seg 10H ", Dia: " segunda ", Hora: " 10:00 "},
+		{ValorPreferencia: "Ter 14h", Dia: "terca", Hora: "14:00"},
+		{ValorPreferencia: "Qua 16h", Dia: "quarta", Hora: "16:00"},
+	}
+	params := types.AllocationParams{
+		GruposPorHorario:    3,
+		MinPessoasPorGrupo:  4,
+		MaxPessoasPorGrupo:  8,
+		AvaliadoresPorGrupo: 2,
+		SoftCriteria: []types.SoftCriterion{
+			{Type: " BALANCED_DISTRIBUTION ", ColumnKey: "curso", SelectedValues: []string{" ADM ", "ECO"}},
+		},
+	}
+
+	got, err := BuildAllocationConfiguration(detections, mappings, params, candidatos)
+	if err != nil {
+		t.Fatalf("BuildAllocationConfiguration returned error: %v", err)
+	}
+
+	if got.Normalized.PreferenceMappings[0].ValorPreferencia != "seg 10h" {
+		t.Fatalf("expected normalized preference mapping, got %#v", got.Normalized.PreferenceMappings)
+	}
+	if got.Normalized.Params.SoftCriteria[0].Type != types.SoftCriterionBalancedDistribution {
+		t.Fatalf("expected normalized soft criteria in params, got %#v", got.Normalized.Params.SoftCriteria)
+	}
+	if got.Diagnostics.HasErrors {
+		t.Fatal("expected diagnostics without errors")
+	}
+	if len(got.Diagnostics.PreferenceMappings) != len(mappings) {
+		t.Fatalf("expected %d mapping diagnostics, got %d", len(mappings), len(got.Diagnostics.PreferenceMappings))
+	}
+	if got.Result.Status != "not_run" {
+		t.Fatalf("expected result status not_run, got %q", got.Result.Status)
+	}
+	if len(got.Summary.DetectedPreferences) != 3 {
+		t.Fatalf("expected 3 detected preferences in summary, got %#v", got.Summary.DetectedPreferences)
+	}
+	if !containsLineWithPrefix(got.Summary.ValidationObservations, "WARNING: configuracao validada com sucesso") {
+		t.Fatalf("expected validation observation in summary, got %#v", got.Summary.ValidationObservations)
+	}
+	if !containsLineWithPrefix(got.Summary.NormalizedValues, "preferencia \"Seg 10h\" -> \"seg 10h\"") {
+		t.Fatalf("expected normalized values summary, got %#v", got.Summary.NormalizedValues)
+	}
+}
+
+func TestBuildAllocationConfigurationAggregatesValidationError(t *testing.T) {
+	candidatos := []types.Candidato{
+		{Curso: "ADM"},
+	}
+
+	_, err := BuildAllocationConfiguration(
+		nil,
+		[]types.PreferenceScheduleMapping{{ValorPreferencia: "ADM", Dia: "", Hora: "08:00"}},
+		DefaultAllocationParams(),
+		candidatos,
+	)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+
+	got, err := BuildAllocationConfiguration(
+		nil,
+		[]types.PreferenceScheduleMapping{{ValorPreferencia: "ADM", Dia: "", Hora: "08:00"}},
+		DefaultAllocationParams(),
+		candidatos,
+	)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !got.Diagnostics.HasErrors {
+		t.Fatal("expected diagnostics to flag errors")
+	}
+	if len(got.Diagnostics.ValidationMessages) == 0 {
+		t.Fatal("expected validation messages")
+	}
+	if got.Diagnostics.ValidationMessages[0].Level != types.ValidationMessageLevelError {
+		t.Fatalf("expected error validation message, got %#v", got.Diagnostics.ValidationMessages)
+	}
+}
+
+func containsLineWithPrefix(lines []string, prefix string) bool {
+	for _, line := range lines {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+	return false
 }

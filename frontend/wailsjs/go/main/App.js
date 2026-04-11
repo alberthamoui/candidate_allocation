@@ -6,6 +6,10 @@ export function BuildAvaliadoresWithMapping(arg1) {
   return window['go']['main']['App']['BuildAvaliadoresWithMapping'](arg1);
 }
 
+export function BuildAllocationConfiguration(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['BuildAllocationConfiguration'](arg1, arg2, arg3, arg4);
+}
+
 export function BuildRestricoesWithMapping(arg1) {
   return window['go']['main']['App']['BuildRestricoesWithMapping'](arg1);
 }
@@ -48,6 +52,10 @@ export function ListCandidateCriterionColumns(arg1) {
 
 export function NormalizeSoftCriteria(arg1) {
   return window['go']['main']['App']['NormalizeSoftCriteria'](arg1);
+}
+
+export function NormalizePreferenceScheduleMappings(arg1) {
+  return window['go']['main']['App']['NormalizePreferenceScheduleMappings'](arg1);
 }
 
 export function SaveAvaliadoresFromMaps(arg1) {

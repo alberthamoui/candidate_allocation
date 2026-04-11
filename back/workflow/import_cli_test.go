@@ -134,13 +134,13 @@ func TestCollectAllocationSetupBuildsExpectedSetup(t *testing.T) {
 		t.Fatalf("collectAllocationSetup returned error: %v", err)
 	}
 
-	if len(setup.DetectedPreferences) != 3 {
-		t.Fatalf("expected 3 detected preferences, got %d", len(setup.DetectedPreferences))
+	if len(setup.Diagnostics.DetectedPreferences) != 3 {
+		t.Fatalf("expected 3 detected preferences, got %d", len(setup.Diagnostics.DetectedPreferences))
 	}
-	if len(setup.PreferenceMappings) != 3 {
-		t.Fatalf("expected 3 preference mappings, got %d", len(setup.PreferenceMappings))
+	if len(setup.Normalized.PreferenceMappings) != 3 {
+		t.Fatalf("expected 3 preference mappings, got %d", len(setup.Normalized.PreferenceMappings))
 	}
-	for _, mapping := range setup.PreferenceMappings {
+	for _, mapping := range setup.Normalized.PreferenceMappings {
 		if mapping.Dia != "segunda" {
 			t.Fatalf("expected default dia to be segunda, got %q", mapping.Dia)
 		}
@@ -148,17 +148,26 @@ func TestCollectAllocationSetupBuildsExpectedSetup(t *testing.T) {
 			t.Fatalf("expected default hora to be 08:00, got %q", mapping.Hora)
 		}
 	}
-	if setup.Params.AvaliadoresPorGrupo != 3 {
-		t.Fatalf("expected default avaliadores por grupo = 3, got %d", setup.Params.AvaliadoresPorGrupo)
+	if setup.Normalized.Params.AvaliadoresPorGrupo != 3 {
+		t.Fatalf("expected default avaliadores por grupo = 3, got %d", setup.Normalized.Params.AvaliadoresPorGrupo)
 	}
-	if setup.Params.MinPessoasPorGrupo != 4 || setup.Params.MaxPessoasPorGrupo != 8 {
-		t.Fatalf("unexpected default min/max params: %#v", setup.Params)
+	if setup.Normalized.Params.MinPessoasPorGrupo != 4 || setup.Normalized.Params.MaxPessoasPorGrupo != 8 {
+		t.Fatalf("unexpected default min/max params: %#v", setup.Normalized.Params)
 	}
-	if len(setup.Params.SoftCriteria) != 0 {
-		t.Fatalf("expected no soft criteria by default, got %#v", setup.Params.SoftCriteria)
+	if len(setup.Normalized.Params.SoftCriteria) != 0 {
+		t.Fatalf("expected no soft criteria by default, got %#v", setup.Normalized.Params.SoftCriteria)
+	}
+	if setup.Result.Status != "not_run" {
+		t.Fatalf("expected result status not_run, got %q", setup.Result.Status)
+	}
+	if !strings.Contains(strings.Join(setup.Summary.ValidationObservations, "\n"), "configuracao validada com sucesso") {
+		t.Fatalf("expected validation observations in summary, got %#v", setup.Summary.ValidationObservations)
 	}
 	if !strings.Contains(output.String(), "PASSO 5") || !strings.Contains(output.String(), "PASSO 6") {
 		t.Fatalf("expected setup summary output, got %q", output.String())
+	}
+	if !strings.Contains(output.String(), "Preferencias mapeadas") || !strings.Contains(output.String(), "Observacoes de validacao") {
+		t.Fatalf("expected layered summary output, got %q", output.String())
 	}
 }
 

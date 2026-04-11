@@ -141,8 +141,21 @@ func (a *App) DefaultAllocationParams() types.AllocationParams {
 	return logic.DefaultAllocationParams()
 }
 
+func (a *App) NormalizePreferenceScheduleMappings(mappings []types.PreferenceScheduleMapping) []types.PreferenceScheduleMapping {
+	return logic.NormalizePreferenceScheduleMappings(mappings)
+}
+
 func (a *App) NormalizeSoftCriteria(criteria []types.SoftCriterion) []types.SoftCriterion {
 	return logic.NormalizeSoftCriteria(criteria)
+}
+
+func (a *App) BuildAllocationConfiguration(
+	detections []types.UniqueValueDetection,
+	mappings []types.PreferenceScheduleMapping,
+	params types.AllocationParams,
+	candidatos []types.Candidato,
+) (types.AllocationConfiguration, error) {
+	return logic.BuildAllocationConfiguration(detections, mappings, params, candidatos)
 }
 
 func (a *App) ValidatePreferenceScheduleMappings(mappings []types.PreferenceScheduleMapping) error {

@@ -96,6 +96,65 @@ func TestWailsModelsContainAllocationParamsFields(t *testing.T) {
 	}
 }
 
+func TestWailsModelsContainAllocationConfigurationFields(t *testing.T) {
+	assertWailsModelContainsJSONFields(t, "HumanSummary", []string{
+		"detectedPreferences",
+		"mappedPreferences",
+		"allocationParameters",
+		"softCriteria",
+		"normalizedValues",
+		"validationObservations",
+	})
+	assertWailsModelContainsJSONFields(t, "ValidationMessage", []string{
+		"level",
+		"code",
+		"message",
+	})
+
+	modelsPath := filepath.Join("frontend", "wailsjs", "go", "models.ts")
+	content, err := os.ReadFile(modelsPath)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", modelsPath, err)
+	}
+
+	assertWailsModelContainsAssignments(t, string(content), "NormalizedAllocationInput", []string{
+		`this.preferenceMappings = this.convertValues(source["preferenceMappings"], PreferenceScheduleMapping)`,
+		`this.params = this.convertValues(source["params"], AllocationParams)`,
+	})
+	assertWailsModelContainsAssignments(t, string(content), "PreferenceMappingDiagnostic", []string{
+		`this.detectedValue = this.convertValues(source["detectedValue"], UniqueValueDetection)`,
+		`this.originalMapping = this.convertValues(source["originalMapping"], PreferenceScheduleMapping)`,
+		`this.normalizedMapping = this.convertValues(source["normalizedMapping"], PreferenceScheduleMapping)`,
+	})
+	assertWailsModelContainsAssignments(t, string(content), "SoftCriterionDiagnostic", []string{
+		`this.originalCriterion = this.convertValues(source["originalCriterion"], SoftCriterion)`,
+		`this.normalizedCriterion = this.convertValues(source["normalizedCriterion"], SoftCriterion)`,
+		`this.summary = source["summary"]`,
+	})
+	assertWailsModelContainsAssignments(t, string(content), "AllocationDiagnostics", []string{
+		`this.detectedPreferences = this.convertValues(source["detectedPreferences"], UniqueValueDetection)`,
+		`this.originalMappings = this.convertValues(source["originalMappings"], PreferenceScheduleMapping)`,
+		`this.normalizedMappings = this.convertValues(source["normalizedMappings"], PreferenceScheduleMapping)`,
+		`this.originalParams = this.convertValues(source["originalParams"], AllocationParams)`,
+		`this.normalizedParams = this.convertValues(source["normalizedParams"], AllocationParams)`,
+		`this.preferenceMappings = this.convertValues(source["preferenceMappings"], PreferenceMappingDiagnostic)`,
+		`this.softCriteria = this.convertValues(source["softCriteria"], SoftCriterionDiagnostic)`,
+		`this.validationMessages = this.convertValues(source["validationMessages"], ValidationMessage)`,
+		`this.hasErrors = source["hasErrors"]`,
+	})
+	assertWailsModelContainsAssignments(t, string(content), "AllocationExecutionResult", []string{
+		`this.status = source["status"]`,
+		`this.allocation = this.convertValues(source["allocation"], Allocation)`,
+		`this.notes = source["notes"]`,
+	})
+	assertWailsModelContainsAssignments(t, string(content), "AllocationConfiguration", []string{
+		`this.summary = this.convertValues(source["summary"], HumanSummary)`,
+		`this.normalized = this.convertValues(source["normalized"], NormalizedAllocationInput)`,
+		`this.diagnostics = this.convertValues(source["diagnostics"], AllocationDiagnostics)`,
+		`this.result = this.convertValues(source["result"], AllocationExecutionResult)`,
+	})
+}
+
 func TestWailsAppBindingsContainNewAllocationHelpers(t *testing.T) {
 	bindingsPath := filepath.Join("frontend", "wailsjs", "go", "main", "App.d.ts")
 	content, err := os.ReadFile(bindingsPath)
@@ -105,9 +164,11 @@ func TestWailsAppBindingsContainNewAllocationHelpers(t *testing.T) {
 
 	source := string(content)
 	requiredSnippets := []string{
+		"export function BuildAllocationConfiguration",
 		"export function DetectUniquePreferenceValues",
 		"export function ListCandidateCriterionColumns",
 		"export function DetectUniqueCandidateColumnValues",
+		"export function NormalizePreferenceScheduleMappings",
 		"export function NormalizeSoftCriteria",
 		"export function ValidateSoftCriteria",
 		"export function ValidateAllocationParams",
@@ -167,4 +228,15 @@ func extractWailsModelClassBody(t *testing.T, source, className string) string {
 		t.Fatalf("failed to locate Wails model class %s", className)
 	}
 	return matches[1]
+}
+
+func assertWailsModelContainsAssignments(t *testing.T, source, className string, assignments []string) {
+	t.Helper()
+
+	classBody := extractWailsModelClassBody(t, source, className)
+	for _, assignment := range assignments {
+		if !strings.Contains(classBody, assignment) {
+			t.Fatalf("assignment %q not found in Wails model %s", assignment, className)
+		}
+	}
 }

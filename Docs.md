@@ -107,13 +107,65 @@ Defaults atuais da configuração:
 - `avaliadoresPorGrupo = 3`
 - `softCriteria = []`
 
+### Contrato em Camadas
+O contrato antigo `AllocationSetup` foi substituído por `AllocationConfiguration` em [`back/type/types.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/type/types.go).
+
+Esse envelope agora separa explicitamente 4 camadas:
+- `summary`: resumo humano legível para log, console e debug
+- `normalized`: payload mínimo e estável pronto para o algoritmo
+- `diagnostics`: origem, normalização e validação da configuração
+- `result`: placeholder tipado para o resultado final da alocação
+
+Detalhe importante:
+- o algoritmo atual ainda não consome `AllocationConfiguration`
+- a camada `normalized` foi preparada para isso sem misturar UI, coleta interativa e diagnóstico
+- o `result.status = "not_run"` enquanto a execução continuar desativada
+
+### Como a Configuração é Montada
+As funções puras de montagem ficam em [`back/logic/allocation_config_logic.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/logic/allocation_config_logic.go).
+
+Pipeline atual:
+1. detectar preferências brutas dos candidatos
+2. normalizar mapeamentos de preferência
+3. normalizar parâmetros e critérios soft
+4. validar o conjunto completo
+5. gerar diagnósticos tipados
+6. gerar o resumo humano final
+
+Isso evita o problema anterior de misturar em um único objeto:
+- dados coletados
+- dados já normalizados
+- mensagens de validação
+- texto de debug
+
+### Camadas em Detalhe
+`summary` inclui:
+- preferências detectadas
+- preferências mapeadas
+- parâmetros de alocação
+- critérios soft
+- valores normalizados
+- observações de validação
+
+`normalized` inclui:
+- `preferenceMappings` normalizados
+- `params` normalizados, incluindo `softCriteria`
+
+`diagnostics` inclui:
+- preferências detectadas originalmente
+- mappings originais e normalizados
+- parâmetros originais e normalizados
+- diagnósticos por mapping e por critério soft
+- mensagens de validação
+- flag `hasErrors`
+
 Detalhe de usabilidade no CLI:
 - os prompts de dia e hora usam defaults editáveis, então `Enter` aceita os valores padrão durante testes
 - os resumos dos critérios soft são escritos em linguagem natural para deixar explícita a intenção da regra
 - o critério `min_value` descreve o comportamento como tentativa de manter pelo menos `N` pessoas do valor selecionado quando ele aparece no grupo
 - o critério `max_value` descreve o comportamento como tentativa de limitar a `N` pessoas do valor selecionado quando ele aparece no grupo
 
-O `RunCLI` agora monta essa estrutura em memória e deixa a chamada final de alocação comentada/desativada nesta etapa.
+O `RunCLI` agora monta `AllocationConfiguration` em memória e deixa a chamada final de alocação comentada/desativada nesta etapa.
 
 Os critérios soft deixaram de ser texto livre e passaram a ser regras estruturadas com:
 - tipo fixo (`min_value`, `at_least_one_each`, `balanced_distribution`, `group_together`, `max_value`)
@@ -125,7 +177,7 @@ As colunas elegíveis incluem todos os campos não-opção do candidato e també
 - o passo 5 de preferências
 - a seleção de valores para critérios soft por coluna
 
-O contrato do backend para o futuro Wails foi preparado em [`app.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/app.go), expondo os helpers de listagem de colunas, detecção de valores únicos, normalização e validação.
+O contrato do backend para o futuro Wails foi preparado em [`app.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/app.go), expondo os helpers de listagem de colunas, detecção de valores únicos, normalização, validação e montagem final de `AllocationConfiguration`.
 
 ## Pontos de Atenção
 - Se mudar o schema de candidatos, avaliadores ou restrições, atualize as structs e confirme os testes de metadata em [`back/type/metadata_test.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/type/metadata_test.go).

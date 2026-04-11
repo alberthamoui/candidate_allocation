@@ -5,6 +5,8 @@ import {logic} from '../models';
 
 export function BuildAvaliadoresWithMapping(arg1:Array<types.MappingItem>):Promise<logic.AvaliadoresResponse>;
 
+export function BuildAllocationConfiguration(arg1:Array<types.UniqueValueDetection>,arg2:Array<types.PreferenceScheduleMapping>,arg3:types.AllocationParams,arg4:Array<types.Candidato>):Promise<types.AllocationConfiguration>;
+
 export function BuildRestricoesWithMapping(arg1:Array<types.MappingItem>):Promise<Array<types.Restricao>>;
 
 export function BuildUsuariosWithMapping(arg1:Array<types.MappingItem>):Promise<logic.UsuariosResponse>;
@@ -26,6 +28,8 @@ export function Greet(arg1:string):Promise<string>;
 export function ListCandidateCriterionColumns(arg1:Array<types.Candidato>):Promise<Array<types.CandidateCriterionColumn>>;
 
 export function NormalizeSoftCriteria(arg1:Array<types.SoftCriterion>):Promise<Array<types.SoftCriterion>>;
+
+export function NormalizePreferenceScheduleMappings(arg1:Array<types.PreferenceScheduleMapping>):Promise<Array<types.PreferenceScheduleMapping>>;
 
 export function SaveAvaliadoresFromMaps(arg1:Array<Record<string, any>>):Promise<void>;
 
