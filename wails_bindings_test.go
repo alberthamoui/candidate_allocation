@@ -165,6 +165,7 @@ func TestWailsAppBindingsContainNewAllocationHelpers(t *testing.T) {
 	source := string(content)
 	requiredSnippets := []string{
 		"export function BuildAllocationConfiguration",
+		"export function CountPossibleAllocationQuantities",
 		"export function DetectUniquePreferenceValues",
 		"export function ListCandidateCriterionColumns",
 		"export function DetectUniqueCandidateColumnValues",

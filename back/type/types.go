@@ -204,12 +204,23 @@ type SoftScoreBreakdown struct {
 	Components   []SoftScoreComponent `json:"components"`
 }
 
+type SolverMetrics struct {
+	NodesVisited       int `json:"nodesVisited"`
+	CompleteStates     int `json:"completeStates"`
+	NodesPrunedByHard  int `json:"nodesPrunedByHard"`
+	NodesPrunedByBound int `json:"nodesPrunedByBound"`
+	BestUpdates        int `json:"bestUpdates"`
+	ParallelTasks      int `json:"parallelTasks"`
+}
+
 type SolverResult struct {
 	Status          string                    `json:"status"`
 	Assignments     map[int]int               `json:"assignments"`
 	Score           SoftScoreBreakdown        `json:"score"`
 	HardViolations  []HardConstraintViolation `json:"hardViolations"`
 	RejectionReason string                    `json:"rejectionReason"`
+	Metrics         SolverMetrics             `json:"metrics"`
+	DebugNotes      []string                  `json:"debugNotes"`
 }
 
 type MappingItem struct {

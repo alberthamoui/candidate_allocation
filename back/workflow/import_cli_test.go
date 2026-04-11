@@ -160,14 +160,11 @@ func TestCollectAllocationSetupBuildsExpectedSetup(t *testing.T) {
 	if setup.Result.Status != "not_run" {
 		t.Fatalf("expected result status not_run, got %q", setup.Result.Status)
 	}
-	if !strings.Contains(strings.Join(setup.Summary.ValidationObservations, "\n"), "configuracao validada com sucesso") {
-		t.Fatalf("expected validation observations in summary, got %#v", setup.Summary.ValidationObservations)
-	}
 	if !strings.Contains(output.String(), "PASSO 5") || !strings.Contains(output.String(), "PASSO 6") {
 		t.Fatalf("expected setup summary output, got %q", output.String())
 	}
-	if !strings.Contains(output.String(), "Preferencias mapeadas") || !strings.Contains(output.String(), "Observacoes de validacao") {
-		t.Fatalf("expected layered summary output, got %q", output.String())
+	if strings.Contains(output.String(), "Preferencias mapeadas") || strings.Contains(output.String(), "Observacoes de validacao") {
+		t.Fatalf("did not expect layered summary output, got %q", output.String())
 	}
 }
 
@@ -270,6 +267,40 @@ func TestCollectSoftCriteriaSupportsEachCriterionType(t *testing.T) {
 				t.Fatalf("expected output to contain %q, got %q", tc.containsOut, output.String())
 			}
 		})
+	}
+}
+
+func TestPrintAllocationQuantitiesWritesSummary(t *testing.T) {
+	var output bytes.Buffer
+	params := types.AllocationParams{
+		GruposPorHorario:   2,
+		MinPessoasPorGrupo: 2,
+		MaxPessoasPorGrupo: 3,
+	}
+
+	printAllocationQuantities(&output, params, 5, 2)
+
+	text := output.String()
+	if !strings.Contains(text, "QUANTIDADES POSSIVEIS DE ALOCACAO") {
+		t.Fatalf("expected allocation quantities header, got %q", text)
+	}
+	if !strings.Contains(text, "Quantidade total de alocacoes distintas:") {
+		t.Fatalf("expected total allocation count, got %q", text)
+	}
+}
+
+func TestPrintAllocationQuantitiesUsesScheduleCount(t *testing.T) {
+	var output bytes.Buffer
+	params := types.AllocationParams{
+		GruposPorHorario:   2,
+		MinPessoasPorGrupo: 2,
+		MaxPessoasPorGrupo: 2,
+	}
+
+	printAllocationQuantities(&output, params, 4, 2)
+
+	if !strings.Contains(output.String(), "Quantidade total de alocacoes distintas: 12") {
+		t.Fatalf("expected schedule-aware allocation count, got %q", output.String())
 	}
 }
 

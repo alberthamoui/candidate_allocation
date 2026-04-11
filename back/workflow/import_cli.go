@@ -403,7 +403,7 @@ func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Cand
 	}
 
 	fmt.Fprintln(out, "\n---- RESUMO DA CONFIGURACAO ----")
-	printHumanSummary(out, config.Summary)
+	printAllocationQuantities(out, config.Normalized.Params, len(candidatos), len(config.Normalized.PreferenceMappings))
 
 	return config, nil
 }
@@ -524,27 +524,16 @@ func formatSoftCriterion(criterion types.SoftCriterion) string {
 	return logic.DescribeSoftCriterion(criterion)
 }
 
-func printHumanSummary(out io.Writer, summary types.HumanSummary) {
-	fmt.Fprintf(out, "Preferencias detectadas: %d\n", len(summary.DetectedPreferences))
-	for _, line := range summary.DetectedPreferences {
-		fmt.Fprintf(out, "  - %s\n", line)
+func printAllocationQuantities(out io.Writer, params types.AllocationParams, totalPeople, scheduleCount int) {
+	count := logic.CountPossibleAllocationQuantitiesAcrossSchedules(params, totalPeople, scheduleCount)
+
+	fmt.Fprintln(out, "\n---- QUANTIDADES POSSIVEIS DE ALOCACAO ----")
+	if count == 0 {
+		fmt.Fprintf(out, "Nenhuma distribuicao valida para %d candidatos e %d horarios com os parametros atuais.\n", totalPeople, scheduleCount)
+		return
 	}
-	fmt.Fprintf(out, "Preferencias mapeadas: %d\n", len(summary.MappedPreferences))
-	for _, line := range summary.MappedPreferences {
-		fmt.Fprintf(out, "  - %s\n", line)
-	}
-	fmt.Fprintln(out, "Parametros de alocacao:")
-	for _, line := range summary.AllocationParameters {
-		fmt.Fprintf(out, "  - %s\n", line)
-	}
-	fmt.Fprintf(out, "Criterios soft: %d\n", len(summary.SoftCriteria))
-	for _, line := range summary.SoftCriteria {
-		fmt.Fprintf(out, "  - %s\n", line)
-	}
-	fmt.Fprintln(out, "Observacoes de validacao:")
-	for _, line := range summary.ValidationObservations {
-		fmt.Fprintf(out, "  - %s\n", line)
-	}
+
+	fmt.Fprintf(out, "Quantidade total de alocacoes distintas: %d\n", count)
 }
 
 func promptYesNo(reader *bufio.Reader, out io.Writer, label string) (bool, error) {

@@ -76,4 +76,20 @@ func TestAppCriterionHelpersDelegate(t *testing.T) {
 	}, candidatos); err != nil {
 		t.Fatalf("expected valid allocation params, got %v", err)
 	}
+
+	if total := app.CountPossibleAllocationQuantities(types.AllocationParams{
+		GruposPorHorario:   2,
+		MinPessoasPorGrupo: 2,
+		MaxPessoasPorGrupo: 3,
+	}, 5); total != 10 {
+		t.Fatalf("expected 10 possible allocations, got %d", total)
+	}
+
+	if total := app.CountPossibleAllocationQuantitiesAcrossSchedules(types.AllocationParams{
+		GruposPorHorario:   2,
+		MinPessoasPorGrupo: 2,
+		MaxPessoasPorGrupo: 2,
+	}, 4, 2); total != 12 {
+		t.Fatalf("expected 12 possible allocations across schedules, got %d", total)
+	}
 }

@@ -86,6 +86,14 @@ export function ValidateAllocationParams(arg1, arg2) {
   return window['go']['main']['App']['ValidateAllocationParams'](arg1, arg2);
 }
 
+export function CountPossibleAllocationQuantities(arg1, arg2) {
+  return window['go']['main']['App']['CountPossibleAllocationQuantities'](arg1, arg2);
+}
+
+export function CountPossibleAllocationQuantitiesAcrossSchedules(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CountPossibleAllocationQuantitiesAcrossSchedules'](arg1, arg2, arg3);
+}
+
 export function ValidatePreferenceScheduleMappings(arg1) {
   return window['go']['main']['App']['ValidatePreferenceScheduleMappings'](arg1);
 }

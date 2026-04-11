@@ -45,6 +45,10 @@ export function SuggestMappingRestricao():Promise<Array<types.MappingItem>>;
 
 export function ValidateAllocationParams(arg1:types.AllocationParams,arg2:Array<types.Candidato>):Promise<void>;
 
+export function CountPossibleAllocationQuantities(arg1:types.AllocationParams,arg2:number):Promise<number>;
+
+export function CountPossibleAllocationQuantitiesAcrossSchedules(arg1:types.AllocationParams,arg2:number,arg3:number):Promise<number>;
+
 export function ValidatePreferenceScheduleMappings(arg1:Array<types.PreferenceScheduleMapping>):Promise<void>;
 
 export function ValidateSoftCriteria(arg1:Array<types.SoftCriterion>,arg2:Array<types.Candidato>):Promise<void>;

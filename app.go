@@ -170,6 +170,14 @@ func (a *App) ValidateAllocationParams(params types.AllocationParams, candidatos
 	return logic.ValidateAllocationParams(params, candidatos)
 }
 
+func (a *App) CountPossibleAllocationQuantities(params types.AllocationParams, totalPeople int) int {
+	return logic.CountPossibleAllocationQuantities(params, totalPeople)
+}
+
+func (a *App) CountPossibleAllocationQuantitiesAcrossSchedules(params types.AllocationParams, totalPeople, scheduleCount int) int {
+	return logic.CountPossibleAllocationQuantitiesAcrossSchedules(params, totalPeople, scheduleCount)
+}
+
 func writeWailsSmokeSentinel() {
 	path := os.Getenv("CANDIDATE_ALLOCATOR_WAILS_SMOKE_FILE")
 	if path == "" {
