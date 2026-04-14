@@ -69,15 +69,33 @@ func AddAvaliador(db *sql.DB, nome, email, sigla string) (int64, error) {
 	return id, err
 }
 
-func AddRestricao(db *sql.DB, candidatoID int64, naoPosso, prefiroNao string) (int64, error) {
+func AddRestricaoNposso(db *sql.DB, avaliadorID, candidatoID int64) (int64, error) {
 	res, err := db.Exec(`
-        INSERT INTO restricoes (candidato_id, naoPosso, prefiroNao)
-        VALUES (?, ?, ?)
-    `, candidatoID, naoPosso, prefiroNao)
+        INSERT INTO restricoesNposso (avaliador_id, candidato_id)
+        VALUES (?, ?)
+    `, avaliadorID, candidatoID)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+func AddRestricaoPrefiroN(db *sql.DB, avaliadorID, candidatoID int64) (int64, error) {
+	res, err := db.Exec(`
+        INSERT INTO restricoesPrefiroN (avaliador_id, candidato_id)
+        VALUES (?, ?)
+    `, avaliadorID, candidatoID)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+func GetAvaliadorIDBySigla(db *sql.DB, sigla string) (int64, error) {
+	var id int64
+	err := db.QueryRow(
+		`SELECT id FROM avaliador WHERE sigla = ?`,
+		sigla,
+	).Scan(&id)
+	return id, err
 }
 
 func GetPessoaIDByName(db *sql.DB, nome string) (int64, error) {

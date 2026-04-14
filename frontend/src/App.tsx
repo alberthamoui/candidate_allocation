@@ -43,7 +43,7 @@ function App({ setMapping }: AppProps) {
 					// Chama a nova função que aceita os dados do arquivo.
 					const result = await SuggestMapping(Array.from(data), nOpcoes);
 					console.log(result, "resultado");
-					setMapping(result); // <-- joga pro pai
+					setMapping(result);
 					navigate("/mapping");
 				} catch (error) {
 					setFileResult("Erro ao processar o arquivo: " + error);

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -19,7 +20,7 @@ var (
 )
 
 func getUsuarioFields(quantidade_opcoes int) []string {
-	t := reflect.TypeOf(Usuario{})
+	t := reflect.TypeOf(Candidato{})
 	var fields []string
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
@@ -68,12 +69,12 @@ type ErrorEntry struct {
 }
 type ValidationResult struct {
 	Erros   []ErrorEntry `json:"erros"`
-	Usuario Usuario      `json:"usuario"`
+	Usuario Candidato    `json:"usuario"`
 }
 
 // limpa dados
 
-func processData(data []Usuario) (map[int]ValidationResult, [][]int) {
+func processData(data []Candidato) (map[int]ValidationResult, [][]int) {
 	resultados := make(map[int]ValidationResult)
 
 	// 1) validação e registro de TODAS as entradas (com ou sem erros)
@@ -170,7 +171,7 @@ func processData(data []Usuario) (map[int]ValidationResult, [][]int) {
 	return resultados, duplicatedIndices
 }
 
-func getHorarios(data []Usuario) []string {
+func getHorarios(data []Candidato) []string {
 	horariosMap := make(map[string]bool)
 	for _, usuario := range data {
 		for _, opcao := range usuario.Opcoes {
@@ -185,7 +186,7 @@ func getHorarios(data []Usuario) []string {
 
 	return horariosUnicos
 }
-func FilterUniqueUsers(resp UsuariosResponse) []Usuario {
+func FilterUniqueUsers(resp UsuariosResponse) []Candidato {
 	// marca todos os índices duplicados, exceto o primeiro de cada grupo
 	skip := make(map[int]struct{})
 	for _, grp := range resp.Duplicates {
@@ -196,7 +197,7 @@ func FilterUniqueUsers(resp UsuariosResponse) []Usuario {
 		}
 	}
 	// coleta os usuários mantendo a ordem arbitrária do map
-	var out []Usuario
+	var out []Candidato
 	for idx, vr := range resp.Usuarios {
 		if _, isDup := skip[idx]; isDup {
 			continue
@@ -212,7 +213,7 @@ func normalizaOpcao(op string) string {
 
 func fillDb(db *sql.DB, data interface{}) {
 	switch v := data.(type) {
-	case []Usuario:
+	case []Candidato:
 		// HORARIOS
 		idHorarios := map[string]int64{}
 		horarios := getHorarios(v)
@@ -254,15 +255,48 @@ func fillDb(db *sql.DB, data interface{}) {
 		}
 	case []Restricao:
 		for _, restricao := range v {
+
 			CandidatoId, err := dbpkg.GetPessoaIDByName(db, restricao.Candidato)
 			if err != nil {
 				fmt.Printf("Erro ao  pegar o id do candidato %s: %v\n", restricao.Candidato, err)
 			}
-			id, err := dbpkg.AddRestricao(db, CandidatoId, restricao.NaoPosso, restricao.PrefiroNao)
-			if err != nil {
-				fmt.Printf("Erro ao adicionar restrição para candidato %d: %v\n", CandidatoId, err)
-			} else {
-				fmt.Printf("Restrição adicionada para candidato %d com ID %d\n", CandidatoId, id)
+			if restricao.NaoPosso != "" {
+				parts := strings.FieldsFunc(restricao.NaoPosso, func(r rune) bool {
+					return r == ',' || unicode.IsSpace(r)
+				})
+				for _, sig := range parts {
+					sigla := strings.TrimSpace(sig)
+					avalID, err := dbpkg.GetAvaliadorIDBySigla(db, sigla)
+					if err != nil {
+						fmt.Printf("Erro no GetAvaliadorID (%s): %v\n", sigla, err)
+						continue
+					}
+					id, err := dbpkg.AddRestricaoNposso(db, avalID, CandidatoId)
+					if err != nil {
+						fmt.Printf("Erro ao inserir NaoPosso [%s] p/ candidato %d: %v\n", sigla, CandidatoId, err)
+					} else {
+						fmt.Printf("NaoPosso inserido para avaliador %s c/ ID %d\n", sigla, id)
+					}
+				}
+			}
+			if restricao.PrefiroNao != "" {
+				parts := strings.FieldsFunc(restricao.PrefiroNao, func(r rune) bool {
+					return r == ',' || unicode.IsSpace(r)
+				})
+				for _, sig := range parts {
+					sigla := strings.TrimSpace(sig)
+					avalID, err := dbpkg.GetAvaliadorIDBySigla(db, sigla)
+					if err != nil {
+						fmt.Printf("Erro no GetAvaliadorID (%s): %v\n", sigla, err)
+						continue
+					}
+					id, err := dbpkg.AddRestricaoPrefiroN(db, avalID, CandidatoId)
+					if err != nil {
+						fmt.Printf("Erro ao inserir PrefiroNao [%s] p/ candidato %d: %v\n", sigla, CandidatoId, err)
+					} else {
+						fmt.Printf("PrefiroNao inserido para avaliador %s c/ ID %d\n", sigla, id)
+					}
+				}
 			}
 		}
 

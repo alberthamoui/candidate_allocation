@@ -18,6 +18,7 @@ import {
 
 function Root() {
 	const [mappingData, setMappingData] = useState<any>(null);
+
 	const [users, setUsers] = useState<any>(null);
 	const [duplicatas, setDuplicatas] = useState<any>(null);
 
@@ -35,7 +36,11 @@ function Root() {
 				<Routes>
 					<Route
 						path="/"
-						element={<App setMapping={setMappingData} />}
+						element={
+							<App
+								setMapping={setMappingData}
+							/>
+						}
 					/>
 
 					{/* Step 1 — candidatos */}

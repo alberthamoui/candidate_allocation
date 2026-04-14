@@ -47,9 +47,9 @@ type ResultadoAlocacao struct {
 }
 
 type Avaliador struct {
-	ID    int		`json:"id"`
-	Nome  string	`json:"nome"`
-	Email string	`json:"email"`
+	ID    int    `json:"id"`
+	Nome  string `json:"nome"`
+	Email string `json:"email"`
 }
 
 type Horario struct {
@@ -114,8 +114,7 @@ func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]i
 			log.Printf("[WARN] horario_id %d não encontrado na tabela de horários. Ignorando.", hid)
 			continue
 		}
-		
-		
+
 		h.Candidatos = append(h.Candidatos, pid)
 		prefs[pid] = append(prefs[pid], hid)
 	}
@@ -140,34 +139,36 @@ func carregarAvaliadores(db *sql.DB) []*Avaliador {
 	return avals
 }
 
-func carregarRestricoes(db *sql.DB) (hard, soft map[int]map[int]bool) {
-	rows, err := db.Query(`SELECT candidato_id, naoPosso, prefiroNao FROM restricoes`)
-	if err != nil { log.Fatal(err) }
+func carregarRestricoes(db *sql.DB) map[int]map[int]bool {
+	rows, err := db.Query(`SELECT candidato_id, naoPosso FROM restricoes`)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer rows.Close()
 
-	hard = make(map[int]map[int]bool)
-	soft = make(map[int]map[int]bool)
-
+	restr := make(map[int]map[int]bool)
 	for rows.Next() {
 		var cid int
-		var nP, pN sql.NullString
-		if err := rows.Scan(&cid, &nP, &pN); err != nil { log.Fatal(err) }
-
-		parse := func(raw sql.NullString, target map[int]map[int]bool) {
-			if !raw.Valid || strings.TrimSpace(raw.String) == "" { return }
-			for _, sig := range strings.Split(raw.String, ",") {
-				sig = strings.TrimSpace(strings.TrimPrefix(sig, "A"))
-				aid, err := strconv.Atoi(sig)
-				if err != nil { continue }
-				if target[aid] == nil { target[aid] = make(map[int]bool) }
-				target[aid][cid] = true
-			}
+		var raw sql.NullString
+		if err := rows.Scan(&cid, &raw); err != nil {
+			log.Fatal(err)
 		}
-
-		parse(nP, hard)
-		parse(pN, soft)
+		if !raw.Valid || strings.TrimSpace(raw.String) == "" {
+			continue
+		}
+		for _, sig := range strings.Split(raw.String, ",") {
+			sig = strings.TrimSpace(strings.TrimPrefix(sig, "A"))
+			aid, err := strconv.Atoi(sig)
+			if err != nil {
+				continue
+			}
+			if restr[aid] == nil {
+				restr[aid] = make(map[int]bool)
+			}
+			restr[aid][cid] = true
+		}
 	}
-	return
+	return restr
 }
 
 func gerarMesas(hmap map[int]*Horario, avals []*Avaliador) ([]*Mesa, map[int][]*Mesa) {
@@ -524,7 +525,6 @@ func Alocar(db *sql.DB) {
 	prefs := carregarDisponibilidades(db, horarios)
 
 	fmt.Println("---- DADOS CARREGADOS ----")
-
 
 	// --- gera MESAS (painéis) p/ cada dia ----------------------------------
 	mesas, porDia := gerarMesas(horarios, avals)

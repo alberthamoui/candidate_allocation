@@ -18,7 +18,8 @@ func SetUp() {
 
 		`PRAGMA foreign_keys = OFF;`,
 		`DROP TABLE IF EXISTS disponibilidade;`,
-		`DROP TABLE IF EXISTS restricoes;`,
+		`DROP TABLE IF EXISTS restricoesPrefiroN;`,
+		`DROP TABLE IF EXISTS restricoesNposso;`,
 		`DROP TABLE IF EXISTS opcoes_horario;`,
 		`DROP TABLE IF EXISTS pessoa;`,
 		`DROP TABLE IF EXISTS avaliador;`,
@@ -66,11 +67,19 @@ func SetUp() {
 
 			);`,
 		// ------------------------------------------------------------------
-		`CREATE TABLE "restricoes" (
+
+		`CREATE TABLE "restricoesNposso" (
 			"id" INTEGER NOT NULL UNIQUE PRIMARY KEY AUTOINCREMENT,
+			"avaliador_id" INTEGER NOT NULL,
 			"candidato_id" INTEGER NOT NULL,
-			"naoPosso" TEXT,
-			"prefiroNao" TEXT,
+			FOREIGN KEY("avaliador_id") REFERENCES avaliador("id") ON DELETE CASCADE,
+			FOREIGN KEY("candidato_id") REFERENCES "pessoa"("id") ON DELETE CASCADE);`,
+
+		`CREATE TABLE "restricoesPrefiroN" (
+			"id" INTEGER NOT NULL UNIQUE PRIMARY KEY AUTOINCREMENT,
+			"avaliador_id" INTEGER NOT NULL,
+			"candidato_id" INTEGER NOT NULL,
+			FOREIGN KEY("avaliador_id") REFERENCES avaliador("id") ON DELETE CASCADE,
 			FOREIGN KEY("candidato_id") REFERENCES "pessoa"("id") ON DELETE CASCADE);`,
 	}
 

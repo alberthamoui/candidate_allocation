@@ -1,8 +1,7 @@
-import { useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react"; // adicionada a importação do useRef
 import { motion } from "framer-motion";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
-
+import { BuildRestricoesWithMapping } from "../wailsjs/go/main/App";
 interface MappingItem {
 	nomeColuna: string;
 	indice: number;
@@ -10,21 +9,13 @@ interface MappingItem {
 }
 interface MappingPageProps {
 	mapping: MappingItem[] | null;
-	/** Function that receives the current mapping items and returns a promise with the result. */
-	buildFn: (items: MappingItem[]) => Promise<any>;
-	/** Called with the build result before navigation. May be async. */
-	onSuccess: (result: any) => Promise<void> | void;
-	/** Route to navigate to after onSuccess resolves. */
-	nextRoute: string;
+	setRestricoes: (data: any) => void;
 }
-export default function MappingPage({
+export default function MappingResticoesPage({
 	mapping,
-	buildFn,
-	onSuccess,
-	nextRoute,
+	setRestricoes,
 }: MappingPageProps) {
 	const navigate = useNavigate();
-	const [loading, setLoading] = useState(false);
 	const dragActiveRef = useRef<boolean>(false);
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 	const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -119,22 +110,17 @@ export default function MappingPage({
 	}
 
 	async function onConfirm() {
-		if (loading) return;
-		setLoading(true);
-		try {
-			const result = await buildFn(items);
-			await onSuccess(result);
-			navigate(nextRoute);
-		} finally {
-			setLoading(false);
-		}
+		console.log(items, " : mapping");
+		const restricoes = await BuildRestricoesWithMapping(items);
+		setRestricoes(restricoes);
+		navigate("/verify");
 	}
 
 	return (
 		<div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-100 flex flex-col items-center py-12 px-4">
 			<div className="max-w-4xl w-full bg-white rounded-xl shadow-lg p-8 mb-8">
 				<h1 className="text-3xl font-bold mb-2 text-center text-gray-800">
-					Reordenar Mapeamento
+					Reordenar Mapeamento Avaliadores
 				</h1>
 				<p className="mb-6 text-gray-600 text-center">
 					Arraste as células da coluna direita para reordenar o
@@ -185,12 +171,12 @@ export default function MappingPage({
 											whileHover={{ scale: 1.02 }}
 											whileTap={{ scale: 0.98 }}
 											className={`
-                                                py-2 px-4
-                                                cursor-move
-                                                text-center
-                                                bg-white
-                                                rounded-lg
-                                                border-2
+                                                py-2 px-4 
+                                                cursor-move 
+                                                text-center 
+                                                bg-white 
+                                                rounded-lg 
+                                                border-2 
                                                 shadow-sm
                                                 transition-all
                                             `}
@@ -221,28 +207,14 @@ export default function MappingPage({
 				</div>
 			</div>
 
-			<div className="flex items-center space-x-4">
-				<button
-					onClick={() => navigate(-1)}
-					className="flex items-center space-x-2 px-6 py-3 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 font-medium transition-all"
-				>
-					<ArrowLeftIcon className="w-4 h-4" />
-					<span>Voltar</span>
-				</button>
-				<motion.button
-					onClick={onConfirm}
-					disabled={loading}
-					whileHover={{ scale: loading ? 1 : 1.05 }}
-					whileTap={{ scale: loading ? 1 : 0.95 }}
-					className={`px-8 py-3 rounded-lg shadow-md font-medium transition-all text-white ${
-						loading
-							? "bg-blue-400 cursor-not-allowed"
-							: "bg-blue-600 hover:bg-blue-700"
-					}`}
-				>
-					{loading ? "Processando..." : "Confirmar Mudanças"}
-				</motion.button>
-			</div>
+			<motion.button
+				onClick={onConfirm}
+				whileHover={{ scale: 1.05 }}
+				whileTap={{ scale: 0.95 }}
+				className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg shadow-md font-medium transition-all"
+			>
+				Confirmar Mudanças
+			</motion.button>
 		</div>
 	);
 }

@@ -98,7 +98,6 @@ func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]MappingItem,
 
 	sheet := file.GetSheetName(0)
 	rows, err := file.GetRows(sheet)
-
 	if err != nil {
 		return nil, err
 	}
@@ -106,13 +105,10 @@ func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]MappingItem,
 		return nil, fmt.Errorf("arquivo sem dados")
 	}
 	header := rows[0]
-	// fmt.Println("header : ", header)
 
-	// Lista de possíveis variáveis da struct Usuario (em minúsculo)
 	variaveisUsuario := getUsuarioFields(quantidade_opcoes)
 	fmt.Println("variaveis usuario: ", variaveisUsuario)
 
-	// Alocação aleatória das variáveis para cada coluna
 	mappingList := make([]string, len(variaveisUsuario))
 	for i, usuarioVar := range variaveisUsuario {
 		if i < len(header) {
@@ -128,6 +124,7 @@ func (a *App) SuggestMapping(data []byte, quantidade_opcoes int) ([]MappingItem,
 	}
 	return mapping_json, nil
 }
+
 func (a *App) SuggestMappingAvaliador() ([]MappingItem, error) {
 	readerData := bytes.NewReader(a.excelData)
 	file, err := excelize.OpenReader(readerData)
@@ -146,9 +143,7 @@ func (a *App) SuggestMappingAvaliador() ([]MappingItem, error) {
 	}
 	header := rows[0]
 
-	// gerar dinamicamente as variáveis de avaliador
 	variaveisAvaliador := getAvaliadorFields()
-
 	fmt.Println("variaveis avaliador : ", variaveisAvaliador)
 	mappingList := make([]string, len(variaveisAvaliador))
 	for i, v := range variaveisAvaliador {
@@ -179,7 +174,6 @@ func (a *App) SuggestMappingRestricao() ([]MappingItem, error) {
 	}
 	header := rows[0]
 
-	// gerar dinamicamente as variáveis de restrição
 	variaveisRestricao := getRestricaoFields()
 	mappingList := make([]string, len(variaveisRestricao))
 	for i, v := range variaveisRestricao {
@@ -193,12 +187,11 @@ func (a *App) SuggestMappingRestricao() ([]MappingItem, error) {
 }
 
 // ProcessMapping converte cada string JSON "[[nomeColuna,indice],variavel]"
-// em um Mapping. Retorna erro se algum item não for JSON válido.
+// em um MappingItem. Retorna erro se algum item não for JSON válido.
 func ProcessMapping(items []string) ([]MappingItem, error) {
 	var result []MappingItem
 
 	for _, item := range items {
-		// decodifica o JSON em um slice genérico
 		var arr []interface{}
 		if err := json.Unmarshal([]byte(item), &arr); err != nil {
 			return nil, fmt.Errorf("invalid JSON '%s': %w", item, err)
@@ -207,7 +200,6 @@ func ProcessMapping(items []string) ([]MappingItem, error) {
 			continue
 		}
 
-		// arr[0] => [nomeColuna, indice]
 		info, ok := arr[0].([]interface{})
 		if !ok || len(info) != 2 {
 			continue
@@ -243,9 +235,7 @@ type UsuariosResponse struct {
 }
 
 func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResponse, error) {
-	// Abre o arquivo Excel a partir dos dados em []byte
 	data := a.excelData
-
 	nOpcoes := a.nOpcoes
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
@@ -269,7 +259,6 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 		u := Usuario{
 			Opcoes: make([]string, nOpcoes),
 		}
-		// Para cada mapping, pega o conteúdo da coluna correspondente e atribui
 		for _, mItem := range mappingItems {
 			if mItem.Indice >= len(row) {
 				continue
@@ -293,7 +282,6 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 			case "email_pessoal":
 				u.EmailPessoal = cell
 			default:
-				// Se for uma opção, o mItem.UserField deve estar no formato "opcao X"
 				if strings.HasPrefix(mItem.Variavel, "opcao") {
 					parts := strings.Split(mItem.Variavel, " ")
 					if len(parts) == 2 {
@@ -317,7 +305,6 @@ func (a *App) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Avaliad
 		return nil, fmt.Errorf("dados do Excel ainda não carregados")
 	}
 
-	// abre planilha a partir do []byte salvo em a.excelData
 	reader := bytes.NewReader(a.excelData)
 	file, err := excelize.OpenReader(reader)
 	if err != nil {
@@ -325,7 +312,6 @@ func (a *App) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Avaliad
 	}
 	defer file.Close()
 
-	// 2ª aba (índice 1) onde estão os avaliadores
 	sheet := file.GetSheetName(1)
 	if sheet == "" {
 		return nil, fmt.Errorf("arquivo não possui uma segunda aba com avaliadores")
@@ -341,12 +327,11 @@ func (a *App) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Avaliad
 
 	var avaliadores []AvaliadorInfo
 
-	// percorre linhas (ignorando cabeçalho)
 	for _, row := range rows[1:] {
 		av := AvaliadorInfo{}
 		for _, m := range mappingItems {
 			if m.Indice >= len(row) {
-				continue // coluna vazia nesta linha
+				continue
 			}
 			val := strings.TrimSpace(row[m.Indice])
 
@@ -360,7 +345,6 @@ func (a *App) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Avaliad
 			}
 		}
 
-		// ignora linhas totalmente vazias
 		if av.Nome == "" && av.Email == "" && av.Sigla == "" {
 			continue
 		}
@@ -378,7 +362,7 @@ func (a *App) BuildRestricoesWithMapping(mappingItems []MappingItem) ([]Restrica
 	}
 	defer file.Close()
 
-	sheet := file.GetSheetName(2) // aba de restrição
+	sheet := file.GetSheetName(2)
 	rows, err := file.GetRows(sheet)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao ler excel: %w", err)
