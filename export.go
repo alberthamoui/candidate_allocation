@@ -22,8 +22,7 @@ func (a *App) RunAlocacao() (AlocacaoResponse, error) {
 	hard, soft := carregarRestricoes(conn)
 	horarios := carregarHorarios(conn)
 	prefs := carregarDisponibilidades(conn, horarios)
-	mesas, porDia := gerarMesas(horarios, avals)
-	res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
+	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft)
 
 	avalNames := make(map[int]string, len(avals))
 	for _, av := range avals {

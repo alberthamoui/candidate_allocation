@@ -24,8 +24,23 @@ const (
 	MAX_PESSOAS_POR_MESA     = 8
 	MIN_AVALIADORES_POR_MESA = 5
 	MAX_AVALIADORES_POR_MESA = 5
-	MAX_TESTES               = 100_000
-	MELHOR_CASO              = 50
+
+	// NUM_TENTATIVAS é o número de vezes que o algoritmo roda para buscar
+	// a melhor alocação. Aumente para melhor qualidade (mais lento).
+	NUM_TENTATIVAS = 1000
+)
+
+// ==================================================
+// =========== CRITÉRIOS DE PONTUAÇÃO ===============
+// ==================================================
+//
+const (
+	PONTOS_OPCAO_1  = 100 // candidato alocado na 1ª opção de horário
+	PONTOS_OPCAO_2  = 70  // candidato alocado na 2ª opção de horário
+	PONTOS_OPCAO_3  = 40  // candidato alocado na 3ª opção de horário
+	PONTOS_OPCAO_4  = 10  // candidato alocado na 4ª opção de horário
+	PENALIDADE_SOFT = -20 // violação de restrição "prefiro não" por avaliador
+	PENALIDADE_HARD = -1000 // violação de restrição "não posso" por avaliador
 )
 
 // ==================================================
@@ -170,28 +185,35 @@ func gerarMesas(hmap map[int]*Horario, avals []*Avaliador) ([]*Mesa, map[int][]*
 	var todas []*Mesa
 	porDia := make(map[int][]*Mesa)
 
+	// Limita o número de mesas ao que pode ser preenchido com o mínimo de
+	// avaliadores. Isso garante que nenhuma mesa fique com menos de
+	// MIN_AVALIADORES_POR_MESA avaliadores.
+	numMesas := len(avals) / MIN_AVALIADORES_POR_MESA
+	if numMesas > MESAS_POR_HORARIO {
+		numMesas = MESAS_POR_HORARIO
+	}
+	if numMesas == 0 {
+		log.Printf("[WARN] Avaliadores insuficientes para formar qualquer mesa (necessário mínimo: %d)", MIN_AVALIADORES_POR_MESA)
+		return todas, porDia
+	}
+
 	for _, h := range hmap {
-		// Embaralha avaliadores uma vez por horário
+		// Embaralha avaliadores para distribuição aleatória entre as mesas.
 		perm := make([]*Avaliador, len(avals))
 		copy(perm, avals)
 		rand.Shuffle(len(perm), func(i, j int) { perm[i], perm[j] = perm[j], perm[i] })
 
-		// Distribui avaliadores sequencialmente (sem repetição por dia)
-		// Cada avaliador aparece em no máximo uma mesa por horário.
 		idx := 0
-
-		for i := 0; i < MESAS_POR_HORARIO; i++ {
+		for i := 0; i < numMesas; i++ {
 			m := &Mesa{
 				ID:        h.ID*100 + i,
 				DiaID:     h.ID,
 				Descricao: fmt.Sprintf("%s – mesa %d", h.Descricao, i+1),
 			}
-
 			for k := 0; k < MIN_AVALIADORES_POR_MESA && idx < len(perm); k++ {
 				m.Avaliadores = append(m.Avaliadores, perm[idx].ID)
 				idx++
 			}
-
 			todas = append(todas, m)
 			porDia[h.ID] = append(porDia[h.ID], m)
 		}
@@ -298,6 +320,94 @@ func fazerAlocacaoMesas(
 		}
 	}
 	return ResultadoAlocacao{Alocacao: aloc, Pontuacao: pontos, Alocados: len(aloc)}
+}
+
+// ==================================================
+// ============= MULTI-TENTATIVA (MELHOR RESULTADO) =
+// ==================================================
+
+// pontuarResultado calcula a pontuação de uma alocação com base nos
+// critérios definidos nas constantes PONTOS_OPCAO_*, PENALIDADE_SOFT e PENALIDADE_HARD.
+// Retorna um valor inteiro — quanto maior, melhor o resultado.
+func pontuarResultado(
+	res ResultadoAlocacao,
+	mesas []*Mesa,
+	prefs map[int][]int,
+	hard, soft map[int]map[int]bool,
+) int {
+	pontosNivel := []int{PONTOS_OPCAO_1, PONTOS_OPCAO_2, PONTOS_OPCAO_3, PONTOS_OPCAO_4}
+
+	// índice mesaID -> Mesa para lookup rápido
+	mesaIdx := make(map[int]*Mesa, len(mesas))
+	for _, m := range mesas {
+		mesaIdx[m.ID] = m
+	}
+
+	score := 0
+	for pid, mid := range res.Alocacao {
+		m := mesaIdx[mid]
+		if m == nil {
+			continue
+		}
+
+		// Pontos pela preferência de horário do candidato
+		for nivel, hid := range prefs[pid] {
+			if hid == m.DiaID {
+				if nivel < len(pontosNivel) {
+					score += pontosNivel[nivel]
+				}
+				break
+			}
+		}
+
+		// Penalidade por violação de restrições por avaliador
+		for _, avID := range m.Avaliadores {
+			if hard[avID][pid] {
+				score += PENALIDADE_HARD
+			} else if soft[avID][pid] {
+				score += PENALIDADE_SOFT
+			}
+		}
+	}
+	return score
+}
+
+// copiarMesas retorna uma cópia profunda do slice de mesas.
+func copiarMesas(mesas []*Mesa) []*Mesa {
+	copia := make([]*Mesa, len(mesas))
+	for i, m := range mesas {
+		mc := *m
+		mc.Candidatos = append([]int{}, m.Candidatos...)
+		mc.Avaliadores = append([]int{}, m.Avaliadores...)
+		copia[i] = &mc
+	}
+	return copia
+}
+
+// fazerMelhorAlocacaoMesas executa o algoritmo NUM_TENTATIVAS vezes e retorna
+// a alocação com maior pontuação segundo os critérios definidos.
+func fazerMelhorAlocacaoMesas(
+	horarios map[int]*Horario,
+	avals []*Avaliador,
+	prefs map[int][]int,
+	hard, soft map[int]map[int]bool,
+) (ResultadoAlocacao, []*Mesa) {
+	var melhorRes ResultadoAlocacao
+	var melhorMesas []*Mesa
+	melhorScore := -(1 << 62)
+
+	for i := 0; i < NUM_TENTATIVAS; i++ {
+		mesas, porDia := gerarMesas(horarios, avals)
+		res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
+		score := pontuarResultado(res, mesas, prefs, hard, soft)
+
+		if melhorMesas == nil || score > melhorScore {
+			melhorScore = score
+			melhorRes = res
+			melhorMesas = copiarMesas(mesas)
+		}
+	}
+	return melhorRes, melhorMesas
 }
 
 // ==================================================
@@ -521,18 +631,17 @@ func Alocar(db *sql.DB) {
 
 	fmt.Println("---- DADOS CARREGADOS ----")
 
-	// --- gera MESAS (painéis) p/ cada dia ----------------------------------
-	mesas, porDia := gerarMesas(horarios, avals)
-	fmt.Println("\n---- MESAS GERADAS ----")
+	// --- busca a melhor alocação em NUM_TENTATIVAS tentativas ---------------
+	fmt.Printf("\n---- BUSCANDO MELHOR ALOCAÇÃO (%d tentativas) ----\n", NUM_TENTATIVAS)
+	start := time.Now()
+	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft)
+
+	fmt.Println("\n---- MESAS GERADAS (melhor resultado) ----")
 	for _, m := range mesas {
 		fmt.Printf("Mesa %d → %s | Avaliadores: %v\n",
 			m.ID, m.Descricao, m.Avaliadores)
 	}
 	fmt.Println(strings.Repeat("-", 60))
-
-	// --- alocação -----------------------------------------------------------
-	start := time.Now()
-	res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
 
 	// índice mesaID -> *Mesa  (facilita buscas na impressão)
 	mapMesa := make(map[int]*Mesa, len(mesas))
