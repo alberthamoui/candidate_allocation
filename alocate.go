@@ -140,58 +140,60 @@ func carregarAvaliadores(db *sql.DB) []*Avaliador {
 	return avals
 }
 
-func carregarRestricoes(db *sql.DB) map[int]map[int]bool {
-	rows, err := db.Query(`SELECT candidato_id, naoPosso FROM restricoes`)
-	if err != nil {
-		log.Fatal(err)
-	}
+func carregarRestricoes(db *sql.DB) (hard, soft map[int]map[int]bool) {
+	rows, err := db.Query(`SELECT candidato_id, naoPosso, prefiroNao FROM restricoes`)
+	if err != nil { log.Fatal(err) }
 	defer rows.Close()
 
-	restr := make(map[int]map[int]bool)
+	hard = make(map[int]map[int]bool)
+	soft = make(map[int]map[int]bool)
+
 	for rows.Next() {
 		var cid int
-		var raw sql.NullString
-		if err := rows.Scan(&cid, &raw); err != nil {
-			log.Fatal(err)
-		}
-		if !raw.Valid || strings.TrimSpace(raw.String) == "" {
-			continue
-		}
-		for _, sig := range strings.Split(raw.String, ",") {
-			sig = strings.TrimSpace(strings.TrimPrefix(sig, "A"))
-			aid, err := strconv.Atoi(sig)
-			if err != nil {
-				continue
+		var nP, pN sql.NullString
+		if err := rows.Scan(&cid, &nP, &pN); err != nil { log.Fatal(err) }
+
+		parse := func(raw sql.NullString, target map[int]map[int]bool) {
+			if !raw.Valid || strings.TrimSpace(raw.String) == "" { return }
+			for _, sig := range strings.Split(raw.String, ",") {
+				sig = strings.TrimSpace(strings.TrimPrefix(sig, "A"))
+				aid, err := strconv.Atoi(sig)
+				if err != nil { continue }
+				if target[aid] == nil { target[aid] = make(map[int]bool) }
+				target[aid][cid] = true
 			}
-			if restr[aid] == nil {
-				restr[aid] = make(map[int]bool)
-			}
-			restr[aid][cid] = true
 		}
+
+		parse(nP, hard)
+		parse(pN, soft)
 	}
-	return restr
+	return
 }
 
-func gerarMesas(horarios map[int]*Horario, avals []*Avaliador) ([]*Mesa, map[int][]*Mesa) {
+func gerarMesas(hmap map[int]*Horario, avals []*Avaliador) ([]*Mesa, map[int][]*Mesa) {
 	var todas []*Mesa
 	porDia := make(map[int][]*Mesa)
 
-	rand.Seed(time.Now().UnixNano())
+	for _, h := range hmap {
+		// Embaralha avaliadores uma vez por horário
+		perm := make([]*Avaliador, len(avals))
+		copy(perm, avals)
+		rand.Shuffle(len(perm), func(i, j int) { perm[i], perm[j] = perm[j], perm[i] })
 
-	for _, h := range horarios {
+		// Distribui avaliadores sequencialmente (sem repetição por dia)
+		// Cada avaliador aparece em no máximo uma mesa por horário.
+		idx := 0
+
 		for i := 0; i < MESAS_POR_HORARIO; i++ {
-			idMesa := h.ID*100 + i // 101,102… 201,202…
 			m := &Mesa{
-				ID:        idMesa,
+				ID:        h.ID*100 + i,
 				DiaID:     h.ID,
 				Descricao: fmt.Sprintf("%s – mesa %d", h.Descricao, i+1),
 			}
 
-			// Sorteia avaliadores p/ mesa
-			n := rand.Intn(MAX_AVALIADORES_POR_MESA-MIN_AVALIADORES_POR_MESA+1) + MIN_AVALIADORES_POR_MESA
-			rand.Shuffle(len(avals), func(i, j int) { avals[i], avals[j] = avals[j], avals[i] })
-			for k := 0; k < n; k++ {
-				m.Avaliadores = append(m.Avaliadores, avals[k].ID)
+			for k := 0; k < MIN_AVALIADORES_POR_MESA && idx < len(perm); k++ {
+				m.Avaliadores = append(m.Avaliadores, perm[idx].ID)
+				idx++
 			}
 
 			todas = append(todas, m)
@@ -225,6 +227,14 @@ func sortHorariosPorCandidatos(hs []*Horario) {
 // ============== ALOCAÇÃO DE PESSOAS ===============
 // ==================================================
 
+func conflitante(avIDs []int, pid int, hard, soft map[int]map[int]bool) (hardBlock bool, softTouch bool) {
+	for _, av := range avIDs {
+		if hard[av][pid] { return true, true }
+		if soft[av][pid] { softTouch = true }
+	}
+	return false, softTouch
+}
+
 func podeAvaliar(avID, pid int, restr map[int]map[int]bool) bool {
 	return !restr[avID][pid]
 }
@@ -238,41 +248,47 @@ func podeAlocarNoHorario(h *Horario, pid int, restr map[int]map[int]bool) bool {
 	return true
 }
 
-func fazerAlocacaoMesas(mesas []*Mesa, porDia map[int][]*Mesa, prefs map[int][]int, restr map[int]map[int]bool) ResultadoAlocacao {
-	aloc := make(map[int]int)      // pessoa -> mesaID
-	alocados := make(map[int]bool) // set
-	pontuacao := 0
+func fazerAlocacaoMesas(
+	mesas []*Mesa, porDia map[int][]*Mesa,
+	prefs map[int][]int,
+	hard, soft map[int]map[int]bool) ResultadoAlocacao {
 
-	// Cada mesa começa com 0 pessoas
+	aloc := make(map[int]int)
 	ocupado := make(map[int]int)
+	alocados := make(map[int]bool)
+	pontos := 0
 
-	// percorre nível de preferência 0..3
 	for nivel := 0; nivel < 4; nivel++ {
 		for pid, pref := range prefs {
-			if alocados[pid] || len(pref) <= nivel {
-				continue
-			}
+			if alocados[pid] || len(pref) <= nivel { continue }
 			dia := pref[nivel]
 
-			// procura 1ª mesa desse dia com vaga e sem restrição
+			var melhor *Mesa
 			for _, m := range porDia[dia] {
-				if ocupado[m.ID] >= MAX_PESSOAS_POR_MESA {
-					continue
-				}
-				if !podeAlocarNoHorario(&Horario{Avaliadores: m.Avaliadores}, pid, restr) {
-					continue
-				}
+				if ocupado[m.ID] >= MAX_PESSOAS_POR_MESA { continue }
+				hardBlock, softTouch := conflitante(m.Avaliadores, pid, hard, soft)
+				if hardBlock { continue }
 
-				// aloca
-				aloc[pid] = m.ID
-				ocupado[m.ID]++
-				m.Candidatos = append(m.Candidatos, pid)
-				alocados[pid] = true
-				pontuacao += nivel
-				break
+				if melhor == nil {
+					melhor = m // prioriza mesa SEM softTouch
+				} else {
+					_, melhorSoftTouch := conflitante(melhor.Avaliadores, pid, hard, soft)
+					if !softTouch && melhorSoftTouch {
+						melhor = m
+					}
+				}
 			}
+			if melhor == nil { continue }
+
+			// aloca na melhor mesa encontrada
+			ocupado[melhor.ID]++
+			melhor.Candidatos = append(melhor.Candidatos, pid)
+			alocados[pid] = true
+			aloc[pid] = melhor.ID
+			pontos += nivel
 		}
 	}
+
 
 	// remove mesas que ficaram abaixo do mínimo
 	for _, m := range mesas {
@@ -285,7 +301,7 @@ func fazerAlocacaoMesas(mesas []*Mesa, porDia map[int][]*Mesa, prefs map[int][]i
 			ocupado[m.ID] = 0
 		}
 	}
-	return ResultadoAlocacao{Alocacao: aloc, Pontuacao: pontuacao, Alocados: len(aloc)}
+	return ResultadoAlocacao{Alocacao: aloc, Pontuacao: pontos, Alocados: len(aloc)}
 }
 
 // ==================================================
@@ -503,7 +519,7 @@ func Alocar(db *sql.DB) {
 	fmt.Println("---- INICIANDO ALOCAÇÃO ----")
 	// --- carrega dados do banco --------------------------------------------
 	avals := carregarAvaliadores(db)
-	restr := carregarRestricoes(db)
+	hard, soft := carregarRestricoes(db)
 	horarios := carregarHorarios(db)
 	prefs := carregarDisponibilidades(db, horarios)
 
@@ -521,7 +537,7 @@ func Alocar(db *sql.DB) {
 
 	// --- alocação -----------------------------------------------------------
 	start := time.Now()
-	res := fazerAlocacaoMesas(mesas, porDia, prefs, restr)
+	res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
 
 	// índice mesaID -> *Mesa  (facilita buscas na impressão)
 	mapMesa := make(map[int]*Mesa, len(mesas))

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
 	PencilIcon,
@@ -6,12 +7,13 @@ import {
 	CheckCircleIcon,
 	XMarkIcon,
 	TrashIcon,
+	ArrowLeftIcon,
 } from "@heroicons/react/24/outline";
 import { UserCard } from "./UserCard";
-import { Save } from "../wailsjs/go/main/App";
+import { SaveUsuarios } from "../wailsjs/go/main/App";
 
 interface ErrorItem {
-	field: string;
+	field: string; // field name (e.g. "cpf", "email_insper")
 	msg: string;
 }
 
@@ -38,16 +40,19 @@ export default function VerifyUserPage({
 			Object.entries(usuarios).map(([id, u]) => [id, { ...u.usuario }])
 		);
 
+	const navigate = useNavigate();
+
 	const [editedUsers, setEditedUsers] = useState<Record<number, Usuario>>(
 		makeEditableCopy()
 	);
 	const [dupGroups, setDupGroups] = useState<number[][]>(duplicates);
 	const [acceptedIds, setAcceptedIds] = useState<Set<number>>(new Set());
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
+	const [saveSuccess, setSaveSuccess] = useState(false);
 
-	// ... existing helper functions ...
+	// Uses reactive dupGroups (not the stale prop) so resolved groups are excluded.
 	const getGroup = (id: number) =>
-		duplicates.find((g) => g.includes(id)) || [];
+		dupGroups.find((g) => g.includes(id)) || [];
 
 	function handleCellChange(
 		userId: number,
@@ -76,7 +81,7 @@ export default function VerifyUserPage({
 	}
 
 	function acceptAll(group: number[]) {
-		const keys = ["cpf", "emailpessoal", "emailinsper"];
+		const keys = ["cpf", "email_pessoal", "email_insper"];
 		const seen = new Map<string, number>();
 		for (const id of group) {
 			const usr = editedUsers[id];
@@ -120,7 +125,6 @@ export default function VerifyUserPage({
 	}
 
 	function rejectAll(group: number[]) {
-		const toRemove = new Set(group);
 		setEditedUsers((prev) => {
 			const n = { ...prev };
 			group.forEach((id) => delete n[id]);
@@ -134,8 +138,7 @@ export default function VerifyUserPage({
 		});
 	}
 
-	function saveCandidates() {
-		// Check if there are still duplicates
+	async function saveCandidates() {
 		if (dupGroups.length > 0) {
 			setErrorMsg(
 				"Não é possível salvar enquanto houver usuários duplicados. Resolva todos os conflitos primeiro."
@@ -143,23 +146,27 @@ export default function VerifyUserPage({
 			return;
 		}
 
-		// Convert editedUsers to the format expected by backend
 		const usuariosParaSalvar = Object.entries(editedUsers).map(
-			([id, user]) => ({
+			([, user]) => ({
 				timestamp: user.timestamp || "",
 				nome: user.nome || "",
 				cpf: user.cpf || "",
 				numero: user.numero || "",
 				semestre: user.semestre || "",
 				curso: user.curso || "",
-				email_insper: user.emailinsper || "",
-				email_pessoal: user.emailpessoal || "",
+				email_insper: user.email_insper || "",
+				email_pessoal: user.email_pessoal || "",
 				opcoes: user.opcoes || [],
 			})
 		);
 
-		console.log("Usuários para salvar:", usuariosParaSalvar);
-		Save(usuariosParaSalvar);
+		try {
+			await SaveUsuarios(usuariosParaSalvar);
+			setSaveSuccess(true);
+			setTimeout(() => navigate("/upload-avaliador"), 1500);
+		} catch (err) {
+			setErrorMsg("Erro ao salvar candidatos: " + err);
+		}
 	}
 
 	const renderUserCard = (userId: number, extraBtn?: React.ReactNode) => {
@@ -180,6 +187,20 @@ export default function VerifyUserPage({
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+			{/* Success Banner */}
+			{saveSuccess && (
+				<motion.div
+					initial={{ opacity: 0, y: -20 }}
+					animate={{ opacity: 1, y: 0 }}
+					className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-8 py-4 rounded-xl shadow-2xl flex items-center space-x-3"
+				>
+					<CheckCircleIcon className="w-6 h-6" />
+					<span className="font-semibold">
+						Candidatos salvos! Indo para avaliadores...
+					</span>
+				</motion.div>
+			)}
+
 			{/* Error Modal */}
 			{errorMsg && (
 				<div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
@@ -208,17 +229,29 @@ export default function VerifyUserPage({
 			{/* Header */}
 			<div className="bg-white shadow-sm border-b">
 				<div className="max-w-7xl mx-auto px-6 py-6">
-					<div className="flex items-center justify-between">
-						<div>
-							<h1 className="text-3xl font-bold text-gray-900">
-								Verificação de Usuários
-							</h1>
-							<p className="text-gray-600 mt-1">
-								Revise e corrija os dados importados. Clique em
-								qualquer campo para editar.
-							</p>
+					<div className="flex items-center justify-between gap-4 flex-wrap">
+						{/* Left: back + title */}
+						<div className="flex items-center space-x-4">
+							<button
+								onClick={() => navigate(-1)}
+								className="flex items-center space-x-1 text-gray-500 hover:text-gray-800 transition-colors text-sm font-medium"
+							>
+								<ArrowLeftIcon className="w-4 h-4" />
+								<span>Voltar</span>
+							</button>
+							<div>
+								<h1 className="text-3xl font-bold text-gray-900">
+									Verificação de Usuários
+								</h1>
+								<p className="text-gray-600 mt-1">
+									Revise e corrija os dados importados. Clique em
+									qualquer campo para editar.
+								</p>
+							</div>
 						</div>
-						<div className="flex items-center space-x-4 text-sm">
+
+						{/* Right: stats + top save button */}
+						<div className="flex items-center space-x-3 text-sm flex-wrap gap-y-2">
 							<div className="flex items-center space-x-2 bg-red-100 px-3 py-2 rounded-lg">
 								<div className="w-3 h-3 bg-red-500 rounded-full"></div>
 								<span>
@@ -236,6 +269,24 @@ export default function VerifyUserPage({
 									únicos
 								</span>
 							</div>
+							<motion.button
+								whileHover={{ scale: dupGroups.length === 0 && !saveSuccess ? 1.02 : 1 }}
+								whileTap={{ scale: dupGroups.length === 0 && !saveSuccess ? 0.98 : 1 }}
+								onClick={saveCandidates}
+								disabled={dupGroups.length > 0 || saveSuccess}
+								className={`flex items-center space-x-2 px-5 py-2 rounded-xl font-semibold shadow transition-all ${
+									dupGroups.length > 0 || saveSuccess
+										? "bg-gray-300 text-gray-400 cursor-not-allowed"
+										: "bg-gradient-to-r from-green-600 to-green-700 text-white hover:shadow-lg cursor-pointer"
+								}`}
+							>
+								<CheckCircleIcon className="w-4 h-4" />
+								<span>
+									{dupGroups.length > 0
+										? `Resolva ${dupGroups.length} duplicado${dupGroups.length > 1 ? "s" : ""}`
+										: "Salvar Candidatos"}
+								</span>
+							</motion.button>
 						</div>
 					</div>
 				</div>
@@ -360,9 +411,9 @@ export default function VerifyUserPage({
 						}}
 						whileTap={{ scale: dupGroups.length === 0 ? 0.98 : 1 }}
 						onClick={saveCandidates}
-						disabled={dupGroups.length > 0}
+						disabled={dupGroups.length > 0 || saveSuccess}
 						className={`px-12 py-4 rounded-xl font-bold text-lg shadow-xl transition-all ${
-							dupGroups.length > 0
+							dupGroups.length > 0 || saveSuccess
 								? "bg-gray-400 text-gray-200 cursor-not-allowed"
 								: "bg-gradient-to-r from-green-600 to-green-700 text-white hover:shadow-2xl cursor-pointer"
 						}`}

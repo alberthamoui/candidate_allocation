@@ -63,7 +63,7 @@ func getRestricaoFields() []string {
 }
 
 type ErrorEntry struct {
-	Field int    `json:"field"`
+	Field string `json:"field"`
 	Msg   string `json:"msg"`
 }
 type ValidationResult struct {
@@ -88,21 +88,21 @@ func processData(data []Usuario) (map[int]ValidationResult, [][]int) {
 
 		// --- validações por regex (e zera o campo quando inválido) ---
 		if !reCPF.MatchString(entrada.CPF) {
-			errs = append(errs, ErrorEntry{3, "cpf inválido"})
+			errs = append(errs, ErrorEntry{"cpf", "cpf inválido"})
 		}
 		if !reNumero.MatchString(entrada.Numero) {
-			errs = append(errs, ErrorEntry{4, "numero inválido"})
+			errs = append(errs, ErrorEntry{"numero", "numero inválido"})
 		}
 		if !reSemestre.MatchString(entrada.Semestre) {
-			errs = append(errs, ErrorEntry{5, "semestre inválido"})
+			errs = append(errs, ErrorEntry{"semestre", "semestre inválido"})
 			entrada.Semestre = ""
 		}
 		if !reEmailInsper.MatchString(entrada.EmailInsper) {
-			errs = append(errs, ErrorEntry{7, "email_insper inválido"})
+			errs = append(errs, ErrorEntry{"email_insper", "email_insper inválido"})
 			entrada.EmailInsper = ""
 		}
 		if !reEmailPessoal.MatchString(entrada.EmailPessoal) {
-			errs = append(errs, ErrorEntry{8, "email_pessoal inválido"})
+			errs = append(errs, ErrorEntry{"email_pessoal", "email_pessoal inválido"})
 			entrada.EmailPessoal = ""
 		}
 
@@ -234,9 +234,13 @@ func fillDb(db *sql.DB, data interface{}) {
 			fmt.Printf("Adicionando usuário: %s (ID: %d)\n", usuario.Nome, id)
 			count := 0
 			for _, opcao := range usuario.Opcoes {
+				norm := normalizaOpcao(opcao)
+				if norm == "" {
+					continue
+				}
 				count++
-				fmt.Printf("Adicionando disponibilidade para usuário %s (ID: %d) - Horário: %s (ID HORARIO: %d)\n", usuario.Nome, id, opcao, idHorarios[opcao])
-				dbpkg.AddDisponibilidade(db, id, idHorarios[opcao], int64(count))
+				fmt.Printf("Adicionando disponibilidade para usuário %s (ID: %d) - Horário: %s (ID HORARIO: %d)\n", usuario.Nome, id, norm, idHorarios[norm])
+				dbpkg.AddDisponibilidade(db, id, idHorarios[norm], int64(count))
 			}
 		}
 	case []AvaliadorInfo:

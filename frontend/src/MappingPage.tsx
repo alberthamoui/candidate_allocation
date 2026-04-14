@@ -1,7 +1,8 @@
-import { useLocation, useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react"; // adicionada a importação do useRef
+import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { BuildUsuariosWithMapping } from "../wailsjs/go/main/App";
+import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+
 interface MappingItem {
 	nomeColuna: string;
 	indice: number;
@@ -9,15 +10,21 @@ interface MappingItem {
 }
 interface MappingPageProps {
 	mapping: MappingItem[] | null;
-	setUsers: (data: any) => void;
-	setDuplicatas: (data: any) => void;
+	/** Function that receives the current mapping items and returns a promise with the result. */
+	buildFn: (items: MappingItem[]) => Promise<any>;
+	/** Called with the build result before navigation. May be async. */
+	onSuccess: (result: any) => Promise<void> | void;
+	/** Route to navigate to after onSuccess resolves. */
+	nextRoute: string;
 }
 export default function MappingPage({
 	mapping,
-	setUsers,
-	setDuplicatas,
+	buildFn,
+	onSuccess,
+	nextRoute,
 }: MappingPageProps) {
 	const navigate = useNavigate();
+	const [loading, setLoading] = useState(false);
 	const dragActiveRef = useRef<boolean>(false);
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 	const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -112,11 +119,15 @@ export default function MappingPage({
 	}
 
 	async function onConfirm() {
-		console.log(items, " : mapping");
-		const { usuarios, duplicates } = await BuildUsuariosWithMapping(items);
-		setUsers(usuarios);
-		setDuplicatas(duplicates);
-		navigate("/verify");
+		if (loading) return;
+		setLoading(true);
+		try {
+			const result = await buildFn(items);
+			await onSuccess(result);
+			navigate(nextRoute);
+		} finally {
+			setLoading(false);
+		}
 	}
 
 	return (
@@ -210,14 +221,28 @@ export default function MappingPage({
 				</div>
 			</div>
 
-			<motion.button
-				onClick={onConfirm}
-				whileHover={{ scale: 1.05 }}
-				whileTap={{ scale: 0.95 }}
-				className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg shadow-md font-medium transition-all"
-			>
-				Confirmar Mudanças
-			</motion.button>
+			<div className="flex items-center space-x-4">
+				<button
+					onClick={() => navigate(-1)}
+					className="flex items-center space-x-2 px-6 py-3 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 font-medium transition-all"
+				>
+					<ArrowLeftIcon className="w-4 h-4" />
+					<span>Voltar</span>
+				</button>
+				<motion.button
+					onClick={onConfirm}
+					disabled={loading}
+					whileHover={{ scale: loading ? 1 : 1.05 }}
+					whileTap={{ scale: loading ? 1 : 0.95 }}
+					className={`px-8 py-3 rounded-lg shadow-md font-medium transition-all text-white ${
+						loading
+							? "bg-blue-400 cursor-not-allowed"
+							: "bg-blue-600 hover:bg-blue-700"
+					}`}
+				>
+					{loading ? "Processando..." : "Confirmar Mudanças"}
+				</motion.button>
+			</div>
 		</div>
 	);
 }

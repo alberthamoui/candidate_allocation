@@ -5,23 +5,22 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"log"
-	"os"
+	"sort"
 	"strconv"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
+	wailsrt "github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/xuri/excelize/v2"
 )
 
 // App struct
-// colocando comentario
 type App struct {
-	ctx       context.Context
-	excelData []byte
-	nOpcoes   int
+	ctx        context.Context
+	excelData  []byte
+	nOpcoes    int
+	lastResult *AlocacaoResponse
 }
 
 // NewApp creates a new App application struct
@@ -31,8 +30,8 @@ func NewApp() *App {
 
 // startup is called at application startup
 func (a *App) startup(ctx context.Context) {
-	// Perform your setup here
 	a.ctx = ctx
+	setupIfNeeded()
 }
 
 // domReady is called after front-end resources have been loaded
@@ -410,99 +409,239 @@ func (a *App) BuildRestricoesWithMapping(mappingItems []MappingItem) ([]Restrica
 	return restricoes, nil
 }
 
-func (a *App) Save(data interface{}) {
-	conn, err := sql.Open("sqlite3", "./insper.db")
+func openDB() (*sql.DB, error) {
+	return sql.Open("sqlite3", "./insper.db")
+}
+
+// SetupDB resets and recreates the database (wipes all data).
+func (a *App) SetupDB() error {
+	SetUp()
+	return nil
+}
+
+// SaveUsuarios persists candidates to the database.
+func (a *App) SaveUsuarios(data []Usuario) error {
+	conn, err := openDB()
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("erro ao abrir banco: %w", err)
+	}
+	defer conn.Close()
+	fillDb(conn, data)
+	return nil
+}
+
+// SaveAvaliadores persists evaluators to the database.
+func (a *App) SaveAvaliadores(data []AvaliadorInfo) error {
+	conn, err := openDB()
+	if err != nil {
+		return fmt.Errorf("erro ao abrir banco: %w", err)
+	}
+	defer conn.Close()
+	fillDb(conn, data)
+	return nil
+}
+
+// SaveRestricoes persists restrictions to the database.
+func (a *App) SaveRestricoes(data []Restricao) error {
+	conn, err := openDB()
+	if err != nil {
+		return fmt.Errorf("erro ao abrir banco: %w", err)
+	}
+	defer conn.Close()
+	fillDb(conn, data)
+	return nil
+}
+
+// MesaResult is the serialisable form of a Mesa with human-readable names.
+type MesaResult struct {
+	ID          int      `json:"id"`
+	Descricao   string   `json:"descricao"`
+	Candidatos  []string `json:"candidatos"`
+	Avaliadores []string `json:"avaliadores"`
+}
+
+// PessoaInfo carries the fields shown for non-allocated candidates.
+type PessoaInfo struct {
+	ID          int    `json:"id"`
+	Nome        string `json:"nome"`
+	EmailInsper string `json:"email_insper"`
+	Curso       string `json:"curso"`
+	Semestre    int    `json:"semestre"`
+}
+
+// AlocacaoResponse is what RunAlocacao returns to the frontend.
+type AlocacaoResponse struct {
+	Mesas           []MesaResult `json:"mesas"`
+	TotalAlocados   int          `json:"total_alocados"`
+	NaoAlocadosInfo []PessoaInfo `json:"nao_alocados_info"`
+	Pontuacao       int          `json:"pontuacao"`
+}
+
+// RunAlocacao runs the allocation algorithm and returns a serialisable result.
+func (a *App) RunAlocacao() (AlocacaoResponse, error) {
+	conn, err := openDB()
+	if err != nil {
+		return AlocacaoResponse{}, fmt.Errorf("erro ao abrir banco: %w", err)
 	}
 	defer conn.Close()
 
-	switch v := data.(type) {
-	case []Usuario:
-		fillDb(conn, data)
-	case []AvaliadorInfo:
-		fillDb(conn, data)
-	case []Restricao:
-		fillDb(conn, data)
-	default:
-		fmt.Println("Tipo de dado não suportado em fillDb", v)
+	// Run same steps as Alocar() in alocate.go (unchanged).
+	avals := carregarAvaliadores(conn)
+	hard, soft := carregarRestricoes(conn)
+	horarios := carregarHorarios(conn)
+	prefs := carregarDisponibilidades(conn, horarios)
+	mesas, porDia := gerarMesas(horarios, avals)
+	res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
+
+	// Evaluator name index from already-loaded slice.
+	avalNames := make(map[int]string, len(avals))
+	for _, av := range avals {
+		avalNames[av.ID] = av.Nome
 	}
+
+	// Query all candidates once for both name lookup and non-allocated list.
+	type pessoaRow struct {
+		ID          int
+		Nome        string
+		EmailInsper string
+		Curso       string
+		Semestre    int
+	}
+	var todasPessoas []pessoaRow
+	pessoaNames := make(map[int]string)
+
+	pRows, err := conn.Query(`SELECT id, nome, email_insper, curso, semestre FROM pessoa`)
+	if err != nil {
+		return AlocacaoResponse{}, fmt.Errorf("erro ao carregar candidatos: %w", err)
+	}
+	for pRows.Next() {
+		var p pessoaRow
+		if scanErr := pRows.Scan(&p.ID, &p.Nome, &p.EmailInsper, &p.Curso, &p.Semestre); scanErr == nil {
+			pessoaNames[p.ID] = p.Nome
+			todasPessoas = append(todasPessoas, p)
+		}
+	}
+	pRows.Close()
+
+	// Assemble mesa results (skip empty mesas).
+	var mesaResults []MesaResult
+	for _, m := range mesas {
+		if len(m.Candidatos) == 0 {
+			continue
+		}
+		mr := MesaResult{ID: m.ID, Descricao: m.Descricao}
+		for _, pid := range m.Candidatos {
+			name := pessoaNames[pid]
+			if name == "" {
+				name = fmt.Sprintf("ID %d", pid)
+			}
+			mr.Candidatos = append(mr.Candidatos, name)
+		}
+		for _, aid := range m.Avaliadores {
+			name := avalNames[aid]
+			if name == "" {
+				name = fmt.Sprintf("ID %d", aid)
+			}
+			mr.Avaliadores = append(mr.Avaliadores, name)
+		}
+		mesaResults = append(mesaResults, mr)
+	}
+	sort.Slice(mesaResults, func(i, j int) bool {
+		return mesaResults[i].ID < mesaResults[j].ID
+	})
+
+	// Build non-allocated list.
+	alocadosSet := make(map[int]bool, len(res.Alocacao))
+	for pid := range res.Alocacao {
+		alocadosSet[pid] = true
+	}
+	var naoAlocados []PessoaInfo
+	for _, p := range todasPessoas {
+		if !alocadosSet[p.ID] {
+			naoAlocados = append(naoAlocados, PessoaInfo{
+				ID:          p.ID,
+				Nome:        p.Nome,
+				EmailInsper: p.EmailInsper,
+				Curso:       p.Curso,
+				Semestre:    p.Semestre,
+			})
+		}
+	}
+
+	result := AlocacaoResponse{
+		Mesas:           mesaResults,
+		TotalAlocados:   res.Alocados,
+		NaoAlocadosInfo: naoAlocados,
+		Pontuacao:       res.Pontuacao,
+	}
+	a.lastResult = &result
+	return result, nil
 }
 
-func main() {
+// ResetApp wipes the database and clears in-memory state so the user can start over.
+func (a *App) ResetApp() error {
 	SetUp()
+	a.excelData = nil
+	a.lastResult = nil
+	a.nOpcoes = 0
+	return nil
+}
 
-	path := flag.String("file", "", "caminho para o arquivo .xlsx")
-	flag.Parse()
-	if *path == "" {
-		fmt.Println("Uso: go run main.go -file seu_arquivo.xlsx")
-		os.Exit(1)
+// ExportResultado opens a save-file dialog and writes the last allocation to an xlsx file.
+func (a *App) ExportResultado() error {
+	if a.lastResult == nil {
+		return fmt.Errorf("nenhuma alocação disponível para exportar")
 	}
 
-	data, err := os.ReadFile(*path)
+	path, err := wailsrt.SaveFileDialog(a.ctx, wailsrt.SaveDialogOptions{
+		Title:           "Salvar Resultado da Alocação",
+		DefaultFilename: "alocacao.xlsx",
+		Filters: []wailsrt.FileFilter{
+			{DisplayName: "Excel (*.xlsx)", Pattern: "*.xlsx"},
+		},
+	})
 	if err != nil {
-		fmt.Println("Erro ao ler o arquivo:", err)
-		os.Exit(1)
+		return fmt.Errorf("erro ao abrir diálogo: %w", err)
+	}
+	if path == "" {
+		return nil // user cancelled
 	}
 
-	app := NewApp()
-	mapping, err := app.SuggestMapping(data, 5)
-	if err != nil {
-		fmt.Println("Erro ao sugerir mapeamento:", err)
-		os.Exit(1)
+	f := excelize.NewFile()
+	defer f.Close()
+
+	// ── Sheet 1: Alocação ──────────────────────────────────────────────────
+	sheet1 := "Alocação"
+	f.SetSheetName("Sheet1", sheet1)
+	for i, h := range []string{"Mesa", "Candidato", "Avaliadores"} {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheet1, cell, h)
+	}
+	row := 2
+	for _, mesa := range a.lastResult.Mesas {
+		avStr := strings.Join(mesa.Avaliadores, ", ")
+		for _, cand := range mesa.Candidatos {
+			f.SetCellValue(sheet1, fmt.Sprintf("A%d", row), mesa.Descricao)
+			f.SetCellValue(sheet1, fmt.Sprintf("B%d", row), cand)
+			f.SetCellValue(sheet1, fmt.Sprintf("C%d", row), avStr)
+			row++
+		}
 	}
 
-	mappingAvaliador, err := app.SuggestMappingAvaliador()
-
-	mappingRestricao, err := app.SuggestMappingRestricao()
-
-	fmt.Println("\n")
-	fmt.Println("mapping candidatos : ", mapping)
-	fmt.Println("\n")
-	fmt.Println("mapping avaliadores : ", mappingAvaliador)
-	fmt.Println("\n")
-	fmt.Println("mapping restricao : ", mappingRestricao)
-	fmt.Println("\n")
-
-	usuarios, err := app.BuildUsuariosWithMapping(mapping)
-	if err != nil {
-		fmt.Println("Erro ao ler o arquivo:", err)
-		os.Exit(1)
+	// ── Sheet 2: Não Alocados ──────────────────────────────────────────────
+	sheet2 := "Não Alocados"
+	f.NewSheet(sheet2)
+	for i, h := range []string{"Nome", "Email Insper", "Curso", "Semestre"} {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheet2, cell, h)
 	}
-	usuarios_filtrados := FilterUniqueUsers(usuarios)
-
-	avaliadores, err := app.BuildAvaliadoresWithMapping(mappingAvaliador)
-	if err != nil {
-		fmt.Println("Erro ao ler o arquivo:", err)
-		os.Exit(1)
+	for i, p := range a.lastResult.NaoAlocadosInfo {
+		r := i + 2
+		f.SetCellValue(sheet2, fmt.Sprintf("A%d", r), p.Nome)
+		f.SetCellValue(sheet2, fmt.Sprintf("B%d", r), p.EmailInsper)
+		f.SetCellValue(sheet2, fmt.Sprintf("C%d", r), p.Curso)
+		f.SetCellValue(sheet2, fmt.Sprintf("D%d", r), p.Semestre)
 	}
-	restricao, err := app.BuildRestricoesWithMapping(mappingRestricao)
-	if err != nil {
-		fmt.Println("Erro ao ler o arquivo:", err)
-		os.Exit(1)
-	}
-	fmt.Println("\n")
-	fmt.Println("usuarios: ", usuarios)
-	fmt.Println("\n\n\n")
-	fmt.Println("avaliadores: ", avaliadores)
-	fmt.Println("\n")
-	fmt.Println("REstricao: ", restricao)
-	fmt.Println("\n")
 
-	app.Save(usuarios_filtrados)
-
-	app.Save(avaliadores)
-	app.Save(restricao)
-
-	// Alocacao
-	conn, err := sql.Open("sqlite3", "./insper.db")
-	Alocar(conn)
-
-	// out1, _ := json.MarshalIndent(mapping, "", " ")
-	// out, _ := json.MarshalIndent(usuarios_filtrados, "", "  ")
-	// out2, _ := json.MarshalIndent(duplicatedIndices, "", "  ")
-	// fmt.Println("usuarios : ", usuarios_filtrados)
-	fmt.Println("\n")
-	// fmt.Println(string(out2))
-
+	return f.SaveAs(path)
 }

@@ -15,6 +15,7 @@ function App({ setMapping }: AppProps) {
 	const [name, setName] = useState("");
 	const [fileResult, setFileResult] = useState("");
 	const [file, setFile] = useState<File | null>(null);
+	const [nOpcoes, setNOpcoes] = useState(5);
 	const updateName = (e: React.ChangeEvent<HTMLInputElement>) =>
 		setName(e.target.value);
 	const updateResultText = (result: string) => setResultText(result);
@@ -40,7 +41,7 @@ function App({ setMapping }: AppProps) {
 					// Converte o ArrayBuffer para Uint8Array
 					const data = new Uint8Array(fileData as ArrayBuffer);
 					// Chama a nova função que aceita os dados do arquivo.
-					const result = await SuggestMapping(Array.from(data), 5);
+					const result = await SuggestMapping(Array.from(data), nOpcoes);
 					console.log(result, "resultado");
 					setMapping(result); // <-- joga pro pai
 					navigate("/mapping");
@@ -95,6 +96,19 @@ function App({ setMapping }: AppProps) {
 					id="file-section"
 					className="flex flex-col items-center space-y-4 w-full pt-4 border-t border-gray-200"
 				>
+					<div className="w-full">
+						<label className="block text-sm font-medium text-gray-700 mb-1">
+							Número de opções de horário por candidato
+						</label>
+						<input
+							type="number"
+							min={1}
+							max={10}
+							value={nOpcoes}
+							onChange={(e) => setNOpcoes(Math.max(1, Math.min(10, Number(e.target.value))))}
+							className="border border-gray-300 p-2 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-300 transition"
+						/>
+					</div>
 					<label htmlFor="fileInput" className="w-full">
 						<input
 							type="file"
