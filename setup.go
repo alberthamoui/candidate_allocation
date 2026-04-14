@@ -141,11 +141,18 @@ func setupIfNeeded() {
 			UNIQUE("pessoa_id", "horario_id", "preferencia")
 			);`,
 
-		`CREATE TABLE IF NOT EXISTS "restricoes" (
+		`CREATE TABLE IF NOT EXISTS "restricoesNposso" (
 			"id" INTEGER NOT NULL UNIQUE PRIMARY KEY AUTOINCREMENT,
+			"avaliador_id" INTEGER NOT NULL,
 			"candidato_id" INTEGER NOT NULL,
-			"naoPosso" TEXT,
-			"prefiroNao" TEXT,
+			FOREIGN KEY("avaliador_id") REFERENCES avaliador("id") ON DELETE CASCADE,
+			FOREIGN KEY("candidato_id") REFERENCES "pessoa"("id") ON DELETE CASCADE);`,
+
+		`CREATE TABLE IF NOT EXISTS "restricoesPrefiroN" (
+			"id" INTEGER NOT NULL UNIQUE PRIMARY KEY AUTOINCREMENT,
+			"avaliador_id" INTEGER NOT NULL,
+			"candidato_id" INTEGER NOT NULL,
+			FOREIGN KEY("avaliador_id") REFERENCES avaliador("id") ON DELETE CASCADE,
 			FOREIGN KEY("candidato_id") REFERENCES "pessoa"("id") ON DELETE CASCADE);`,
 	}
 

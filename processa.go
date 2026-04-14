@@ -13,7 +13,6 @@ import (
 
 var (
 	reEmailPessoal = regexp.MustCompile(`^[^@]+@[^@]+\.[^@]+$`)
-	reEmailInsper  = regexp.MustCompile(`^[^@]+@al\.insper\.edu\.br$`)
 	reCPF          = regexp.MustCompile(`^\d{11}$`)
 	reNumero       = regexp.MustCompile(`^\d{9}$`)
 	reSemestre     = regexp.MustCompile(`^([1-9]|10)$`)
@@ -74,7 +73,12 @@ type ValidationResult struct {
 
 // limpa dados
 
-func processData(data []Candidato) (map[int]ValidationResult, [][]int) {
+func processData(data []Candidato, emailDomain string) (map[int]ValidationResult, [][]int) {
+	// Compila regex do email institucional dinamicamente com base no domínio configurado.
+	// Escapa o domínio para uso seguro em regex (ex: "@al.insper.edu.br" → "@al\.insper\.edu\.br").
+	escapedDomain := regexp.QuoteMeta(emailDomain)
+	reEmailInstitucional := regexp.MustCompile(`^[^@]+` + escapedDomain + `$`)
+
 	resultados := make(map[int]ValidationResult)
 
 	// 1) validação e registro de TODAS as entradas (com ou sem erros)
@@ -98,8 +102,8 @@ func processData(data []Candidato) (map[int]ValidationResult, [][]int) {
 			errs = append(errs, ErrorEntry{"semestre", "semestre inválido"})
 			entrada.Semestre = ""
 		}
-		if !reEmailInsper.MatchString(entrada.EmailInsper) {
-			errs = append(errs, ErrorEntry{"email_insper", "email_insper inválido"})
+		if !reEmailInstitucional.MatchString(entrada.EmailInsper) {
+			errs = append(errs, ErrorEntry{"email_insper", fmt.Sprintf("email institucional inválido (esperado: ...%s)", emailDomain)})
 			entrada.EmailInsper = ""
 		}
 		if !reEmailPessoal.MatchString(entrada.EmailPessoal) {

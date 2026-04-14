@@ -24,7 +24,7 @@ export function SaveUsuarios(arg1:Array<main.Usuario>):Promise<void>;
 
 export function SetupDB():Promise<void>;
 
-export function SuggestMapping(arg1:Array<number>,arg2:number):Promise<Array<main.MappingItem>>;
+export function SuggestMapping(arg1:Array<number>,arg2:number,arg3:string):Promise<Array<main.MappingItem>>;
 
 export function SuggestMappingAvaliador():Promise<Array<main.MappingItem>>;
 

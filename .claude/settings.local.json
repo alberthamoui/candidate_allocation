@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(npx tsc:*)",
+      "Bash(python -c ':*)",
+      "Bash(python:*)",
+      "Bash(go run:*)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(echo \"GO_EXIT:$?\")",
+      "Bash(echo \"TS_EXIT:$?\")",
+      "Bash(npm run *)",
+      "Bash(ls \"C:/Users/Albert/Documents/Insper/Estagio/Projetos CV/candidate_allocation/\"*.db)",
+      "Bash(sqlite3 insper.db \"SELECT * FROM pessoa WHERE nome LIKE '%Isabela%' OR nome LIKE '%Cubas%';\")",
+      "Bash(sqlite3 insper.db \"SELECT name FROM sqlite_master WHERE type='table';\")",
+      "Bash(sqlite3 insper.db ' *)",
+      "Bash(sqlite3 casoTeste.db ' *)",
+      "Bash(sqlite3 casoTeste.db \"SELECT name FROM sqlite_master WHERE type='table';\")",
+      "Bash(go vet *)"
+    ]
+  }
+}

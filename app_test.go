@@ -58,7 +58,7 @@ func TestSuggestMapping(t *testing.T) {
 
 	// Chama a função a ser testada
 
-	mappings, err := a.SuggestMapping(buf.Bytes(), 1)
+	mappings, err := a.SuggestMapping(buf.Bytes(), 1, "@al.insper.edu.br")
 	if err != nil {
 		t.Fatalf("SuggestMapping retornou um erro inesperado: %v", err)
 	}

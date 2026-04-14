@@ -46,8 +46,8 @@ export function SetupDB() {
   return window['go']['main']['App']['SetupDB']();
 }
 
-export function SuggestMapping(arg1, arg2) {
-  return window['go']['main']['App']['SuggestMapping'](arg1, arg2);
+export function SuggestMapping(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SuggestMapping'](arg1, arg2, arg3);
 }
 
 export function SuggestMappingAvaliador() {

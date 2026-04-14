@@ -139,36 +139,31 @@ func carregarAvaliadores(db *sql.DB) []*Avaliador {
 	return avals
 }
 
-func carregarRestricoes(db *sql.DB) map[int]map[int]bool {
-	rows, err := db.Query(`SELECT candidato_id, naoPosso FROM restricoes`)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rows.Close()
+func carregarRestricoes(db *sql.DB) (hard map[int]map[int]bool, soft map[int]map[int]bool) {
+	hard = make(map[int]map[int]bool)
+	soft = make(map[int]map[int]bool)
 
-	restr := make(map[int]map[int]bool)
-	for rows.Next() {
-		var cid int
-		var raw sql.NullString
-		if err := rows.Scan(&cid, &raw); err != nil {
+	loadInto := func(m map[int]map[int]bool, query string) {
+		rows, err := db.Query(query)
+		if err != nil {
 			log.Fatal(err)
 		}
-		if !raw.Valid || strings.TrimSpace(raw.String) == "" {
-			continue
-		}
-		for _, sig := range strings.Split(raw.String, ",") {
-			sig = strings.TrimSpace(strings.TrimPrefix(sig, "A"))
-			aid, err := strconv.Atoi(sig)
-			if err != nil {
-				continue
+		defer rows.Close()
+		for rows.Next() {
+			var aid, cid int
+			if err := rows.Scan(&aid, &cid); err != nil {
+				log.Fatal(err)
 			}
-			if restr[aid] == nil {
-				restr[aid] = make(map[int]bool)
+			if m[aid] == nil {
+				m[aid] = make(map[int]bool)
 			}
-			restr[aid][cid] = true
+			m[aid][cid] = true
 		}
 	}
-	return restr
+
+	loadInto(hard, `SELECT avaliador_id, candidato_id FROM restricoesNposso`)
+	loadInto(soft, `SELECT avaliador_id, candidato_id FROM restricoesPrefiroN`)
+	return
 }
 
 func gerarMesas(hmap map[int]*Horario, avals []*Avaliador) ([]*Mesa, map[int][]*Mesa) {

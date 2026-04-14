@@ -350,7 +350,7 @@ export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
 									<tr>
 										<th className="text-left px-6 py-3 font-semibold">#</th>
 										<th className="text-left px-6 py-3 font-semibold">Nome</th>
-										<th className="text-left px-6 py-3 font-semibold">Email Insper</th>
+										<th className="text-left px-6 py-3 font-semibold">Email Institucional</th>
 										<th className="text-left px-6 py-3 font-semibold">Curso</th>
 										<th className="text-left px-6 py-3 font-semibold">Semestre</th>
 									</tr>

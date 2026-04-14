@@ -16,6 +16,7 @@ function App({ setMapping }: AppProps) {
 	const [fileResult, setFileResult] = useState("");
 	const [file, setFile] = useState<File | null>(null);
 	const [nOpcoes, setNOpcoes] = useState(5);
+	const [emailDomain, setEmailDomain] = useState("@al.insper.edu.br");
 	const updateName = (e: React.ChangeEvent<HTMLInputElement>) =>
 		setName(e.target.value);
 	const updateResultText = (result: string) => setResultText(result);
@@ -41,7 +42,7 @@ function App({ setMapping }: AppProps) {
 					// Converte o ArrayBuffer para Uint8Array
 					const data = new Uint8Array(fileData as ArrayBuffer);
 					// Chama a nova função que aceita os dados do arquivo.
-					const result = await SuggestMapping(Array.from(data), nOpcoes);
+					const result = await SuggestMapping(Array.from(data), nOpcoes, emailDomain);
 					console.log(result, "resultado");
 					setMapping(result);
 					navigate("/mapping");
@@ -107,6 +108,18 @@ function App({ setMapping }: AppProps) {
 							value={nOpcoes}
 							onChange={(e) => setNOpcoes(Math.max(1, Math.min(10, Number(e.target.value))))}
 							className="border border-gray-300 p-2 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-300 transition"
+						/>
+					</div>
+					<div className="w-full">
+						<label className="block text-sm font-medium text-gray-700 mb-1">
+							Domínio do email institucional
+						</label>
+						<input
+							type="text"
+							value={emailDomain}
+							onChange={(e) => setEmailDomain(e.target.value)}
+							placeholder="@al.insper.edu.br"
+							className="border border-gray-300 p-2 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-300 transition font-mono text-sm"
 						/>
 					</div>
 					<label htmlFor="fileInput" className="w-full">
