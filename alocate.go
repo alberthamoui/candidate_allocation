@@ -1,4 +1,5 @@
 package main
+// go run example_cli.go app.go models.go mapping.go export.go alocate.go processa.go setup.go -file ./Execelteste/base_exemplo.xlsx
 
 // ==================================================
 // ============== IMPORTS E CONSTANTES ==============
@@ -8,7 +9,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"math/big"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -25,24 +25,37 @@ const (
 	MIN_AVALIADORES_POR_MESA = 5
 	MAX_AVALIADORES_POR_MESA = 5
 
-	// NUM_TENTATIVAS é o número de vezes que o algoritmo roda para buscar
-	// a melhor alocação. Aumente para melhor qualidade (mais lento).
-	NUM_TENTATIVAS = 1000
+	// ~10.000 p/seg
+	NUM_TENTATIVAS = 100_000_000
+	NOTA_MINIMA    = 100
+	SCORE_BASE     = 100
 )
+var TENTATIVA = 0
 
 // ==================================================
 // =========== CRITÉRIOS DE PONTUAÇÃO ===============
 // ==================================================
-//
 const (
-	PONTOS_OPCAO_1  = 100 // candidato alocado na 1ª opção de horário
-	PONTOS_OPCAO_2  = 70  // candidato alocado na 2ª opção de horário
-	PONTOS_OPCAO_3  = 40  // candidato alocado na 3ª opção de horário
-	PONTOS_OPCAO_4  = 10  // candidato alocado na 4ª opção de horário
-	PENALIDADE_SOFT = -20 // violação de restrição "prefiro não" por avaliador
-	PENALIDADE_HARD = -1000 // violação de restrição "não posso" por avaliador
+	PONTOS_OPCAO_1         = 0   // candidato alocado na 1ª opção de horário
+	PONTOS_OPCAO_2         = -10    // candidato alocado na 2ª opção de horário
+	PONTOS_OPCAO_3         = -30    // candidato alocado na 3ª opção de horário
+	PONTOS_OPCAO_4         = -50    // candidato alocado na 4ª opção de horário
+	PONTOS_OPCAO_5         = -70    // candidato alocado na 5ª opção de horário
+	PENALIDADE_NAO_ALOCADO = -1000 // candidato que não foi alocado
+	PENALIDADE_SOFT        = -50   // violação de restrição "prefiro não" por avaliador
+	PENALIDADE_HARD        = -1000 // violação de restrição "não posso" por avaliador
 )
 
+var MELHOR_MAP_PENALIDADES = map[string]int{
+		"opcao_1":         0,
+		"opcao_2":         0,
+		"opcao_3":         0,
+		"opcao_4":         0,
+		"opcao_5":         0,
+		"nao_alocado":     0,
+		"prefiro_nao":    0,
+		"nao_posso":      0,
+	}
 // ==================================================
 // ==================== STRUCTS =====================
 // ==================================================
@@ -77,14 +90,6 @@ type Horario struct {
 type horarioInfo struct {
 	H       *Horario
 	Pessoas []int
-}
-
-func fatorialBig(n int) *big.Int {
-	result := big.NewInt(1)
-	for i := 2; i <= n; i++ {
-		result.Mul(result, big.NewInt(int64(i)))
-	}
-	return result
 }
 
 // ==================================================
@@ -222,55 +227,22 @@ func gerarMesas(hmap map[int]*Horario, avals []*Avaliador) ([]*Mesa, map[int][]*
 }
 
 // ==================================================
-// ========= PRÉ-PROCESSAMENTO DE HORÁRIOS =========
-// ==================================================
-
-func filtrarHorariosValidos(horarios map[int]*Horario) []*Horario {
-	var valid []*Horario
-	for _, h := range horarios {
-		if len(h.Candidatos) >= MIN_PESSOAS_POR_MESA {
-			valid = append(valid, h)
-		}
-	}
-	return valid
-}
-
-func sortHorariosPorCandidatos(hs []*Horario) {
-	sort.SliceStable(hs, func(i, j int) bool {
-		return len(hs[i].Candidatos) < len(hs[j].Candidatos)
-	})
-}
-
-// ==================================================
 // ============== ALOCAÇÃO DE PESSOAS ===============
 // ==================================================
 
 func conflitante(avIDs []int, pid int, hard, soft map[int]map[int]bool) (hardBlock bool, softTouch bool) {
 	for _, av := range avIDs {
-		if hard[av][pid] { return true, true }
-		if soft[av][pid] { softTouch = true }
+		if hard[av][pid] {
+			return true, true
+		}
+		if soft[av][pid] {
+			softTouch = true
+		}
 	}
 	return false, softTouch
 }
 
-func podeAvaliar(avID, pid int, restr map[int]map[int]bool) bool {
-	return !restr[avID][pid]
-}
-
-func podeAlocarNoHorario(h *Horario, pid int, restr map[int]map[int]bool) bool {
-	for _, av := range h.Avaliadores {
-		if !podeAvaliar(av, pid, restr) {
-			return false
-		}
-	}
-	return true
-}
-
-func fazerAlocacaoMesas(
-	mesas []*Mesa, porDia map[int][]*Mesa,
-	prefs map[int][]int,
-	hard, soft map[int]map[int]bool) ResultadoAlocacao {
-
+func fazerAlocacaoMesas(mesas []*Mesa, porDia map[int][]*Mesa, prefs map[int][]int, hard, soft map[int]map[int]bool) ResultadoAlocacao {
 	aloc := make(map[int]int)
 	ocupado := make(map[int]int)
 	alocados := make(map[int]bool)
@@ -278,14 +250,20 @@ func fazerAlocacaoMesas(
 
 	for nivel := 0; nivel < 4; nivel++ {
 		for pid, pref := range prefs {
-			if alocados[pid] || len(pref) <= nivel { continue }
+			if alocados[pid] || len(pref) <= nivel {
+				continue
+			}
 			dia := pref[nivel]
 
 			var melhor *Mesa
 			for _, m := range porDia[dia] {
-				if ocupado[m.ID] >= MAX_PESSOAS_POR_MESA { continue }
+				if ocupado[m.ID] >= MAX_PESSOAS_POR_MESA {
+					continue
+				}
 				hardBlock, softTouch := conflitante(m.Avaliadores, pid, hard, soft)
-				if hardBlock { continue }
+				if hardBlock {
+					continue
+				}
 
 				if melhor == nil {
 					melhor = m // prioriza mesa SEM softTouch
@@ -296,7 +274,9 @@ func fazerAlocacaoMesas(
 					}
 				}
 			}
-			if melhor == nil { continue }
+			if melhor == nil {
+				continue
+			}
 
 			// aloca na melhor mesa encontrada
 			ocupado[melhor.ID]++
@@ -306,7 +286,6 @@ func fazerAlocacaoMesas(
 			pontos += nivel
 		}
 	}
-
 
 	// remove mesas que ficaram abaixo do mínimo
 	for _, m := range mesas {
@@ -329,13 +308,19 @@ func fazerAlocacaoMesas(
 // pontuarResultado calcula a pontuação de uma alocação com base nos
 // critérios definidos nas constantes PONTOS_OPCAO_*, PENALIDADE_SOFT e PENALIDADE_HARD.
 // Retorna um valor inteiro — quanto maior, melhor o resultado.
-func pontuarResultado(
-	res ResultadoAlocacao,
-	mesas []*Mesa,
-	prefs map[int][]int,
-	hard, soft map[int]map[int]bool,
-) int {
-	pontosNivel := []int{PONTOS_OPCAO_1, PONTOS_OPCAO_2, PONTOS_OPCAO_3, PONTOS_OPCAO_4}
+func pontuarResultado(res ResultadoAlocacao, mesas []*Mesa, prefs map[int][]int, hard, soft map[int]map[int]bool) (int, map[string]int, int) {
+	pontosNivel := []int{PONTOS_OPCAO_1, PONTOS_OPCAO_2, PONTOS_OPCAO_3, PONTOS_OPCAO_4, PONTOS_OPCAO_5}
+	var MAP_PENALIDADES = map[string]int{
+		"opcao_1":         0,
+		"opcao_2":         0,
+		"opcao_3":         0,
+		"opcao_4":         0,
+		"opcao_5":         0,
+		"nao_alocado":     0,
+		"prefiro_nao":    0,
+		"nao_posso":      0,
+	}
+	PONTOS_TOMADOS := 0
 
 	// índice mesaID -> Mesa para lookup rápido
 	mesaIdx := make(map[int]*Mesa, len(mesas))
@@ -343,10 +328,18 @@ func pontuarResultado(
 		mesaIdx[m.ID] = m
 	}
 
-	score := 0
+	score := SCORE_BASE
 	for pid, mid := range res.Alocacao {
 		m := mesaIdx[mid]
 		if m == nil {
+			continue
+		}
+
+		// Penalidade por não alocado (caso haja candidatos que não foram alocados)
+		if m.Candidatos == nil || len(m.Candidatos) == 0 {
+			score += PENALIDADE_NAO_ALOCADO
+			PONTOS_TOMADOS += PENALIDADE_NAO_ALOCADO
+			MAP_PENALIDADES["nao_alocado"] += 1
 			continue
 		}
 
@@ -355,7 +348,9 @@ func pontuarResultado(
 			if hid == m.DiaID {
 				if nivel < len(pontosNivel) {
 					score += pontosNivel[nivel]
+					PONTOS_TOMADOS += pontosNivel[nivel]
 				}
+				MAP_PENALIDADES[fmt.Sprintf("opcao_%d", nivel+1)] += 1
 				break
 			}
 		}
@@ -364,12 +359,16 @@ func pontuarResultado(
 		for _, avID := range m.Avaliadores {
 			if hard[avID][pid] {
 				score += PENALIDADE_HARD
+				MAP_PENALIDADES["nao_posso"] += 1
+				PONTOS_TOMADOS += PENALIDADE_HARD
 			} else if soft[avID][pid] {
 				score += PENALIDADE_SOFT
+				MAP_PENALIDADES["prefiro_nao"] += 1
+				PONTOS_TOMADOS += PENALIDADE_SOFT
 			}
 		}
 	}
-	return score
+	return score, MAP_PENALIDADES, PONTOS_TOMADOS
 }
 
 // copiarMesas retorna uma cópia profunda do slice de mesas.
@@ -386,26 +385,39 @@ func copiarMesas(mesas []*Mesa) []*Mesa {
 
 // fazerMelhorAlocacaoMesas executa o algoritmo NUM_TENTATIVAS vezes e retorna
 // a alocação com maior pontuação segundo os critérios definidos.
-func fazerMelhorAlocacaoMesas(
-	horarios map[int]*Horario,
-	avals []*Avaliador,
-	prefs map[int][]int,
-	hard, soft map[int]map[int]bool,
-) (ResultadoAlocacao, []*Mesa) {
+func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool) (ResultadoAlocacao, []*Mesa) {
 	var melhorRes ResultadoAlocacao
 	var melhorMesas []*Mesa
 	melhorScore := -(1 << 62)
 
-	for i := 0; i < NUM_TENTATIVAS; i++ {
+	// DEFINIR POR NÚMERO DE TENTATIVAS
+	// for i := 0; i < NUM_TENTATIVAS; i++ {
+	// 	mesas, porDia := gerarMesas(horarios, avals)
+	// 	res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
+	// 	score := pontuarResultado(res, mesas, prefs, hard, soft)
+
+	// 	if melhorMesas == nil || score > melhorScore {
+	// 		melhorScore = score
+	// 		melhorRes = res
+	// 		melhorMesas = copiarMesas(mesas)
+	// 	}
+	// }
+
+	// DEFINIR POR NOTA MINIMA
+	for melhorScore < NOTA_MINIMA {
 		mesas, porDia := gerarMesas(horarios, avals)
 		res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
-		score := pontuarResultado(res, mesas, prefs, hard, soft)
-
+		score, MAP_PENALIDADES, PONTOS_TOMADOS := pontuarResultado(res, mesas, prefs, hard, soft)
+		
+		TENTATIVA++
 		if melhorMesas == nil || score > melhorScore {
+			MELHOR_MAP_PENALIDADES = MAP_PENALIDADES
 			melhorScore = score
 			melhorRes = res
 			melhorMesas = copiarMesas(mesas)
 		}
+		
+		fmt.Printf("Tentativa %d: melhor pontuação até agora = %d  - Penalidades: %v - Pontos Tomados: %d\n", TENTATIVA, melhorScore, MELHOR_MAP_PENALIDADES, PONTOS_TOMADOS)
 	}
 	return melhorRes, melhorMesas
 }
@@ -420,9 +432,7 @@ func fazerMelhorAlocacaoMesas(
 // 	var mu sync.Mutex
 // 	ctx, cancel := context.WithCancel(ctx)
 // 	defer cancel()
-
 // 	g, ctx := errgroup.WithContext(ctx)
-
 // 	for w := 0; w < workers; w++ {
 // 		g.Go(func() error {
 // 			for perm := range permCh {
@@ -439,7 +449,6 @@ func fazerMelhorAlocacaoMesas(
 // 			return nil
 // 		})
 // 	}
-
 // 	g.Go(func() error {
 // 		defer close(permCh)
 // 		count := 0
@@ -467,7 +476,6 @@ func fazerMelhorAlocacaoMesas(
 // 		heap(horarios, len(horarios))
 // 		return nil
 // 	})
-
 // 	_ = g.Wait()
 // 	return best
 // }
@@ -476,72 +484,9 @@ func fazerMelhorAlocacaoMesas(
 // ============= IMPRESSÃO DOS RESULTADOS ===========
 // ==================================================
 
-func imprimirAlocacao(aloc map[int]int, horarios map[int]*Horario) int {
-	fmt.Println("\n---- ALOCAÇÃO FINAL ----")
-	alSet := make(map[int]bool) // quem foi alocado
-
-	for pid, hid := range aloc {
-		h := horarios[hid]
-		fmt.Printf("Pessoa %d -> %s (horário ID %d)\n", pid, h.Descricao, h.ID)
-		alSet[pid] = true
-	}
-
-	// --- calcula totais únicos --------------------------
-	totalSet := make(map[int]bool)
-	for _, h := range horarios {
-		for _, pid := range h.Candidatos {
-			totalSet[pid] = true
-		}
-	}
-
-	var nao []int
-	for pid := range totalSet {
-		if !alSet[pid] {
-			nao = append(nao, pid)
-		}
-	}
-	// ----------------------------------------------------
-
-	fmt.Printf("\n---- NÃO ALOCADOS (%d) ----\n%v\n", len(nao), nao)
-	return len(totalSet)
-}
-
-func imprimirHorariosPreenchidos(horarios map[int]*Horario, aloc map[int]int, total int) {
-	fmt.Printf("\n---- HORÁRIOS PREENCHIDOS ----\nCandidatos totais: %d\n\n", total)
-
-	m := make(map[int][]int)
-	for pid, hid := range aloc {
-		m[hid] = append(m[hid], pid)
-	}
-
-	var preenchidos []horarioInfo
-	for _, h := range horarios {
-		if ps := m[h.ID]; len(ps) > 0 {
-			preenchidos = append(preenchidos, horarioInfo{h, ps})
-		}
-	}
-
-	sort.Slice(preenchidos, func(i, j int) bool {
-		return len(preenchidos[i].Pessoas) > len(preenchidos[j].Pessoas)
-	})
-
-	for _, inf := range preenchidos {
-		fmt.Printf(
-			"Horário %d (%s): %d pessoas – %v | Avaliadores: %v\n",
-			inf.H.ID, inf.H.Descricao,
-			len(inf.Pessoas), inf.Pessoas,
-			inf.H.Avaliadores,
-		)
-	}
-}
-
 func imprimirAlocacaoMesas(aloc map[int]int, mesas map[int]*Mesa, prefs map[int][]int) int {
 	fmt.Println("\n---- ALOCAÇÃO FINAL ----")
-	alocados := make(map[int]bool)
-	for pid, mid := range aloc {
-		fmt.Printf("Pessoa %d -> %s (Mesa %d)\n", pid, mesas[mid].Descricao, mid)
-		alocados[pid] = true
-	}
+	// alocados := make(map[int]bool)
 
 	// total único de pessoas que possuem preferência registrada
 	totalSet := make(map[int]bool)
@@ -551,7 +496,7 @@ func imprimirAlocacaoMesas(aloc map[int]int, mesas map[int]*Mesa, prefs map[int]
 
 	var nao []int
 	for pid := range totalSet {
-		if !alocados[pid] {
+		if _, exists := aloc[pid]; !exists {
 			nao = append(nao, pid)
 		}
 	}
@@ -632,7 +577,7 @@ func Alocar(db *sql.DB) {
 	fmt.Println("---- DADOS CARREGADOS ----")
 
 	// --- busca a melhor alocação em NUM_TENTATIVAS tentativas ---------------
-	fmt.Printf("\n---- BUSCANDO MELHOR ALOCAÇÃO (%d tentativas) ----\n", NUM_TENTATIVAS)
+	fmt.Printf("\n---- BUSCANDO MELHOR ALOCAÇÃO (%d tentativas) || (%d nota minima) ----\n", NUM_TENTATIVAS, NOTA_MINIMA)
 	start := time.Now()
 	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft)
 
@@ -653,5 +598,8 @@ func Alocar(db *sql.DB) {
 	total := imprimirAlocacaoMesas(res.Alocacao, mapMesa, prefs)
 	imprimirMesasPreenchidas(mesas, res.Alocacao, total)
 
-	fmt.Printf("\nTempo total de execução: %v\n", time.Since(start))
+	pontuacao, MAP_PENALIDADES, _ := pontuarResultado(res, mesas, prefs, hard, soft)
+	fmt.Printf("\nPontuação da melhor alocação: %d\n", pontuacao)
+	fmt.Printf("Tempo total de execução: %v\n", time.Since(start))
+	fmt.Printf("Penalidades detalhadas: %v\n", MAP_PENALIDADES)
 }
