@@ -418,12 +418,15 @@ func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, pre
 			score, MAP_PENALIDADES, PONTOS_TOMADOS := pontuarResultado(res, mesas, prefs, hard, soft)
 			TENTATIVA++
 
-			if (melhorMesas == nil || score > melhorScore) || (melhorScore >= SCORE_BASE) {
+			if melhorMesas == nil || score > melhorScore {
 				MELHOR_MAP_PENALIDADES = MAP_PENALIDADES
 				melhorScore = score
 				melhorRes = res
 				melhorMesas = copiarMesas(mesas)
 				melhorPontosTomados = PONTOS_TOMADOS
+			}
+			if melhorScore >= SCORE_BASE { // Mesmo por tentativas, se atingir a pontuação máxima possível, pode parar
+				break
 			}
 			if TENTATIVA%PRINT_QUANTIDADE == 0 {
 				fmt.Printf("Tentativa %d: melhor pontuação até agora = %d  - Penalidades: %v - Pontos Tomados: %d\n", TENTATIVA, melhorScore, MELHOR_MAP_PENALIDADES, melhorPontosTomados)
