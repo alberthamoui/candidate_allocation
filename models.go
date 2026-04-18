@@ -46,6 +46,8 @@ type UsuariosResponse struct {
 // MesaResult é a forma serializável de uma Mesa com nomes legíveis.
 type MesaResult struct {
 	ID          int      `json:"id"`
+	DiaID       int      `json:"dia_id"`
+	DiaNome     string   `json:"dia_nome"`
 	Descricao   string   `json:"descricao"`
 	Candidatos  []string `json:"candidatos"`
 	Avaliadores []string `json:"avaliadores"`

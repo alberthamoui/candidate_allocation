@@ -31,7 +31,7 @@ const (
 	INFINITY = math.MaxInt
 
 	// CONFIGURAÇÕES DE EXECUÇÃO
-	NUM_TENTATIVAS = 1_000
+	NUM_TENTATIVAS = 10_000
 	NOTA_MINIMA    = 95
 	SCORE_BASE     = 100
 	NOTA_TENTATIVA = "tentativa"
@@ -401,8 +401,8 @@ func copiarMesas(mesas []*Mesa) []*Mesa {
 // fazerMelhorAlocacaoMesas executa até MAX_RESTARTS rodadas independentes de
 // NUM_TENTATIVAS cada, mantendo o melhor resultado global entre todas as rodadas.
 // Para quando TARGET_SCORE é atingido ou todas as rodadas se esgotam.
-// onProgress é chamado a cada tentativa: recebe (tentativaLocal, totalTentativas, melhorScoreLocal).
-func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool, onProgress func(int, int, int)) (ResultadoAlocacao, []*Mesa) {
+// onProgress recebe (tentativaGlobal, totalGlobal, melhorScore, restartAtual).
+func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool, onProgress func(int, int, int, int)) (ResultadoAlocacao, []*Mesa) {
 	var globalRes ResultadoAlocacao
 	var globalMesas []*Mesa
 	globalScore := -INFINITY
@@ -413,6 +413,9 @@ func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, pre
 
 	fmt.Printf("INICIANDO ALOCAÇÃO: MODO %s | MAX_RESTARTS=%d | NUM_TENTATIVAS=%d | TARGET_SCORE=%d\n",
 		strings.ToUpper(NOTA_TENTATIVA), MAX_RESTARTS, NUM_TENTATIVAS, TARGET_SCORE)
+
+	totalGlobal := MAX_RESTARTS * NUM_TENTATIVAS
+	globalTentativa := 0
 
 	for restart := 1; restart <= MAX_RESTARTS; restart++ {
 		localScore := -INFINITY
@@ -426,9 +429,8 @@ func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, pre
 		fmt.Printf("\n[Restart %d/%d] Iniciando | Melhor global até agora: %d\n",
 			restart, MAX_RESTARTS, globalScore)
 
-		tentativa := 0
 		for t := 1; t <= NUM_TENTATIVAS; t++ {
-			tentativa++
+			globalTentativa++
 
 			mesas, porDia := gerarMesas(horarios, avals)
 			res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
@@ -442,21 +444,21 @@ func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, pre
 			}
 
 			if onProgress != nil {
-				onProgress(tentativa, NUM_TENTATIVAS, localScore)
+				onProgress(globalTentativa, totalGlobal, localScore, restart)
 			}
 
-			if tentativa%PRINT_QUANTIDADE == 0 {
-				fmt.Printf("[Restart %d | T %d/%d] Local: %d | Global: %d | Pen: %v | PontosTomados: %d\n",
-					restart, tentativa, NUM_TENTATIVAS, localScore, globalScore, localPenalidades, pontosTomados)
+			if globalTentativa%PRINT_QUANTIDADE == 0 {
+				fmt.Printf("[Restart %d | T %d/%d global] Local: %d | Global: %d | Pen: %v | PontosTomados: %d\n",
+					restart, globalTentativa, totalGlobal, localScore, globalScore, localPenalidades, pontosTomados)
 			}
 
 			if MAX_NAO_ALOCADOS > localPenalidades["nao_alocado"] && localScore >= SCORE_BASE {
-				fmt.Printf("[Restart %d | T %d] Solução perfeita encontrada (score=%d)!\n", restart, tentativa, localScore)
+				fmt.Printf("[Restart %d | T %d] Solução perfeita encontrada (score=%d)!\n", restart, globalTentativa, localScore)
 				break
 			}
 
 			if NOTA_TENTATIVA == "nota" && localScore >= NOTA_MINIMA {
-				fmt.Printf("[Restart %d | T %d] Nota mínima %d atingida.\n", restart, tentativa, NOTA_MINIMA)
+				fmt.Printf("[Restart %d | T %d] Nota mínima %d atingida.\n", restart, globalTentativa, NOTA_MINIMA)
 				break
 			}
 		}

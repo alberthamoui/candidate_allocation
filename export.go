@@ -29,24 +29,16 @@ func (s *Session) RunAlocacao(emit func(any)) (AlocacaoResponse, error) {
 
 	emit(progressEvent{Step: "Iniciando algoritmo...", Pct: 25, Total: NUM_TENTATIVAS * MAX_RESTARTS})
 
-	onProgress := func(tentativa, total, score int) {
-		if tentativa%PRINT_QUANTIDADE != 0 {
+	onProgress := func(globalTentativa, total, score, restart int) {
+		if globalTentativa%PRINT_QUANTIDADE != 0 {
 			return
 		}
-		var pct int
-		if total > 0 {
-			pct = 25 + (tentativa*70)/total
-		} else {
-			if score < 0 {
-				pct = 25
-			} else {
-				pct = 25 + (score*70)/NOTA_MINIMA
-			}
-		}
+		pct := 25 + (globalTentativa*70)/total
 		if pct > 95 {
 			pct = 95
 		}
-		emit(progressEvent{Step: "Calculando...", Pct: pct, Tentativa: tentativa, Total: total, Score: score})
+		step := fmt.Sprintf("Calculando... (tentativa %d/%d)", restart, MAX_RESTARTS)
+		emit(progressEvent{Step: step, Pct: pct, Tentativa: globalTentativa, Total: total, Score: score})
 	}
 
 	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft, onProgress)
@@ -87,12 +79,17 @@ func (s *Session) RunAlocacao(emit func(any)) (AlocacaoResponse, error) {
 	}
 	pRows.Close()
 
+	diaNames := make(map[int]string, len(horarios))
+	for _, h := range horarios {
+		diaNames[h.ID] = h.Descricao
+	}
+
 	var mesaResults []MesaResult
 	for _, m := range mesas {
 		if len(m.Candidatos) == 0 {
 			continue
 		}
-		mr := MesaResult{ID: m.ID, Descricao: m.Descricao}
+		mr := MesaResult{ID: m.ID, DiaID: m.DiaID, DiaNome: diaNames[m.DiaID], Descricao: m.Descricao}
 		for _, pid := range m.Candidatos {
 			name := pessoaNames[pid]
 			if name == "" {
@@ -149,35 +146,133 @@ func (s *Session) ExportResultado() ([]byte, error) {
 	f := excelize.NewFile()
 	defer f.Close()
 
-	sheet1 := "Alocação"
-	f.SetSheetName("Sheet1", sheet1)
+	// --- Aba "Lista": uma linha por candidato (mesmo formato anterior) ---
+	lista := "Lista"
+	f.SetSheetName("Sheet1", lista)
 	for i, h := range []string{"Mesa", "Candidato", "Avaliadores"} {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		f.SetCellValue(sheet1, cell, h)
+		f.SetCellValue(lista, cell, h)
 	}
 	row := 2
 	for _, mesa := range s.lastResult.Mesas {
 		avStr := strings.Join(mesa.Avaliadores, ", ")
 		for _, cand := range mesa.Candidatos {
-			f.SetCellValue(sheet1, fmt.Sprintf("A%d", row), mesa.Descricao)
-			f.SetCellValue(sheet1, fmt.Sprintf("B%d", row), cand)
-			f.SetCellValue(sheet1, fmt.Sprintf("C%d", row), avStr)
+			f.SetCellValue(lista, fmt.Sprintf("A%d", row), mesa.Descricao)
+			f.SetCellValue(lista, fmt.Sprintf("B%d", row), cand)
+			f.SetCellValue(lista, fmt.Sprintf("C%d", row), avStr)
 			row++
 		}
 	}
 
-	sheet2 := "Não Alocados"
-	f.NewSheet(sheet2)
+	// --- Aba "Alocação": grade 2D agrupada por dia ---
+	aloc := "Alocação"
+	f.NewSheet(aloc)
+
+	// Agrupar mesas por DiaID, preservando ordem de ID
+	type diaGroup struct {
+		DiaID   int
+		DiaNome string
+		Mesas   []MesaResult
+	}
+	diaOrder := []int{}
+	diaMap := map[int]*diaGroup{}
+	for _, mr := range s.lastResult.Mesas {
+		if _, ok := diaMap[mr.DiaID]; !ok {
+			diaOrder = append(diaOrder, mr.DiaID)
+			diaMap[mr.DiaID] = &diaGroup{DiaID: mr.DiaID, DiaNome: mr.DiaNome}
+		}
+		diaMap[mr.DiaID].Mesas = append(diaMap[mr.DiaID].Mesas, mr)
+	}
+
+	curRow := 1
+	set := func(col, r int, val any) {
+		cell, _ := excelize.CoordinatesToCellName(col, r)
+		f.SetCellValue(aloc, cell, val)
+	}
+
+	for _, diaID := range diaOrder {
+		grp := diaMap[diaID]
+
+		// Capitaliza primeira letra do nome do dia
+		nome := grp.DiaNome
+		if len(nome) > 0 {
+			nome = strings.ToUpper(nome[:1]) + nome[1:]
+		}
+		set(1, curRow, nome)
+		curRow++
+
+		mesas := grp.Mesas
+		for i := 0; i < len(mesas); i += 2 {
+			left := mesas[i]
+			hasRight := i+1 < len(mesas)
+
+			// Cabeçalho: "Mesa X" / "Mesa Y"
+			set(1, curRow, left.Descricao)
+			if hasRight {
+				set(7, curRow, mesas[i+1].Descricao)
+			}
+			curRow++
+
+			// Subcabeçalho
+			set(1, curRow, "AVALIADORES")
+			set(2, curRow, "CANDIDATOS")
+			if hasRight {
+				set(7, curRow, "AVALIADORES")
+				set(8, curRow, "CANDIDATOS")
+			}
+			curRow++
+
+			// Linhas de dados
+			nRows := len(left.Avaliadores)
+			if len(left.Candidatos) > nRows {
+				nRows = len(left.Candidatos)
+			}
+			if hasRight {
+				right := mesas[i+1]
+				if len(right.Avaliadores) > nRows {
+					nRows = len(right.Avaliadores)
+				}
+				if len(right.Candidatos) > nRows {
+					nRows = len(right.Candidatos)
+				}
+			}
+			for k := 0; k < nRows; k++ {
+				if k < len(left.Avaliadores) {
+					set(1, curRow, left.Avaliadores[k])
+				}
+				if k < len(left.Candidatos) {
+					set(2, curRow, left.Candidatos[k])
+				}
+				if hasRight {
+					right := mesas[i+1]
+					if k < len(right.Avaliadores) {
+						set(7, curRow, right.Avaliadores[k])
+					}
+					if k < len(right.Candidatos) {
+						set(8, curRow, right.Candidatos[k])
+					}
+				}
+				curRow++
+			}
+
+			// Linha em branco entre pares de mesas
+			curRow++
+		}
+	}
+
+	// --- Aba "Não Alocados" ---
+	nao := "Não Alocados"
+	f.NewSheet(nao)
 	for i, h := range []string{"Nome", "Email Institucional", "Curso", "Semestre"} {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		f.SetCellValue(sheet2, cell, h)
+		f.SetCellValue(nao, cell, h)
 	}
 	for i, p := range s.lastResult.NaoAlocadosInfo {
 		r := i + 2
-		f.SetCellValue(sheet2, fmt.Sprintf("A%d", r), p.Nome)
-		f.SetCellValue(sheet2, fmt.Sprintf("B%d", r), p.EmailInsper)
-		f.SetCellValue(sheet2, fmt.Sprintf("C%d", r), p.Curso)
-		f.SetCellValue(sheet2, fmt.Sprintf("D%d", r), p.Semestre)
+		f.SetCellValue(nao, fmt.Sprintf("A%d", r), p.Nome)
+		f.SetCellValue(nao, fmt.Sprintf("B%d", r), p.EmailInsper)
+		f.SetCellValue(nao, fmt.Sprintf("C%d", r), p.Curso)
+		f.SetCellValue(nao, fmt.Sprintf("D%d", r), p.Semestre)
 	}
 
 	buf, err := f.WriteToBuffer()
