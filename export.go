@@ -10,19 +10,73 @@ import (
 	wailsrt "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+type progressEvent struct {
+	Step      string `json:"step"`
+	Pct       int    `json:"pct"`
+	Tentativa int    `json:"tentativa"`
+	Total     int    `json:"total"`
+	Score     int    `json:"score"`
+}
+
+func (a *App) emitProgress(step string, pct, tentativa, total, score int) {
+	wailsrt.EventsEmit(a.ctx, "alocacao:progress", progressEvent{
+		Step:      step,
+		Pct:       pct,
+		Tentativa: tentativa,
+		Total:     total,
+		Score:     score,
+	})
+}
+
 // RunAlocacao executa o algoritmo de alocação e retorna o resultado serializável.
 func (a *App) RunAlocacao() (AlocacaoResponse, error) {
+	a.emitProgress("Conectando ao banco...", 5, 0, 0, 0)
 	conn, err := openDB()
 	if err != nil {
 		return AlocacaoResponse{}, fmt.Errorf("erro ao abrir banco: %w", err)
 	}
 	defer conn.Close()
 
+	a.emitProgress("Carregando dados...", 15, 0, 0, 0)
 	avals := carregarAvaliadores(conn)
 	hard, soft := carregarRestricoes(conn)
 	horarios := carregarHorarios(conn)
 	prefs := carregarDisponibilidades(conn, horarios)
-	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft)
+
+	a.emitProgress("Iniciando algoritmo...", 25, 0, NUM_TENTATIVAS, 0)
+
+	// Emite progresso a cada PRINT_QUANTIDADE iterações para não sobrecarregar o IPC
+	onProgress := func(tentativa, total, score int) {
+		if tentativa%PRINT_QUANTIDADE != 0 {
+			return
+		}
+		var pct int
+		if total > 0 {
+			pct = 25 + (tentativa*70)/total
+		} else {
+			// modo "nota": progresso baseado na proximidade da nota mínima
+			if score < 0 {
+				pct = 25
+			} else {
+				pct = 25 + (score*70)/NOTA_MINIMA
+			}
+		}
+		if pct > 95 {
+			pct = 95
+		}
+		a.emitProgress("Calculando...", pct, tentativa, total, score)
+	}
+
+	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft, onProgress)
+
+	a.emitProgress("Finalizando...", 97, 0, 0, 0)
+
+	mapMesa := make(map[int]*Mesa, len(mesas))
+	for _, m := range mesas {
+		mapMesa[m.ID] = m
+	}
+	total := imprimirAlocacaoMesas(res.Alocacao, mapMesa, prefs)
+	imprimirMesasPreenchidas(mesas, res.Alocacao, total)
 
 	avalNames := make(map[int]string, len(avals))
 	for _, av := range avals {

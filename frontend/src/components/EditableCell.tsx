@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { PencilIcon } from "@heroicons/react/24/outline";
-/* Enhanced EditableCell Component */
+
 interface EditableCellProps {
 	value: string | number;
 	onChange: (v: string) => void;
 	hasError?: boolean;
 }
-/* Enhanced EditableCell Component - Reduced padding */
+
 export function EditableCell({
 	value,
 	onChange,

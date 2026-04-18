@@ -9,11 +9,11 @@ import {
 	TrashIcon,
 	ArrowLeftIcon,
 } from "@heroicons/react/24/outline";
-import { UserCard } from "./UserCard";
-import { SaveUsuarios } from "../wailsjs/go/main/App";
+import { UserCard } from "../components/UserCard";
+import { SaveUsuarios } from "../../wailsjs/go/main/App";
 
 interface ErrorItem {
-	field: string; // field name (e.g. "cpf", "email_insper")
+	field: string;
 	msg: string;
 }
 
@@ -50,7 +50,6 @@ export default function VerifyUserPage({
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
 	const [saveSuccess, setSaveSuccess] = useState(false);
 
-	// Uses reactive dupGroups (not the stale prop) so resolved groups are excluded.
 	const getGroup = (id: number) =>
 		dupGroups.find((g) => g.includes(id)) || [];
 
@@ -67,7 +66,6 @@ export default function VerifyUserPage({
 	const flattenDup = () => dupGroups.flat();
 	const isDuplicate = (id: number) => flattenDup().includes(id);
 
-	// ... existing action functions ...
 	function acceptOne(group: number[], idAccepted: number) {
 		setAcceptedIds((s) => new Set(s).add(idAccepted));
 		const others = group.filter((id) => id !== idAccepted);
@@ -105,6 +103,7 @@ export default function VerifyUserPage({
 		});
 		setDupGroups((prev) => prev.filter((g) => g !== group));
 	}
+
 	function deleteUser(userId: number) {
 		setEditedUsers((prev) => {
 			const next = { ...prev };
@@ -116,7 +115,6 @@ export default function VerifyUserPage({
 			next.delete(userId);
 			return next;
 		});
-		// Remove from duplicate groups if exists
 		setDupGroups((prev) =>
 			prev
 				.map((group) => group.filter((id) => id !== userId))
@@ -230,7 +228,6 @@ export default function VerifyUserPage({
 			<div className="bg-white shadow-sm border-b">
 				<div className="max-w-7xl mx-auto px-6 py-6">
 					<div className="flex items-center justify-between gap-4 flex-wrap">
-						{/* Left: back + title */}
 						<div className="flex items-center space-x-4">
 							<button
 								onClick={() => navigate(-1)}
@@ -250,7 +247,6 @@ export default function VerifyUserPage({
 							</div>
 						</div>
 
-						{/* Right: stats + top save button */}
 						<div className="flex items-center space-x-3 text-sm flex-wrap gap-y-2">
 							<div className="flex items-center space-x-2 bg-red-100 px-3 py-2 rounded-lg">
 								<div className="w-3 h-3 bg-red-500 rounded-full"></div>
@@ -309,7 +305,6 @@ export default function VerifyUserPage({
 								transition={{ delay: idx * 0.1 }}
 								className="border-2 border-red-300 rounded-2xl shadow-xl bg-white overflow-hidden"
 							>
-								{/* Group header */}
 								<div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-6">
 									<div className="flex justify-between items-center">
 										<div>
@@ -345,7 +340,6 @@ export default function VerifyUserPage({
 									</div>
 								</div>
 
-								{/* User cards */}
 								<div className="p-8">
 									<div className="flex flex-wrap gap-6 justify-center">
 										{group.map((id) =>
@@ -403,6 +397,7 @@ export default function VerifyUserPage({
 						</div>
 					</div>
 				</div>
+
 				{/* Save button at the bottom */}
 				<div className="flex justify-center pt-8">
 					<motion.button

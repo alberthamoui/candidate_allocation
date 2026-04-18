@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import wailsLogo from "./assets/wails.png";
-import "./App.css";
-import { Greet, SuggestMapping } from "../wailsjs/go/main/App";
+import wailsLogo from "../assets/wails.png";
+import { Greet, SuggestMapping } from "../../wailsjs/go/main/App";
 
 interface AppProps {
 	setMapping: (data: any) => void;
 }
 
-function App({ setMapping }: AppProps) {
+function Home({ setMapping }: AppProps) {
 	const [resultText, setResultText] = useState(
 		"Por favor, digite seu nome abaixo 👇"
 	);
@@ -39,9 +38,7 @@ function App({ setMapping }: AppProps) {
 						setFileResult("Erro ao ler o arquivo.");
 						return;
 					}
-					// Converte o ArrayBuffer para Uint8Array
 					const data = new Uint8Array(fileData as ArrayBuffer);
-					// Chama a nova função que aceita os dados do arquivo.
 					const result = await SuggestMapping(Array.from(data), nOpcoes, emailDomain);
 					console.log(result, "resultado");
 					setMapping(result);
@@ -150,4 +147,4 @@ function App({ setMapping }: AppProps) {
 	);
 }
 
-export default App;
+export default Home;

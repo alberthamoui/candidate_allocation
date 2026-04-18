@@ -2,19 +2,19 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-	NoSymbolIcon,
+	UserGroupIcon,
 	ExclamationTriangleIcon,
 	ArrowLeftIcon,
 } from "@heroicons/react/24/outline";
-import { SuggestMappingRestricao } from "../wailsjs/go/main/App";
+import { SuggestMappingAvaliador } from "../../wailsjs/go/main/App";
 
-interface UploadRestricaoProps {
-	setMappingRestricao: (data: any) => void;
+interface UploadAvaliadorProps {
+	setMappingAvaliador: (data: any) => void;
 }
 
-export default function UploadRestricao({
-	setMappingRestricao,
-}: UploadRestricaoProps) {
+export default function UploadAvaliador({
+	setMappingAvaliador,
+}: UploadAvaliadorProps) {
 	const navigate = useNavigate();
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -23,12 +23,12 @@ export default function UploadRestricao({
 		setLoading(true);
 		setError(null);
 		try {
-			const result = await SuggestMappingRestricao();
-			setMappingRestricao(result);
-			navigate("/mapping-restricao");
+			const result = await SuggestMappingAvaliador();
+			setMappingAvaliador(result);
+			navigate("/mapping-avaliador");
 		} catch (err) {
 			setError(
-				"Erro ao processar restrições. Certifique-se de que o arquivo possui uma aba de restrições. Detalhe: " +
+				"Erro ao processar avaliadores. Certifique-se de que o arquivo possui uma aba de avaliadores. Detalhe: " +
 					err
 			);
 		} finally {
@@ -45,25 +45,25 @@ export default function UploadRestricao({
 						Passo 1 ✓
 					</span>
 					<span className="text-gray-300">→</span>
-					<span className="bg-green-100 text-green-700 font-semibold px-3 py-1 rounded-full">
-						Passo 2 ✓
+					<span className="bg-blue-600 text-white font-semibold px-3 py-1 rounded-full">
+						Passo 2
 					</span>
 					<span className="text-gray-300">→</span>
-					<span className="bg-blue-600 text-white font-semibold px-3 py-1 rounded-full">
+					<span className="bg-gray-100 text-gray-400 font-semibold px-3 py-1 rounded-full">
 						Passo 3
 					</span>
 				</div>
 
-				<NoSymbolIcon className="w-20 h-20 text-blue-500" />
+				<UserGroupIcon className="w-20 h-20 text-blue-500" />
 
 				<div className="text-center space-y-2">
 					<h1 className="text-3xl font-bold text-blue-700">
-						Restrições
+						Avaliadores
 					</h1>
 					<p className="text-gray-500 text-sm">
-						As restrições serão lidas da aba{" "}
+						Os avaliadores serão lidos da aba{" "}
 						<span className="font-semibold text-gray-700">
-							Restricao
+							Avaliadores
 						</span>{" "}
 						do mesmo arquivo já carregado.
 					</p>
@@ -87,7 +87,7 @@ export default function UploadRestricao({
 							: "bg-blue-600 hover:bg-blue-700"
 					}`}
 				>
-					{loading ? "Processando..." : "Processar Restrições"}
+					{loading ? "Processando..." : "Processar Avaliadores"}
 				</motion.button>
 
 				<button

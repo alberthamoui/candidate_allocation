@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { EventsOn, EventsOff } from "../../wailsjs/runtime/runtime";
 import {
 	CheckCircleIcon,
 	ExclamationTriangleIcon,
@@ -11,7 +12,7 @@ import {
 	ArrowLeftIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { RunAlocacao, ExportResultado, ResetApp } from "../wailsjs/go/main/App";
+import { RunAlocacao, ExportResultado, ResetApp } from "../../wailsjs/go/main/App";
 
 interface PessoaInfo {
 	id: number;
@@ -48,15 +49,33 @@ export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
 	const [exportDone, setExportDone] = useState(false);
 	const [confirmReset, setConfirmReset] = useState(false);
 	const [resetting, setResetting] = useState(false);
+	const [progressPct, setProgressPct] = useState(0);
+	const [progressStep, setProgressStep] = useState("Iniciando...");
+	const progressRef = useRef(0);
 
 	useEffect(() => {
+		EventsOn("alocacao:progress", (e: { step: string; pct: number; tentativa: number; total: number; score: number }) => {
+			// Nunca deixa a barra andar para trás
+			if (e.pct > progressRef.current) {
+				progressRef.current = e.pct;
+				setProgressPct(e.pct);
+			}
+			setProgressStep(e.step);
+		});
+
 		RunAlocacao()
 			.then((data) => {
+				setProgressPct(100);
+				setProgressStep("Concluído!");
 				setResult(data);
 				setAlocacaoResult(data);
 			})
 			.catch((err) => setError("Erro ao executar alocação: " + err))
-			.finally(() => setLoading(false));
+			.finally(() => {
+				setTimeout(() => setLoading(false), 400);
+			});
+
+		return () => { EventsOff("alocacao:progress"); };
 	}, []);
 
 	async function handleExport() {
@@ -88,9 +107,25 @@ export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
 	if (loading) {
 		return (
 			<div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-100 flex items-center justify-center">
-				<div className="bg-white shadow-xl rounded-2xl p-10 text-center space-y-4">
-					<div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-					<p className="text-gray-600 font-medium">Executando alocação...</p>
+				<div className="bg-white shadow-xl rounded-2xl p-10 w-full max-w-md space-y-6">
+					<div className="text-center space-y-1">
+						<h2 className="text-xl font-bold text-gray-800">Executando Alocação</h2>
+						<p className="text-sm text-gray-500">{progressStep}</p>
+					</div>
+
+					{/* Barra de progresso */}
+					<div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
+						<motion.div
+							className="h-4 rounded-full bg-gradient-to-r from-blue-500 to-green-500"
+							initial={{ width: "0%" }}
+							animate={{ width: `${progressPct}%` }}
+							transition={{ duration: 0.3, ease: "easeOut" }}
+						/>
+					</div>
+
+					<div className="text-sm text-gray-500 text-center">
+						{progressPct}%
+					</div>
 				</div>
 			</div>
 		);
@@ -212,9 +247,7 @@ export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
 									<span>{naoAlocados.length} não alocados</span>
 								</div>
 							)}
-							<div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg font-semibold">
-								Pontuação: {result.pontuacao}
-							</div>
+
 						</div>
 
 						{/* Action buttons */}

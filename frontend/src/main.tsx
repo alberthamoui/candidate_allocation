@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import App from "./App";
-import MappingPage from "./MappingPage";
-import UploadAvaliador from "./UploadAvaliador";
-import UploadRestricao from "./UploadRestricao";
-import Resultado from "./Resultado";
+import Home from "./pages/Home";
+import MappingPage from "./pages/MappingPage";
+import UploadAvaliador from "./pages/UploadAvaliador";
+import UploadRestricao from "./pages/UploadRestricao";
+import Resultado from "./pages/Resultado";
 import "./index.css";
-import VerifyUserPage from "./VerifyUsers";
+import VerifyUserPage from "./pages/VerifyUsers";
 import {
 	BuildUsuariosWithMapping,
 	BuildAvaliadoresWithMapping,
@@ -37,7 +37,7 @@ function Root() {
 					<Route
 						path="/"
 						element={
-							<App
+							<Home
 								setMapping={setMappingData}
 							/>
 						}

@@ -24,22 +24,28 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// ~10.000 p/seg
 const (
+	// CONFIGURAÇÕES DE ALOCAÇÃO
 	MESAS_POR_HORARIO        = 5
 	MIN_PESSOAS_POR_MESA     = 5
 	MAX_PESSOAS_POR_MESA     = 8
 	MIN_AVALIADORES_POR_MESA = 5
 	MAX_AVALIADORES_POR_MESA = 5
-
-	// ~10.000 p/seg
 	INFINITY = math.MaxInt
+
+	// CONFIGURAÇÕES DE EXECUÇÃO
 	NUM_TENTATIVAS = 100_000
 	NOTA_MINIMA    = 95
 	SCORE_BASE     = 100
 	PARALELO = false
-	// NOTA_TENTATIVA = "nota"
 	NOTA_TENTATIVA = "tentativa"
+	// NOTA_TENTATIVA = "nota"
 
+	// CONTROLE DE NAO ALOCADOS
+	MAX_NAO_ALOCADOS = 1
+
+	// CONTROLE DE LOGS
 	PRINT_QUANTIDADE = 1000
 )
 
@@ -400,63 +406,73 @@ func copiarMesas(mesas []*Mesa) []*Mesa {
 }
 
 // fazerMelhorAlocacaoMesas delega para gerarPermutacoesParalelo.
-func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool) (ResultadoAlocacao, []*Mesa) {
+// onProgress é chamado a cada iteração: recebe (tentativaAtual, totalTentativas, melhorScore).
+// Passe nil para desabilitar (ex.: uso CLI).
+func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool, onProgress func(int, int, int)) (ResultadoAlocacao, []*Mesa) {
 	// if PARALELO{
 	// 	return gerarPermutacoesParalelo(horarios, avals, prefs, hard, soft)
 	// }
-	var melhorRes ResultadoAlocacao
+var melhorRes ResultadoAlocacao
 	var melhorMesas []*Mesa
 	melhorScore := -INFINITY
-	
 	var melhorPontosTomados int
-	if NOTA_TENTATIVA == "tentativa" {
-		// DEFINIR POR QUANTIDADE DE TENTATIVA
-		fmt.Print("DEFINIR POR QUANTIDADE DE TENTATIVA\n")
-		for range NUM_TENTATIVAS {
-			mesas, porDia := gerarMesas(horarios, avals)
-			res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
-			score, MAP_PENALIDADES, PONTOS_TOMADOS := pontuarResultado(res, mesas, prefs, hard, soft)
-			TENTATIVA++
+	
+	localTentativa := 0
+	fmt.Printf("INICIANDO ALOCAÇÃO: MODO %s\n", strings.ToUpper(NOTA_TENTATIVA))
 
-			if melhorMesas == nil || score > melhorScore {
-				MELHOR_MAP_PENALIDADES = MAP_PENALIDADES
-				melhorScore = score
-				melhorRes = res
-				melhorMesas = copiarMesas(mesas)
-				melhorPontosTomados = PONTOS_TOMADOS
-			}
-			if melhorScore >= SCORE_BASE { // Mesmo por tentativas, se atingir a pontuação máxima possível, pode parar
+	for {
+		// Executa a lógica de alocação
+		mesas, porDia := gerarMesas(horarios, avals)
+		res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
+		score, MAP_PENALIDADES, PONTOS_TOMADOS := pontuarResultado(res, mesas, prefs, hard, soft)
+
+		TENTATIVA++
+		localTentativa++
+
+		// 2. Atualiza o melhor resultado
+		if melhorMesas == nil || score > melhorScore {
+			MELHOR_MAP_PENALIDADES = MAP_PENALIDADES
+			melhorScore = score
+			melhorRes = res
+			melhorMesas = copiarMesas(mesas)
+			melhorPontosTomados = PONTOS_TOMADOS
+		}
+
+		// 3. Feedback de progresso
+		totalEsperado := -1
+		if NOTA_TENTATIVA == "tentativa" {
+			totalEsperado = NUM_TENTATIVAS
+		}
+		
+		if onProgress != nil {
+			onProgress(localTentativa, totalEsperado, melhorScore)
+		}
+
+		if TENTATIVA%PRINT_QUANTIDADE == 0 {
+			fmt.Printf("Tentativa %d: melhor pontuação = %d - Penalidades: %v - Pontos Tomados: %d\n", TENTATIVA, melhorScore, MELHOR_MAP_PENALIDADES, melhorPontosTomados)
+		}
+
+		// 4. Condições de Parada
+		if MAX_NAO_ALOCADOS > MELHOR_MAP_PENALIDADES["nao_alocado"] {
+			if melhorScore >= SCORE_BASE {
 				break
 			}
-			if TENTATIVA%PRINT_QUANTIDADE == 0 {
-				fmt.Printf("Tentativa %d: melhor pontuação até agora = %d  - Penalidades: %v - Pontos Tomados: %d\n", TENTATIVA, melhorScore, MELHOR_MAP_PENALIDADES, melhorPontosTomados)
+	
+			// Condição específica: Modo Tentativa
+			if NOTA_TENTATIVA == "tentativa" && localTentativa >= NUM_TENTATIVAS {
+				break
 			}
-		}
-	} else if NOTA_TENTATIVA == "nota" {
-		// DEFINIR POR NOTA MINIMA
-		fmt.Print("DEFINIR POR NOTA MINIMA\n")
-		for melhorScore < NOTA_MINIMA {
-			mesas, porDia := gerarMesas(horarios, avals)
-			res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
-			score, MAP_PENALIDADES, PONTOS_TOMADOS := pontuarResultado(res, mesas, prefs, hard, soft)
-
-			TENTATIVA++
-			if melhorMesas == nil || score > melhorScore {
-				MELHOR_MAP_PENALIDADES = MAP_PENALIDADES
-				melhorScore = score
-				melhorRes = res
-				melhorMesas = copiarMesas(mesas)
-				melhorPontosTomados = PONTOS_TOMADOS
-			}
-			if TENTATIVA%PRINT_QUANTIDADE == 0 {
-				fmt.Printf("Tentativa %d: melhor pontuação até agora = %d  - Penalidades: %v - Pontos Tomados: %d\n", TENTATIVA, melhorScore, MELHOR_MAP_PENALIDADES, melhorPontosTomados)
+	
+			// Condição específica: Modo Nota
+			if NOTA_TENTATIVA == "nota" && melhorScore >= NOTA_MINIMA {
+				break
 			}
 		}
 	}
-	fmt.Printf("Tentativa %d: melhor pontuação até agora = %d  - Penalidades: %v - Pontos Tomados: %d\n", TENTATIVA, melhorScore, MELHOR_MAP_PENALIDADES, melhorPontosTomados)
+
+	fmt.Printf("Finalizado na Tentativa %d: Melhor score = %d\n", TENTATIVA, melhorScore)
 	return melhorRes, melhorMesas
 }
-
 
 // ==================================================
 // ===== GERADOR DE PERMUTAÇÕES (PARALELIZADO) ======
@@ -619,7 +635,7 @@ func Alocar(db *sql.DB) {
 	// --- busca a melhor alocação em NUM_TENTATIVAS tentativas ---------------
 	fmt.Printf("\n---- BUSCANDO MELHOR ALOCAÇÃO (%d tentativas) || (%d nota minima) ----\n", NUM_TENTATIVAS, NOTA_MINIMA)
 	start := time.Now()
-	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft)
+	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft, nil)
 
 	fmt.Println("\n---- MESAS GERADAS (melhor resultado) ----")
 	for _, m := range mesas {
