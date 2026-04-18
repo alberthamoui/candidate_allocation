@@ -12,10 +12,10 @@ import (
 
 // SuggestMapping lê o cabeçalho da primeira aba do Excel e sugere
 // um mapeamento automático entre colunas e campos de Usuario.
-func (a *App) SuggestMapping(data []byte, quantidade_opcoes int, emailDomain string) ([]MappingItem, error) {
-	a.excelData = data
-	a.nOpcoes = quantidade_opcoes
-	a.emailDomain = emailDomain
+func (s *Session) SuggestMapping(data []byte, quantidade_opcoes int, emailDomain string) ([]MappingItem, error) {
+	s.excelData = data
+	s.nOpcoes = quantidade_opcoes
+	s.emailDomain = emailDomain
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
 	if err != nil {
@@ -50,8 +50,8 @@ func (a *App) SuggestMapping(data []byte, quantidade_opcoes int, emailDomain str
 
 // SuggestMappingAvaliador lê o cabeçalho da segunda aba do Excel e sugere
 // um mapeamento automático para campos de AvaliadorInfo.
-func (a *App) SuggestMappingAvaliador() ([]MappingItem, error) {
-	readerData := bytes.NewReader(a.excelData)
+func (s *Session) SuggestMappingAvaliador() ([]MappingItem, error) {
+	readerData := bytes.NewReader(s.excelData)
 	file, err := excelize.OpenReader(readerData)
 	if err != nil {
 		return nil, err
@@ -83,8 +83,8 @@ func (a *App) SuggestMappingAvaliador() ([]MappingItem, error) {
 
 // SuggestMappingRestricao lê o cabeçalho da terceira aba do Excel e sugere
 // um mapeamento automático para campos de Restricao.
-func (a *App) SuggestMappingRestricao() ([]MappingItem, error) {
-	readerData := bytes.NewReader(a.excelData)
+func (s *Session) SuggestMappingRestricao() ([]MappingItem, error) {
+	readerData := bytes.NewReader(s.excelData)
 	file, err := excelize.OpenReader(readerData)
 	if err != nil {
 		return nil, err
@@ -158,9 +158,9 @@ func ProcessMapping(items []string) ([]MappingItem, error) {
 
 // BuildUsuariosWithMapping lê a primeira aba do Excel aplicando o mapeamento
 // fornecido e retorna usuários validados e índices de duplicatas.
-func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResponse, error) {
-	data := a.excelData
-	nOpcoes := a.nOpcoes
+func (s *Session) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResponse, error) {
+	data := s.excelData
+	nOpcoes := s.nOpcoes
 	readerData := bytes.NewReader(data)
 	file, err := excelize.OpenReader(readerData)
 	if err != nil {
@@ -219,18 +219,18 @@ func (a *App) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResp
 		}
 		users = append(users, u)
 	}
-	users_limpo, duplicatedIndices := processData(users, a.emailDomain)
+	users_limpo, duplicatedIndices := processData(users, s.emailDomain)
 
 	return UsuariosResponse{Usuarios: users_limpo, Duplicates: duplicatedIndices}, nil
 }
 
 // BuildAvaliadoresWithMapping lê a segunda aba do Excel aplicando o mapeamento fornecido.
-func (a *App) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]AvaliadorInfo, error) {
-	if a.excelData == nil {
+func (s *Session) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]AvaliadorInfo, error) {
+	if s.excelData == nil {
 		return nil, fmt.Errorf("dados do Excel ainda não carregados")
 	}
 
-	reader := bytes.NewReader(a.excelData)
+	reader := bytes.NewReader(s.excelData)
 	file, err := excelize.OpenReader(reader)
 	if err != nil {
 		return nil, fmt.Errorf("erro abrindo excel: %w", err)
@@ -280,8 +280,8 @@ func (a *App) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Avaliad
 }
 
 // BuildRestricoesWithMapping lê a terceira aba do Excel aplicando o mapeamento fornecido.
-func (a *App) BuildRestricoesWithMapping(mappingItems []MappingItem) ([]Restricao, error) {
-	readerData := bytes.NewReader(a.excelData)
+func (s *Session) BuildRestricoesWithMapping(mappingItems []MappingItem) ([]Restricao, error) {
+	readerData := bytes.NewReader(s.excelData)
 	file, err := excelize.OpenReader(readerData)
 	if err != nil {
 		return nil, err

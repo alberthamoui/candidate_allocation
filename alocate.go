@@ -7,18 +7,14 @@ package main
 // ==================================================
 
 import (
-	// "context"
 	"database/sql"
 	"fmt"
 	"log"
 	"math"
 	"math/rand"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
-	// "sync"
-	// "sync/atomic"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -35,12 +31,15 @@ const (
 	INFINITY = math.MaxInt
 
 	// CONFIGURAÇÕES DE EXECUÇÃO
-	NUM_TENTATIVAS = 100_000
+	NUM_TENTATIVAS = 1_000
 	NOTA_MINIMA    = 95
 	SCORE_BASE     = 100
-	PARALELO = false
 	NOTA_TENTATIVA = "tentativa"
 	// NOTA_TENTATIVA = "nota"
+
+	// MULTI-START
+	MAX_RESTARTS = 40
+	TARGET_SCORE = 95
 
 	// CONTROLE DE NAO ALOCADOS
 	MAX_NAO_ALOCADOS = 1
@@ -48,8 +47,6 @@ const (
 	// CONTROLE DE LOGS
 	PRINT_QUANTIDADE = 1000
 )
-
-var TENTATIVA = 0
 
 // ==================================================
 // =========== CRITÉRIOS DE PONTUAÇÃO ===============
@@ -64,17 +61,6 @@ const (
 	PENALIDADE_NAO_ALOCADO = -1000 // candidato que não foi alocado
 	PENALIDADE_HARD        = -1000 // violação de restrição "não posso" por avaliador
 )
-
-var MELHOR_MAP_PENALIDADES = map[string]int{
-	"opcao_1":     0,
-	"opcao_2":     0,
-	"opcao_3":     0,
-	"opcao_4":     0,
-	"opcao_5":     0,
-	"nao_alocado": 0,
-	"prefiro_nao": 0,
-	"nao_posso":   0,
-}
 
 // ==================================================
 // ==================== STRUCTS =====================
@@ -263,13 +249,20 @@ func conflitante(avIDs []int, pid int, hard, soft map[int]map[int]bool) (hardBlo
 }
 
 func fazerAlocacaoMesas(mesas []*Mesa, porDia map[int][]*Mesa, prefs map[int][]int, hard, soft map[int]map[int]bool) ResultadoAlocacao {
+	pids := make([]int, 0, len(prefs))
+	for pid := range prefs {
+		pids = append(pids, pid)
+	}
+
 	aloc := make(map[int]int)
 	ocupado := make(map[int]int)
 	alocados := make(map[int]bool)
 	pontos := 0
 
 	for nivel := 0; nivel < 4; nivel++ {
-		for pid, pref := range prefs {
+		rand.Shuffle(len(pids), func(i, j int) { pids[i], pids[j] = pids[j], pids[i] })
+		for _, pid := range pids {
+			pref := prefs[pid]
 			if alocados[pid] || len(pref) <= nivel {
 				continue
 			}
@@ -405,131 +398,90 @@ func copiarMesas(mesas []*Mesa) []*Mesa {
 	return copia
 }
 
-// fazerMelhorAlocacaoMesas delega para gerarPermutacoesParalelo.
-// onProgress é chamado a cada iteração: recebe (tentativaAtual, totalTentativas, melhorScore).
-// Passe nil para desabilitar (ex.: uso CLI).
+// fazerMelhorAlocacaoMesas executa até MAX_RESTARTS rodadas independentes de
+// NUM_TENTATIVAS cada, mantendo o melhor resultado global entre todas as rodadas.
+// Para quando TARGET_SCORE é atingido ou todas as rodadas se esgotam.
+// onProgress é chamado a cada tentativa: recebe (tentativaLocal, totalTentativas, melhorScoreLocal).
 func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool, onProgress func(int, int, int)) (ResultadoAlocacao, []*Mesa) {
-	// if PARALELO{
-	// 	return gerarPermutacoesParalelo(horarios, avals, prefs, hard, soft)
-	// }
-var melhorRes ResultadoAlocacao
-	var melhorMesas []*Mesa
-	melhorScore := -INFINITY
-	var melhorPontosTomados int
-	
-	localTentativa := 0
-	fmt.Printf("INICIANDO ALOCAÇÃO: MODO %s\n", strings.ToUpper(NOTA_TENTATIVA))
+	var globalRes ResultadoAlocacao
+	var globalMesas []*Mesa
+	globalScore := -INFINITY
+	globalPenalidades := map[string]int{
+		"opcao_1": 0, "opcao_2": 0, "opcao_3": 0, "opcao_4": 0, "opcao_5": 0,
+		"nao_alocado": 0, "prefiro_nao": 0, "nao_posso": 0,
+	}
 
-	for {
-		// Executa a lógica de alocação
-		mesas, porDia := gerarMesas(horarios, avals)
-		res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
-		score, MAP_PENALIDADES, PONTOS_TOMADOS := pontuarResultado(res, mesas, prefs, hard, soft)
+	fmt.Printf("INICIANDO ALOCAÇÃO: MODO %s | MAX_RESTARTS=%d | NUM_TENTATIVAS=%d | TARGET_SCORE=%d\n",
+		strings.ToUpper(NOTA_TENTATIVA), MAX_RESTARTS, NUM_TENTATIVAS, TARGET_SCORE)
 
-		TENTATIVA++
-		localTentativa++
-
-		// 2. Atualiza o melhor resultado
-		if melhorMesas == nil || score > melhorScore {
-			MELHOR_MAP_PENALIDADES = MAP_PENALIDADES
-			melhorScore = score
-			melhorRes = res
-			melhorMesas = copiarMesas(mesas)
-			melhorPontosTomados = PONTOS_TOMADOS
+	for restart := 1; restart <= MAX_RESTARTS; restart++ {
+		localScore := -INFINITY
+		var localRes ResultadoAlocacao
+		var localMesas []*Mesa
+		localPenalidades := map[string]int{
+			"opcao_1": 0, "opcao_2": 0, "opcao_3": 0, "opcao_4": 0, "opcao_5": 0,
+			"nao_alocado": 0, "prefiro_nao": 0, "nao_posso": 0,
 		}
 
-		// 3. Feedback de progresso
-		totalEsperado := -1
-		if NOTA_TENTATIVA == "tentativa" {
-			totalEsperado = NUM_TENTATIVAS
-		}
-		
-		if onProgress != nil {
-			onProgress(localTentativa, totalEsperado, melhorScore)
-		}
+		fmt.Printf("\n[Restart %d/%d] Iniciando | Melhor global até agora: %d\n",
+			restart, MAX_RESTARTS, globalScore)
 
-		if TENTATIVA%PRINT_QUANTIDADE == 0 {
-			fmt.Printf("Tentativa %d: melhor pontuação = %d - Penalidades: %v - Pontos Tomados: %d\n", TENTATIVA, melhorScore, MELHOR_MAP_PENALIDADES, melhorPontosTomados)
-		}
+		tentativa := 0
+		for t := 1; t <= NUM_TENTATIVAS; t++ {
+			tentativa++
 
-		// 4. Condições de Parada
-		if MAX_NAO_ALOCADOS > MELHOR_MAP_PENALIDADES["nao_alocado"] {
-			if melhorScore >= SCORE_BASE {
+			mesas, porDia := gerarMesas(horarios, avals)
+			res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
+			score, mapPen, pontosTomados := pontuarResultado(res, mesas, prefs, hard, soft)
+
+			if localMesas == nil || score > localScore {
+				localScore = score
+				localRes = res
+				localMesas = copiarMesas(mesas)
+				localPenalidades = mapPen
+			}
+
+			if onProgress != nil {
+				onProgress(tentativa, NUM_TENTATIVAS, localScore)
+			}
+
+			if tentativa%PRINT_QUANTIDADE == 0 {
+				fmt.Printf("[Restart %d | T %d/%d] Local: %d | Global: %d | Pen: %v | PontosTomados: %d\n",
+					restart, tentativa, NUM_TENTATIVAS, localScore, globalScore, localPenalidades, pontosTomados)
+			}
+
+			if MAX_NAO_ALOCADOS > localPenalidades["nao_alocado"] && localScore >= SCORE_BASE {
+				fmt.Printf("[Restart %d | T %d] Solução perfeita encontrada (score=%d)!\n", restart, tentativa, localScore)
 				break
 			}
-	
-			// Condição específica: Modo Tentativa
-			if NOTA_TENTATIVA == "tentativa" && localTentativa >= NUM_TENTATIVAS {
+
+			if NOTA_TENTATIVA == "nota" && localScore >= NOTA_MINIMA {
+				fmt.Printf("[Restart %d | T %d] Nota mínima %d atingida.\n", restart, tentativa, NOTA_MINIMA)
 				break
 			}
-	
-			// Condição específica: Modo Nota
-			if NOTA_TENTATIVA == "nota" && melhorScore >= NOTA_MINIMA {
-				break
-			}
+		}
+
+		fmt.Printf("[Restart %d] Concluído | Score local: %d | Penalidades: %v\n",
+			restart, localScore, localPenalidades)
+
+		if localMesas != nil && localScore > globalScore {
+			globalScore = localScore
+			globalRes = localRes
+			globalMesas = localMesas
+			globalPenalidades = localPenalidades
+			fmt.Printf("[Restart %d] *** Novo melhor global: %d ***\n", restart, globalScore)
+		}
+
+		if globalScore >= TARGET_SCORE {
+			fmt.Printf("\nTarget score %d atingido no restart %d. Encerrando.\n", TARGET_SCORE, restart)
+			break
 		}
 	}
 
-	fmt.Printf("Finalizado na Tentativa %d: Melhor score = %d\n", TENTATIVA, melhorScore)
-	return melhorRes, melhorMesas
+	fmt.Printf("\nFinalizado | Melhor score global: %d | Penalidades: %v\n", globalScore, globalPenalidades)
+	return globalRes, globalMesas
 }
 
-// ==================================================
-// ===== GERADOR DE PERMUTAÇÕES (PARALELIZADO) ======
-// ==================================================
-// func gerarPermutacoesParalelo(horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool) (ResultadoAlocacao, []*Mesa) {
-// 	workers := runtime.NumCPU()
-// 	var mu sync.Mutex
-// 	var melhorRes ResultadoAlocacao
-// 	var melhorMesas []*Mesa
-// 	melhorScore := -(1 << 62)
-// 	ctx, cancel := context.WithCancel(context.Background())
-// 	defer cancel()
-// 	var contador atomic.Int64
-// 	var wg sync.WaitGroup
-// 	for w := 0; w < workers; w++ {
-// 		wg.Add(1)
-// 		go func() {
-// 			defer wg.Done()
-// 			for {
-// 				select {
-// 				case <-ctx.Done():
-// 					return
-// 				default:
-// 				}
-// 				t := int(contador.Add(1))
-// 				if NOTA_TENTATIVA == "nota" && t > NUM_TENTATIVAS {
-// 					cancel()
-// 					return
-// 				}
-// 				mesas, porDia := gerarMesas(horarios, avals)
-// 				res := fazerAlocacaoMesas(mesas, porDia, prefs, hard, soft)
-// 				score, mapPen, pontosTomados := pontuarResultado(res, mesas, prefs, hard, soft)
-// 				mu.Lock()
-// 				atualizado := false
-// 				if melhorMesas == nil || score > melhorScore {
-// 					melhorScore = score
-// 					melhorRes = res
-// 					melhorMesas = copiarMesas(mesas)
-// 					MELHOR_MAP_PENALIDADES = mapPen
-// 					TENTATIVA = t
-// 					atualizado = true
-// 				}
-// 				localScore := melhorScore
-// 				mu.Unlock()
-// 				if atualizado {
-// 					fmt.Printf("Tentativa %d: novo melhor = %d | Penalidades: %v | Pontos Tomados: %d\n", t, localScore, mapPen, pontosTomados)
-// 				}
-// 				if NOTA_TENTATIVA == "tentativa" && localScore >= NOTA_MINIMA {
-// 					cancel()
-// 					return
-// 				}
-// 			}
-// 		}()
-// 	}
-// 	wg.Wait()
-// 	return melhorRes, melhorMesas
-// }
 
 // ==================================================
 // ============= IMPRESSÃO DOS RESULTADOS ===========
@@ -625,11 +577,6 @@ func Alocar(db *sql.DB) {
 	horarios := carregarHorarios(db)
 	prefs := carregarDisponibilidades(db, horarios)
 
-	if PARALELO {
-		fmt.Printf("Executando em modo paralelo com %d workers\n", runtime.NumCPU())
-	}else{
-		fmt.Println("Executando em modo sequencial")
-	}
 	fmt.Println("---- DADOS CARREGADOS ----")
 
 	// --- busca a melhor alocação em NUM_TENTATIVAS tentativas ---------------

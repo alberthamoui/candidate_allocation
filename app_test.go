@@ -2,8 +2,7 @@ package main
 
 import (
 	"bytes"
-	"context"
-
+	"database/sql"
 	"reflect"
 	"testing"
 
@@ -11,11 +10,12 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// setupApp inicializa o App para os testes.
-func setupApp() *App {
-	a := NewApp()
-	a.startup(context.Background())
-	return a
+// setupSession cria uma sessão de teste com banco em memória.
+func setupSession() *Session {
+	db, _ := sql.Open("sqlite3", ":memory:")
+	db.SetMaxOpenConns(1)
+	setupConn(db)
+	return &Session{db: db, emailDomain: "@al.insper.edu.br"}
 }
 
 // createMockExcelFile cria um arquivo Excel em memória para testes.
@@ -44,7 +44,7 @@ func createMockExcelFile(data [][]interface{}) (*bytes.Buffer, error) {
 }
 
 func TestSuggestMapping(t *testing.T) {
-	a := setupApp()
+	a := setupSession()
 
 	// Cria um arquivo Excel de mock
 	excelData := [][]interface{}{
@@ -111,7 +111,7 @@ func TestProcessMapping(t *testing.T) {
 }
 
 func TestBuildUsuariosWithMapping(t *testing.T) {
-	a := setupApp()
+	a := setupSession()
 
 	// Cria um arquivo Excel de mock
 	excelData := [][]interface{}{

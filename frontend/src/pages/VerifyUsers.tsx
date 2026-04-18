@@ -10,7 +10,7 @@ import {
 	ArrowLeftIcon,
 } from "@heroicons/react/24/outline";
 import { UserCard } from "../components/UserCard";
-import { SaveUsuarios } from "../../wailsjs/go/main/App";
+import { saveUsuarios } from "../api";
 
 interface ErrorItem {
 	field: string;
@@ -159,7 +159,7 @@ export default function VerifyUserPage({
 		);
 
 		try {
-			await SaveUsuarios(usuariosParaSalvar);
+			await saveUsuarios(usuariosParaSalvar);
 			setSaveSuccess(true);
 			setTimeout(() => navigate("/upload-avaliador"), 1500);
 		} catch (err) {

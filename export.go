@@ -1,15 +1,14 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
-	wailsrt "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// progressEvent é enviado via SSE durante a execução do algoritmo.
 type progressEvent struct {
 	Step      string `json:"step"`
 	Pct       int    `json:"pct"`
@@ -18,34 +17,18 @@ type progressEvent struct {
 	Score     int    `json:"score"`
 }
 
-func (a *App) emitProgress(step string, pct, tentativa, total, score int) {
-	wailsrt.EventsEmit(a.ctx, "alocacao:progress", progressEvent{
-		Step:      step,
-		Pct:       pct,
-		Tentativa: tentativa,
-		Total:     total,
-		Score:     score,
-	})
-}
+// RunAlocacao executa o algoritmo na sessão e retorna o resultado.
+// emit é chamado com eventos progressEvent e, ao final, com o resultado completo.
+func (s *Session) RunAlocacao(emit func(any)) (AlocacaoResponse, error) {
+	emit(progressEvent{Step: "Carregando dados...", Pct: 15})
 
-// RunAlocacao executa o algoritmo de alocação e retorna o resultado serializável.
-func (a *App) RunAlocacao() (AlocacaoResponse, error) {
-	a.emitProgress("Conectando ao banco...", 5, 0, 0, 0)
-	conn, err := openDB()
-	if err != nil {
-		return AlocacaoResponse{}, fmt.Errorf("erro ao abrir banco: %w", err)
-	}
-	defer conn.Close()
+	avals := carregarAvaliadores(s.db)
+	hard, soft := carregarRestricoes(s.db)
+	horarios := carregarHorarios(s.db)
+	prefs := carregarDisponibilidades(s.db, horarios)
 
-	a.emitProgress("Carregando dados...", 15, 0, 0, 0)
-	avals := carregarAvaliadores(conn)
-	hard, soft := carregarRestricoes(conn)
-	horarios := carregarHorarios(conn)
-	prefs := carregarDisponibilidades(conn, horarios)
+	emit(progressEvent{Step: "Iniciando algoritmo...", Pct: 25, Total: NUM_TENTATIVAS * MAX_RESTARTS})
 
-	a.emitProgress("Iniciando algoritmo...", 25, 0, NUM_TENTATIVAS, 0)
-
-	// Emite progresso a cada PRINT_QUANTIDADE iterações para não sobrecarregar o IPC
 	onProgress := func(tentativa, total, score int) {
 		if tentativa%PRINT_QUANTIDADE != 0 {
 			return
@@ -54,7 +37,6 @@ func (a *App) RunAlocacao() (AlocacaoResponse, error) {
 		if total > 0 {
 			pct = 25 + (tentativa*70)/total
 		} else {
-			// modo "nota": progresso baseado na proximidade da nota mínima
 			if score < 0 {
 				pct = 25
 			} else {
@@ -64,12 +46,11 @@ func (a *App) RunAlocacao() (AlocacaoResponse, error) {
 		if pct > 95 {
 			pct = 95
 		}
-		a.emitProgress("Calculando...", pct, tentativa, total, score)
+		emit(progressEvent{Step: "Calculando...", Pct: pct, Tentativa: tentativa, Total: total, Score: score})
 	}
 
 	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft, onProgress)
-
-	a.emitProgress("Finalizando...", 97, 0, 0, 0)
+	emit(progressEvent{Step: "Finalizando...", Pct: 97})
 
 	mapMesa := make(map[int]*Mesa, len(mesas))
 	for _, m := range mesas {
@@ -93,7 +74,7 @@ func (a *App) RunAlocacao() (AlocacaoResponse, error) {
 	var todasPessoas []pessoaRow
 	pessoaNames := make(map[int]string)
 
-	pRows, err := conn.Query(`SELECT id, nome, email_insper, curso, semestre FROM pessoa`)
+	pRows, err := s.db.Query(`SELECT id, nome, email_insper, curso, semestre FROM pessoa`)
 	if err != nil {
 		return AlocacaoResponse{}, fmt.Errorf("erro ao carregar candidatos: %w", err)
 	}
@@ -155,34 +136,19 @@ func (a *App) RunAlocacao() (AlocacaoResponse, error) {
 		NaoAlocadosInfo: naoAlocados,
 		Pontuacao:       res.Pontuacao,
 	}
-	a.lastResult = &result
+	s.lastResult = &result
 	return result, nil
 }
 
-// ExportResultado abre um diálogo de salvar e grava a última alocação em xlsx.
-func (a *App) ExportResultado() error {
-	if a.lastResult == nil {
-		return fmt.Errorf("nenhuma alocação disponível para exportar")
-	}
-
-	path, err := wailsrt.SaveFileDialog(a.ctx, wailsrt.SaveDialogOptions{
-		Title:           "Salvar Resultado da Alocação",
-		DefaultFilename: "alocacao.xlsx",
-		Filters: []wailsrt.FileFilter{
-			{DisplayName: "Excel (*.xlsx)", Pattern: "*.xlsx"},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("erro ao abrir diálogo: %w", err)
-	}
-	if path == "" {
-		return nil // usuário cancelou
+// ExportResultado gera os bytes do arquivo .xlsx com a última alocação.
+func (s *Session) ExportResultado() ([]byte, error) {
+	if s.lastResult == nil {
+		return nil, fmt.Errorf("nenhuma alocação disponível para exportar")
 	}
 
 	f := excelize.NewFile()
 	defer f.Close()
 
-	// ── Aba 1: Alocação ──────────────────────────────────────────────────
 	sheet1 := "Alocação"
 	f.SetSheetName("Sheet1", sheet1)
 	for i, h := range []string{"Mesa", "Candidato", "Avaliadores"} {
@@ -190,7 +156,7 @@ func (a *App) ExportResultado() error {
 		f.SetCellValue(sheet1, cell, h)
 	}
 	row := 2
-	for _, mesa := range a.lastResult.Mesas {
+	for _, mesa := range s.lastResult.Mesas {
 		avStr := strings.Join(mesa.Avaliadores, ", ")
 		for _, cand := range mesa.Candidatos {
 			f.SetCellValue(sheet1, fmt.Sprintf("A%d", row), mesa.Descricao)
@@ -200,14 +166,13 @@ func (a *App) ExportResultado() error {
 		}
 	}
 
-	// ── Aba 2: Não Alocados ───────────────────────────────────────────────
 	sheet2 := "Não Alocados"
 	f.NewSheet(sheet2)
 	for i, h := range []string{"Nome", "Email Institucional", "Curso", "Semestre"} {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		f.SetCellValue(sheet2, cell, h)
 	}
-	for i, p := range a.lastResult.NaoAlocadosInfo {
+	for i, p := range s.lastResult.NaoAlocadosInfo {
 		r := i + 2
 		f.SetCellValue(sheet2, fmt.Sprintf("A%d", r), p.Nome)
 		f.SetCellValue(sheet2, fmt.Sprintf("B%d", r), p.EmailInsper)
@@ -215,10 +180,9 @@ func (a *App) ExportResultado() error {
 		f.SetCellValue(sheet2, fmt.Sprintf("D%d", r), p.Semestre)
 	}
 
-	return f.SaveAs(path)
-}
-
-// openDB abre a conexão com o banco de dados SQLite.
-func openDB() (*sql.DB, error) {
-	return sql.Open("sqlite3", "./insper.db")
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { EventsOn, EventsOff } from "../../wailsjs/runtime/runtime";
 import {
 	CheckCircleIcon,
 	ExclamationTriangleIcon,
@@ -12,29 +11,7 @@ import {
 	ArrowLeftIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { RunAlocacao, ExportResultado, ResetApp } from "../../wailsjs/go/main/App";
-
-interface PessoaInfo {
-	id: number;
-	nome: string;
-	email_insper: string;
-	curso: string;
-	semestre: number;
-}
-
-interface MesaResult {
-	id: number;
-	descricao: string;
-	candidatos: string[];
-	avaliadores: string[];
-}
-
-interface AlocacaoResponse {
-	mesas: MesaResult[];
-	total_alocados: number;
-	nao_alocados_info: PessoaInfo[];
-	pontuacao: number;
-}
+import { startAlocacao, downloadExcel, resetSession, AlocacaoResponse } from "../api";
 
 interface ResultadoProps {
 	setAlocacaoResult: (data: AlocacaoResponse | null) => void;
@@ -54,38 +31,37 @@ export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
 	const progressRef = useRef(0);
 
 	useEffect(() => {
-		EventsOn("alocacao:progress", (e: { step: string; pct: number; tentativa: number; total: number; score: number }) => {
-			// Nunca deixa a barra andar para trás
-			if (e.pct > progressRef.current) {
-				progressRef.current = e.pct;
-				setProgressPct(e.pct);
-			}
-			setProgressStep(e.step);
-		});
-
-		RunAlocacao()
-			.then((data) => {
+		const es = startAlocacao(
+			(ev) => {
+				if (ev.pct !== undefined && ev.pct > progressRef.current) {
+					progressRef.current = ev.pct;
+					setProgressPct(ev.pct);
+				}
+				if (ev.step) setProgressStep(ev.step);
+			},
+			(result) => {
 				setProgressPct(100);
 				setProgressStep("Concluído!");
-				setResult(data);
-				setAlocacaoResult(data);
-			})
-			.catch((err) => setError("Erro ao executar alocação: " + err))
-			.finally(() => {
+				setResult(result);
+				setAlocacaoResult(result);
 				setTimeout(() => setLoading(false), 400);
-			});
-
-		return () => { EventsOff("alocacao:progress"); };
+			},
+			(msg) => {
+				setError("Erro ao executar alocação: " + msg);
+				setLoading(false);
+			}
+		);
+		return () => { es.close(); };
 	}, []);
 
-	async function handleExport() {
+	function handleExport() {
 		setExporting(true);
 		try {
-			await ExportResultado();
+			downloadExcel();
 			setExportDone(true);
 			setTimeout(() => setExportDone(false), 2500);
-		} catch (err) {
-			setError("Erro ao exportar: " + err);
+		} catch (err: any) {
+			setError("Erro ao exportar: " + err.message);
 		} finally {
 			setExporting(false);
 		}
@@ -94,11 +70,11 @@ export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
 	async function handleReset() {
 		setResetting(true);
 		try {
-			await ResetApp();
+			await resetSession();
 			setAlocacaoResult(null);
 			navigate("/");
-		} catch (err) {
-			setError("Erro ao reiniciar: " + err);
+		} catch (err: any) {
+			setError("Erro ao reiniciar: " + err.message);
 			setResetting(false);
 		}
 	}

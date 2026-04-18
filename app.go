@@ -1,93 +1,140 @@
 package main
 
 import (
-	"context"
-	"fmt"
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
+	"net/http"
+	"sync"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// App é a struct principal da aplicação Wails.
-type App struct {
-	ctx         context.Context
+// Session guarda o estado de um usuário durante o fluxo de alocação.
+type Session struct {
+	db          *sql.DB
 	excelData   []byte
 	nOpcoes     int
 	emailDomain string
 	lastResult  *AlocacaoResponse
+	updatedAt   time.Time
 }
 
-// NewApp cria uma nova instância da aplicação.
-func NewApp() *App {
-	return &App{}
-}
-
-// startup é chamado na inicialização da aplicação.
-func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
-	setupIfNeeded()
-}
-
-// domReady é chamado após o frontend carregar.
-func (a App) domReady(ctx context.Context) {}
-
-// beforeClose é chamado antes do app fechar.
-// Retornar true cancela o fechamento.
-func (a *App) beforeClose(ctx context.Context) (prevent bool) {
-	return false
-}
-
-// shutdown é chamado ao encerrar a aplicação.
-func (a *App) shutdown(ctx context.Context) {}
-
-// Greet retorna uma saudação (método de exemplo do template Wails).
-func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's show time!", name)
-}
-
-// SetupDB recria o banco do zero (apaga todos os dados).
-func (a *App) SetupDB() error {
-	SetUp()
+// SaveUsuarios persiste candidatos no banco da sessão.
+func (s *Session) SaveUsuarios(data []Usuario) error {
+	fillDb(s.db, data)
 	return nil
 }
 
-// SaveUsuarios persiste candidatos no banco de dados.
-func (a *App) SaveUsuarios(data []Usuario) error {
-	conn, err := openDB()
+// SaveAvaliadores persiste avaliadores no banco da sessão.
+func (s *Session) SaveAvaliadores(data []AvaliadorInfo) error {
+	fillDb(s.db, data)
+	return nil
+}
+
+// SaveRestricoes persiste restrições no banco da sessão.
+func (s *Session) SaveRestricoes(data []Restricao) error {
+	fillDb(s.db, data)
+	return nil
+}
+
+// Reset recria o banco em memória e limpa o estado.
+func (s *Session) Reset() {
+	s.db.Close()
+	db, _ := sql.Open("sqlite3", ":memory:")
+	db.SetMaxOpenConns(1)
+	setupConn(db)
+	s.db = db
+	s.excelData = nil
+	s.lastResult = nil
+	s.nOpcoes = 0
+	s.emailDomain = ""
+}
+
+// ==================================================
+// =================== SESSION STORE ================
+// ==================================================
+
+type SessionStore struct {
+	mu       sync.RWMutex
+	sessions map[string]*Session
+}
+
+func NewSessionStore() *SessionStore {
+	s := &SessionStore{sessions: make(map[string]*Session)}
+	go s.cleanup()
+	return s
+}
+
+func newSessionID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// Create abre um banco :memory: exclusivo para a sessão e inicializa o schema.
+func (s *SessionStore) Create() (string, *Session) {
+	db, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
-		return fmt.Errorf("erro ao abrir banco: %w", err)
+		panic(err)
 	}
-	defer conn.Close()
-	fillDb(conn, data)
-	return nil
+	// MaxOpenConns=1 garante que o pool sempre reutilize a mesma conexão,
+	// preservando o banco em memória entre queries.
+	db.SetMaxOpenConns(1)
+	setupConn(db)
+
+	id := newSessionID()
+	sess := &Session{db: db, updatedAt: time.Now()}
+
+	s.mu.Lock()
+	s.sessions[id] = sess
+	s.mu.Unlock()
+	return id, sess
 }
 
-// SaveAvaliadores persiste avaliadores no banco de dados.
-func (a *App) SaveAvaliadores(data []AvaliadorInfo) error {
-	conn, err := openDB()
-	if err != nil {
-		return fmt.Errorf("erro ao abrir banco: %w", err)
+// Get retorna a sessão e atualiza o timestamp de acesso.
+func (s *SessionStore) Get(id string) *Session {
+	s.mu.Lock()
+	sess := s.sessions[id]
+	if sess != nil {
+		sess.updatedAt = time.Now()
 	}
-	defer conn.Close()
-	fillDb(conn, data)
-	return nil
+	s.mu.Unlock()
+	return sess
 }
 
-// SaveRestricoes persiste restrições no banco de dados.
-func (a *App) SaveRestricoes(data []Restricao) error {
-	conn, err := openDB()
-	if err != nil {
-		return fmt.Errorf("erro ao abrir banco: %w", err)
+// Delete encerra o banco e remove a sessão do mapa.
+func (s *SessionStore) Delete(id string) {
+	s.mu.Lock()
+	if sess, ok := s.sessions[id]; ok {
+		sess.db.Close()
+		delete(s.sessions, id)
 	}
-	defer conn.Close()
-	fillDb(conn, data)
-	return nil
+	s.mu.Unlock()
 }
 
-// ResetApp limpa o banco e o estado em memória para o usuário recomeçar.
-func (a *App) ResetApp() error {
-	SetUp()
-	a.excelData = nil
-	a.lastResult = nil
-	a.nOpcoes = 0
-	return nil
+// cleanup remove sessões inativas a cada 10 minutos (TTL: 90 minutos).
+func (s *SessionStore) cleanup() {
+	ticker := time.NewTicker(10 * time.Minute)
+	for range ticker.C {
+		cutoff := time.Now().Add(-90 * time.Minute)
+		s.mu.Lock()
+		for id, sess := range s.sessions {
+			if sess.updatedAt.Before(cutoff) {
+				sess.db.Close()
+				delete(s.sessions, id)
+			}
+		}
+		s.mu.Unlock()
+	}
+}
+
+// sessionFromRequest extrai a sessão do header X-Session-Id.
+func (s *SessionStore) sessionFromRequest(r *http.Request) *Session {
+	id := r.Header.Get("X-Session-Id")
+	if id == "" {
+		return nil
+	}
+	return s.Get(id)
 }
