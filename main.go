@@ -11,6 +11,9 @@ import (
 //go:embed frontend/dist
 var frontendDist embed.FS
 
+//go:embed Excels/base_exemplo.xlsx
+var exemploXLSX []byte
+
 func main() {
 	distFS, err := fs.Sub(frontendDist, "frontend/dist")
 	if err != nil {

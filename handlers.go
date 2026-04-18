@@ -279,6 +279,13 @@ func (store *SessionStore) handleExport(w http.ResponseWriter, r *http.Request) 
 	w.Write(data)
 }
 
+// GET /api/exemplo — download do arquivo Excel de exemplo.
+func handleExemplo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", `attachment; filename="base_exemplo.xlsx"`)
+	w.Write(exemploXLSX)
+}
+
 // DELETE /api/session — encerra a sessão atual.
 func (store *SessionStore) handleReset(w http.ResponseWriter, r *http.Request) {
 	id := r.Header.Get("X-Session-Id")
@@ -306,6 +313,7 @@ func buildRouter(store *SessionStore, distFS fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/save-restricoes", store.handleSaveRestricoes)
 	mux.HandleFunc("GET /api/alocar", store.handleAlocar)
 	mux.HandleFunc("GET /api/export", store.handleExport)
+	mux.HandleFunc("GET /api/exemplo", handleExemplo)
 	mux.HandleFunc("DELETE /api/session", store.handleReset)
 
 	// SPA: serve index.html para rotas do React Router, static assets direto do FS

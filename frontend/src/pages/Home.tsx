@@ -102,6 +102,14 @@ function Home({ setMapping }: AppProps) {
         >
           {loading ? "Processando..." : "Iniciar →"}
         </button>
+
+        <a
+          href="/api/exemplo"
+          download="base_exemplo.xlsx"
+          className="w-full py-2 rounded-xl font-medium text-blue-600 border border-blue-300 bg-blue-50 hover:bg-blue-100 transition-all text-center text-sm"
+        >
+          Baixar planilha de exemplo
+        </a>
       </div>
     </div>
   );
