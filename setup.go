@@ -8,7 +8,7 @@ import (
 )
 
 func SetUp() {
-	db, err := sql.Open("sqlite3", "./insper.db")
+	db, err := sql.Open("sqlite3", "./base.db")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func SetUp() {
 		}
 	}
 
-	log.Println("Banco de dados criado com sucesso: insper.db")
+	log.Println("Banco de dados criado com sucesso: base.db")
 }
 
 // setupConn inicializa o schema em um banco já aberto (ex.: :memory: por sessão).
@@ -158,7 +158,7 @@ func setupConn(db *sql.DB) {
 // setupIfNeeded creates tables only if they do not yet exist.
 // Safe to call on every app startup – does NOT wipe existing data.
 func setupIfNeeded() {
-	db, err := sql.Open("sqlite3", "./insper.db")
+	db, err := sql.Open("sqlite3", "./base.db")
 	if err != nil {
 		log.Fatal(err)
 	}

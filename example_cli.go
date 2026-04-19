@@ -130,7 +130,7 @@ func main() {
 	}
 
 	// ── Alocação ──────────────────────────────────────────────────────────
-	conn, err := sql.Open("sqlite3", "./insper.db")
+	conn, err := sql.Open("sqlite3", "./base.db")
 	if err != nil {
 		fmt.Println("Erro ao conectar ao banco:", err)
 		os.Exit(1)

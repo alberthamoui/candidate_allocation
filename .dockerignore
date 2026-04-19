@@ -1,4 +1,4 @@
 frontend/node_modules
-insper.db
+base.db
 *.exe
 build/

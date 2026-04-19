@@ -1,6 +1,12 @@
-# Wails build output
+# Build output
 build/bin/
+build/darwin/
+build/windows/
 frontend/dist/
+
+# Compiled binaries
+server
+server.exe
 
 # Databases
 *.db
@@ -48,6 +54,9 @@ dist/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Claude Code local settings
+.claude/
 
 # Editor / IDE
 .vscode/
