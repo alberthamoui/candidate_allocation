@@ -1,39 +1,31 @@
 # Candidate Allocation
 
-Aplicativo desktop para alocação de candidatos em mesas de entrevista, desenvolvido com Wails v2 (Go + React/TypeScript).
+Sistema web para alocação de candidatos em mesas de entrevista, desenvolvido em Go (servidor HTTP) + React/TypeScript (frontend embarcado).
 
-O sistema lê um arquivo Excel (.xlsx) contendo candidatos, avaliadores e restrições, permite revisar e corrigir os dados importados, executa o algoritmo de alocação e exporta o resultado.
+**Acesso online:** [https://candidate-allocation.onrender.com/](https://candidate-allocation.onrender.com/)
 
-## Requisitos
+---
 
-- [Go](https://golang.org/) 1.21 ou superior
-- [Wails CLI v2](https://wails.io/docs/gettingstarted/installation) 
-- [Node.js](https://nodejs.org/) 18 ou superior
-- Compilador C (necessário para `go-sqlite3`) — no Windows, instale o [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)
+## Como funciona
 
-## Instalação
+O sistema guia o usuário em 4 etapas:
 
-1. Clone o repositório:
+1. **Upload** — envia o arquivo `.xlsx` com candidatos, avaliadores e restrições e configura parâmetros iniciais
+2. **Candidatos** — mapeamento de colunas, revisão e correção dos dados (duplicatas, campos inválidos)
+3. **Avaliadores** — mapeamento e confirmação da aba de avaliadores
+4. **Restrições** — mapeamento e confirmação da aba de restrições
 
-   ```bash
-   git clone https://github.com/alberthamoui/candidate_allocation.git
-   cd candidate_allocation
-   ```
+Após as 4 etapas, o algoritmo de alocação é executado automaticamente. O resultado mostra as mesas formadas e os candidatos não alocados. É possível exportar o resultado para `.xlsx` ou reiniciar do zero.
 
-2. Instale as dependências Go e frontend:
-
-   ```bash
-   go mod tidy
-   cd frontend && npm install && cd ..
-   ```
+---
 
 ## Formatação do arquivo Excel
 
-O arquivo `.xlsx` deve ter exatamente **3 abas**, nesta ordem. Um arquivo de exemplo com dados fictícios está disponível em [`Execelteste/base_exemplo.xlsx`](Execelteste/base_exemplo.xlsx).
+O arquivo `.xlsx` deve ter exatamente **3 abas**, nesta ordem. Um arquivo de exemplo pode ser baixado diretamente na tela inicial do app (botão "Baixar exemplo").
 
 ### Aba 1 — Candidatos
 
-Uma linha por candidato. Os nomes de coluna não precisam ser exatos — o app sugere um mapeamento automático por posição, que pode ser ajustado na interface.
+Uma linha por candidato. Os nomes de coluna não precisam ser exatos — o app sugere mapeamento automático por posição, ajustável na interface.
 
 | Campo | Descrição | Validação |
 |---|---|---|
@@ -47,10 +39,10 @@ Uma linha por candidato. Os nomes de coluna não precisam ser exatos — o app s
 | Email Pessoal | Email pessoal | Qualquer email válido |
 | Opção 1 … Opção N | Horários disponíveis em ordem de preferência | Uma coluna por opção |
 
-Dois parâmetros são configurados na tela inicial do app antes do upload:
+Dois parâmetros são configurados antes do upload:
 
-- **Número de opções de horário** (N): quantas colunas de disponibilidade existem na planilha. A primeira opção tem maior prioridade no algoritmo de alocação.
-- **Domínio do email institucional**: sufixo que todos os emails institucionais devem ter (ex: `@al.insper.edu.br`). Emails que não terminarem com esse domínio serão sinalizados como inválidos na etapa de revisão.
+- **Número de opções de horário** (N): quantas colunas de disponibilidade existem na planilha. A primeira opção tem maior prioridade no algoritmo.
+- **Domínio do email institucional**: sufixo que todos os emails institucionais devem ter (ex: `@al.insper.edu.br`).
 
 Exemplo de horário: `quarta 14-16`
 
@@ -74,56 +66,93 @@ Uma linha por candidato que possui restrição. As siglas devem corresponder exa
 | NaoPosso | Siglas de avaliadores com quem o candidato **não pode** ser alocado (restrição absoluta) |
 | PrefiroNao | Siglas de avaliadores com quem o candidato **prefere não** ser alocado (restrição suave) |
 
-Exemplo: candidato `João Silva` com `NaoPosso = ABC, DEF` nunca será colocado em mesa com os avaliadores de sigla `ABC` ou `DEF`.
+---
 
+## Rodando localmente
 
+### Pré-requisitos
 
-## Como rodar
+- [Go](https://golang.org/) 1.21+
+- [Node.js](https://nodejs.org/) 18+
+- Compilador C (necessário para `go-sqlite3`) — no Windows, instale o [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)
 
-**Modo desenvolvimento** (hot reload):
-
-```bash
-wails dev
-```
-
-**Build para distribuição** (gera executável em `build/bin/`):
+### Desenvolvimento
 
 ```bash
-wails build
+git clone https://github.com/alberthamoui/candidate_allocation.git
+cd candidate_allocation
+
+# instalar dependências do frontend e gerar o build estático
+cd frontend && npm install && npm run build && cd ..
+
+# rodar o servidor Go (porta 8080)
+go run .
 ```
 
-## Fluxo de uso
+Acesse em [http://localhost:8080](http://localhost:8080).
 
-O aplicativo guia o usuario em 3 etapas:
+Para hot-reload do frontend durante desenvolvimento:
 
-1. **Candidatos** — upload do arquivo `.xlsx`, mapeamento de colunas, revisao e correcao dos dados importados (resolucao de duplicatas, edicao de campos)
-2. **Avaliadores** — leitura da aba "Avaliadores" do mesmo arquivo, mapeamento e confirmacao
-3. **Restricoes** — leitura da aba "Restricoes", mapeamento e confirmacao
+```bash
+# terminal 1 — frontend com Vite
+cd frontend && npm run dev
 
-Apos as 3 etapas, o algoritmo de alocacao e executado automaticamente. O resultado mostra as mesas formadas e os candidatos nao alocados. E possivel exportar o resultado para `.xlsx` ou reiniciar o processo do zero.
+# terminal 2 — servidor Go
+go run .
+```
 
-## Estrutura principal
+### Docker
+
+```bash
+docker build -t candidate-allocation .
+docker run -p 8080:8080 candidate-allocation
+```
+
+---
+
+## Estrutura do projeto
 
 ```
 candidate_allocation/
-├── app.go          -- backend: funcoes expostas ao frontend via Wails
-├── alocate.go      -- algoritmo de alocacao
+├── main.go         -- entrypoint: servidor HTTP, roteamento
+├── handlers.go     -- handlers das rotas HTTP e router
+├── app.go          -- SessionStore e lógica de sessão
+├── alocate.go      -- algoritmo de alocação
 ├── processa.go     -- parsing do arquivo Excel
-├── setup.go        -- inicializacao do banco de dados SQLite
-├── db/             -- funcoes auxiliares de banco
-└── frontend/
+├── mapping.go      -- lógica de mapeamento de colunas
+├── export.go       -- geração do Excel de resultado
+├── models.go       -- structs de dados
+├── setup.go        -- inicialização do banco SQLite
+├── db/             -- funções auxiliares de banco
+├── Dockerfile      -- build multi-stage (Node → Go → Alpine)
+├── Excels/         -- arquivo de exemplo para download
+└── frontend/       -- app React/TypeScript (Vite + Tailwind)
     └── src/
-        ├── main.tsx           -- roteamento e estado global
-        ├── App.tsx            -- tela inicial e upload
-        ├── MappingPage.tsx    -- tela de mapeamento de colunas (reutilizada nas 3 etapas)
-        ├── VerifyUsers.tsx    -- revisao de candidatos
+        ├── main.tsx            -- roteamento e estado global
+        ├── App.tsx             -- tela inicial e upload
+        ├── MappingPage.tsx     -- mapeamento de colunas (reutilizado nas 3 etapas)
+        ├── VerifyUsers.tsx     -- revisão de candidatos
         ├── UploadAvaliador.tsx
         ├── UploadRestricao.tsx
-        └── Resultado.tsx      -- resultado da alocacao e exportacao
+        └── Resultado.tsx       -- resultado da alocação e exportação
 ```
 
-## Banco de dados
+## API
 
-O arquivo `insper.db` (SQLite) e criado automaticamente na primeira execucao. Tabelas: `pessoa`, `opcoes_horario`, `disponibilidade`, `avaliador`, `restricoes`.
+| Método | Rota | Descrição |
+|---|---|---|
+| `POST` | `/api/upload` | Recebe o `.xlsx` e cria uma sessão |
+| `POST` | `/api/build-usuarios` | Aplica mapeamento de colunas e retorna candidatos parseados |
+| `POST` | `/api/save-usuarios` | Salva candidatos revisados na sessão |
+| `POST` | `/api/suggest-avaliador` | Sugere mapeamento para a aba de avaliadores |
+| `POST` | `/api/build-avaliadores` | Aplica mapeamento e retorna avaliadores parseados |
+| `POST` | `/api/save-avaliadores` | Salva avaliadores na sessão |
+| `POST` | `/api/suggest-restricao` | Sugere mapeamento para a aba de restrições |
+| `POST` | `/api/build-restricoes` | Aplica mapeamento e retorna restrições parseadas |
+| `POST` | `/api/save-restricoes` | Salva restrições na sessão |
+| `GET` | `/api/alocar?sessionId=` | Executa alocação via Server-Sent Events (streaming de progresso) |
+| `GET` | `/api/export?sessionId=` | Download do resultado em `.xlsx` |
+| `GET` | `/api/exemplo` | Download do arquivo de exemplo |
+| `DELETE` | `/api/session` | Encerra e limpa a sessão atual |
 
-O botao "Reiniciar" no resultado apaga todos os dados e permite comecar um novo processo de alocacao.
+Todas as rotas de sessão recebem o `sessionId` pelo header `X-Session-Id`.
