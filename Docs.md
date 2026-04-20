@@ -410,3 +410,14 @@ Detalhe importante para testes:
 - Se mudar `required`, `unique` ou `duplicate` nas tags das structs, a UI de mapeamento, a revisão de duplicados e a sincronização de índices do banco devem se ajustar sem precisar de regra nova no frontend.
 - Se mudar métodos exportados do `App`, mantenha `frontend/wailsjs` consistente.
 - Se alterar o workflow do CLI em [`back/workflow/import_cli.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/workflow/import_cli.go), alinhe o fluxo correspondente da aplicação.
+
+## Ferramentas de Qualidade (Linter)
+
+O repositório agora possui uma configuração explícita e visível dos linters utilizados, garantindo um padrão de código consistente.
+
+A configuração principal fica no `.golangci.yml`, com a listagem de todos os linters habilitados (como `unused`, `gosec`, `revive`, entre outros).
+
+**Analyzer Customizado (Unexported)**
+Foi criado um analyzer específico localizado em `tools/unexported/main.go`. A responsabilidade dele é buscar funções exportadas (com inicial maiúscula) que não estão sendo chamadas fora do seu pacote de origem e sugerir que elas se tornem privadas (unexported).
+- **Como funciona:** O script varre o módulo inteiro usando `go/packages`, constrói um índice de definições e referências e aponta métodos "vazando" a não ser que estejam em uma allowlist (como os métodos do `App` usados pelo Wails).
+- **Como executar:** Ao invés de executar apenas `golangci-lint run`, é recomendado utilizar `make lint`, que cuidará de buildar a ferramenta e executar ambos os checks (o golangci-lint padrão e o nosso analyzer customizado).

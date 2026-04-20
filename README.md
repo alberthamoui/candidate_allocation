@@ -45,6 +45,12 @@ Se quiser mudar a quantidade de opcoes de horario esperadas na aba de candidatos
 go run . cli -file caminho/para/arquivo.xlsx -opcoes 5
 ```
 
+Para rodar o Linter se roda assim
+
+```bash
+golangci-lint run
+```
+
 ## About
 
 Wails template which includes: Vite, React, TS, TailwindCSS out of the box.
