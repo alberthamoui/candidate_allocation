@@ -37,7 +37,7 @@ func (s *Session) RunAlocacao(emit func(any)) (AlocacaoResponse, error) {
 		if pct > 95 {
 			pct = 95
 		}
-		step := fmt.Sprintf("Calculando... (tentativa %d/%d)", restart, MAX_RESTARTS)
+		step := fmt.Sprintf("Calculando... (rodada %d/%d)", restart, MAX_RESTARTS)
 		emit(progressEvent{Step: step, Pct: pct, Tentativa: globalTentativa, Total: total, Score: score})
 	}
 

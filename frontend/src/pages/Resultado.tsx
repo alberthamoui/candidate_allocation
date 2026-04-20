@@ -13,6 +13,15 @@ import {
 } from "@heroicons/react/24/outline";
 import { startAlocacao, downloadExcel, resetSession, AlocacaoResponse } from "../api";
 
+function formatEta(ms: number): string {
+	if (ms <= 0) return "";
+	const s = Math.ceil(ms / 1000);
+	if (s < 60) return `~${s}s restantes`;
+	const m = Math.floor(s / 60);
+	const rem = s % 60;
+	return rem > 0 ? `~${m}min ${rem}s restantes` : `~${m}min restantes`;
+}
+
 interface ResultadoProps {
 	setAlocacaoResult: (data: AlocacaoResponse | null) => void;
 }
@@ -28,7 +37,9 @@ export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
 	const [resetting, setResetting] = useState(false);
 	const [progressPct, setProgressPct] = useState(0);
 	const [progressStep, setProgressStep] = useState("Iniciando...");
+	const [eta, setEta] = useState<string>("");
 	const progressRef = useRef(0);
+	const startTimeRef = useRef<number | null>(null);
 
 	useEffect(() => {
 		const es = startAlocacao(
@@ -38,6 +49,16 @@ export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
 					setProgressPct(ev.pct);
 				}
 				if (ev.step) setProgressStep(ev.step);
+				if (ev.tentativa && ev.total && ev.tentativa > 0) {
+					if (startTimeRef.current === null) {
+						startTimeRef.current = Date.now();
+					} else {
+						const elapsed = Date.now() - startTimeRef.current;
+						const avgMs = elapsed / ev.tentativa;
+						const remainingMs = avgMs * (ev.total - ev.tentativa);
+						setEta(formatEta(remainingMs));
+					}
+				}
 			},
 			(result) => {
 				setProgressPct(100);
@@ -101,6 +122,9 @@ export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
 
 					<div className="text-sm text-gray-500 text-center">
 						{progressPct}%
+						{eta && (
+							<span className="ml-2 text-gray-400">&mdash; {eta}</span>
+						)}
 					</div>
 				</div>
 			</div>
