@@ -10,3 +10,9 @@ Sempre que você tiver alguma informação util para que o proximo agente não s
 Se você considerar que existe informações desnecessárias no AGENTS.md ou no Docs.md Você pode altera-las e removelas.(necessário)
 
 Sempre que você fizer uma função crie um teste para essa função
+
+Sempre que você criar, modificar ou adicionar uma feature no front-end (UI), você **deve** criar ou atualizar os testes no diretório `tools/ui-testing`. (necessário)
+
+Para rodar os testes de UI após implementar qualquer funcionalidade e garantir que você não quebrou nada no layout ou comportamento do front-end:
+1. Certifique-se de que a aplicação `wails dev` está rodando em background (`wails dev &` caso não esteja).
+2. Vá para `tools/ui-testing` e rode `./runner.sh`. Verifique se os testes passam, olhando também `test-results/report.json` se houver falhas.

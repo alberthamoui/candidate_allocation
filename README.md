@@ -67,6 +67,31 @@ npm install
 
 [Here](scripts) you can find useful scripts for building on different platforms and Wails CLI installation.
 
+## UI Testing and Verification
+
+This project includes a fully isolated, headless UI testing environment built with Playwright to verify the application's frontend.
+
+### For Humans: How to run tests
+The tests target the development server. Make sure you have the Wails dev server running:
+
+1. Start your application in dev mode:
+   ```bash
+   wails dev
+   ```
+2. In a new terminal, run the tests:
+   ```bash
+   cd tools/ui-testing
+   npm install # (first time only)
+   ./runner.sh
+   ```
+
+### For the AI Agent: How to use this for verification
+The testing infrastructure is built to be "agent-friendly" and completely headless. When building UI features, the agent should:
+1. Ensure the app is running in the background (`wails dev &`).
+2. Navigate to `tools/ui-testing` and run `./runner.sh`.
+3. If tests fail, read the generated JSON report at `tools/ui-testing/test-results/report.json` to understand why.
+4. If a visual layout needs verification, tests can be configured to take screenshots (e.g., `await page.screenshot({ path: 'ui-state.png' });`), which will be placed in the `test-results/` folder for analysis.
+
 ## Live Development
 
 To run in live development mode, run `wails dev` in the project directory. In another terminal, go into the `frontend`

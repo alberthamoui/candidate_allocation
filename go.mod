@@ -6,6 +6,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/wailsapp/wails/v2 v2.10.1
 	github.com/xuri/excelize/v2 v2.9.1
+	golang.org/x/tools v0.44.0
 )
 
 require (
@@ -42,7 +43,6 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
-	golang.org/x/tools v0.44.0 // indirect
 )
 
 // replace github.com/wailsapp/wails/v2 v2.10.1 => /Users/joaobresser/go/pkg/mod
