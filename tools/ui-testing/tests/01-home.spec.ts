@@ -7,6 +7,7 @@ test.describe('Suite 1: Home Page & Initial Setup', () => {
     // Verifica se o título "Candidate Allocator" aparece na home
     const header = page.locator('h1');
     await expect(header).toHaveText('Candidate Allocator');
+    await expect(page.getByTestId('page-help-button')).toBeVisible();
   });
 
   test('Deve interagir com a funcionalidade Greet do Wails', async ({ page }) => {
@@ -32,5 +33,13 @@ test.describe('Suite 1: Home Page & Initial Setup', () => {
     const errorMsg = page.locator('#fileResult');
     await expect(errorMsg).toHaveText('Por favor, selecione um arquivo.');
     await expect(errorMsg).toBeVisible();
+  });
+
+  test('Deve abrir a ajuda contextual da página inicial', async ({ page }) => {
+    await page.goto('/');
+
+    await page.getByTestId('page-help-button').click();
+    await expect(page.locator('text=Ajuda desta página')).toBeVisible();
+    await expect(page.locator('text=Entrada controlada')).toBeVisible();
   });
 });

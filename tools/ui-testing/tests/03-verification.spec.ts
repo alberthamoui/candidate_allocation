@@ -23,7 +23,7 @@ test.describe('Suite 3: Edição Inline e Validação (EntityVerificationView)',
 
   test('Deve bloquear salvamento quando houver duplicatas e resolver duplicata com sucesso', async ({ page }) => {
     // Verifica se existem duplicatas baseando-se no texto do botão
-    const saveBtn = page.locator('button', { hasText: /(Resolva.*duplicado|Salvar Dados)/i });
+    const saveBtn = page.getByTestId('verification-save-button');
     const btnText = await saveBtn.innerText();
     
     if (btnText.includes('Resolva')) {

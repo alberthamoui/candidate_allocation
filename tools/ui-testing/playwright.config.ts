@@ -30,6 +30,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
+  outputDir: '/tmp/candidate-allocation-playwright',
+
   /* Configure projects for major browsers */
   projects: [
     {

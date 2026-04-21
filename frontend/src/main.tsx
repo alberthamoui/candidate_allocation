@@ -10,7 +10,11 @@ import VerifyRestricoesPage from "./VerifyRestricoes";
 import MappingAvaliadoresPage from "./MappingAvaliadoresPage";
 import MappingResticoesPage from "./MappingRerstricoesPage";
 import SuccessPage from "./SuccessPage";
+import AllocationLoadingPage from "./AllocationLoadingPage";
+import AllocationResultPage from "./AllocationResultPage";
+import AllocationConfigPage from "./AllocationConfigPage";
 import type { MappingDraft, MappingFieldInfo } from "./importTypes";
+import { WorkflowLayout } from "./workflowShell";
 
 function Root() {
 	const [mappingData, setMappingData] = useState<MappingDraft[] | null>(null);
@@ -34,81 +38,86 @@ function Root() {
 		<React.StrictMode>
 			<BrowserRouter>
 				<Routes>
-					<Route
-						path="/"
-						element={
-							<App
-								setMapping={setMappingData}
-								setMappingAvaliadores={setMappingAvaliadores}
-								setMappingRestricoes={setMappingRestricoes}
-								setCandidateFieldInfos={setCandidateFieldInfos}
-								setAvaliadorFieldInfos={setAvaliadorFieldInfos}
-								setRestricaoFieldInfos={setRestricaoFieldInfos}
-							/>
-						}
-					/>
-					<Route
-						path="/mapping"
-						element={
-							<MappingPage
-								mapping={mappingData}
-								setMapping={setMappingData}
-								fieldInfos={candidateFieldInfos}
-								setUsers={setUsers}
-								setDuplicatas={setDuplicatas}
-								setDuplicateFields={setDuplicateFields}
-							/>
-						}
-					/>
-					<Route
-						path="/mappingAvaliadores"
-						element={
-							<MappingAvaliadoresPage
-								mapping={mappingAvaliadores}
-								setMapping={setMappingAvaliadores}
-								fieldInfos={avaliadorFieldInfos}
-								setAvaliadores={setAvaliadores}
-								setDuplicatas={setAvaliadoresDuplicatas}
-								setDuplicateFields={setAvaliadoresDuplicateFields}
-							/>
-						}
-					/>
-					<Route
-						path="/mappingRestricoes"
-						element={
-							<MappingResticoesPage
-								mapping={mappingRestricoes}
-								setMapping={setMappingRestricoes}
-								fieldInfos={restricaoFieldInfos}
-								setRestricoes={setRestricoes}
-							/>
-						}
-					/>
-					<Route
-						path="/verify"
-						element={
-							<VerifyUserPage
-								usuarios={users}
-								duplicates={duplicatas}
-								duplicateFields={duplicateFields}
-							/>
-						}
-					/>
-					<Route
-						path="/verifyRestricoes"
-						element={<VerifyRestricoesPage restricoes={restricoes} />}
-					/>
-					<Route
-						path="/verifyAvaliadores"
-						element={
-							<VerifyAvaliadoresPage
-								avaliadores={avaliadores}
-								duplicates={avaliadoresDuplicatas}
-								duplicateFields={avaliadoresDuplicateFields}
-							/>
-						}
-					/>
-					<Route path="/success" element={<SuccessPage />} />
+					<Route element={<WorkflowLayout />}>
+						<Route
+							path="/"
+							element={
+								<App
+									setMapping={setMappingData}
+									setMappingAvaliadores={setMappingAvaliadores}
+									setMappingRestricoes={setMappingRestricoes}
+									setCandidateFieldInfos={setCandidateFieldInfos}
+									setAvaliadorFieldInfos={setAvaliadorFieldInfos}
+									setRestricaoFieldInfos={setRestricaoFieldInfos}
+								/>
+							}
+						/>
+						<Route
+							path="/mapping"
+							element={
+								<MappingPage
+									mapping={mappingData}
+									setMapping={setMappingData}
+									fieldInfos={candidateFieldInfos}
+									setUsers={setUsers}
+									setDuplicatas={setDuplicatas}
+									setDuplicateFields={setDuplicateFields}
+								/>
+							}
+						/>
+						<Route
+							path="/mappingAvaliadores"
+							element={
+								<MappingAvaliadoresPage
+									mapping={mappingAvaliadores}
+									setMapping={setMappingAvaliadores}
+									fieldInfos={avaliadorFieldInfos}
+									setAvaliadores={setAvaliadores}
+									setDuplicatas={setAvaliadoresDuplicatas}
+									setDuplicateFields={setAvaliadoresDuplicateFields}
+								/>
+							}
+						/>
+						<Route
+							path="/mappingRestricoes"
+							element={
+								<MappingResticoesPage
+									mapping={mappingRestricoes}
+									setMapping={setMappingRestricoes}
+									fieldInfos={restricaoFieldInfos}
+									setRestricoes={setRestricoes}
+								/>
+							}
+						/>
+						<Route
+							path="/verify"
+							element={
+								<VerifyUserPage
+									usuarios={users}
+									duplicates={duplicatas}
+									duplicateFields={duplicateFields}
+								/>
+							}
+						/>
+						<Route
+							path="/verifyRestricoes"
+							element={<VerifyRestricoesPage restricoes={restricoes} />}
+						/>
+						<Route
+							path="/verifyAvaliadores"
+							element={
+								<VerifyAvaliadoresPage
+									avaliadores={avaliadores}
+									duplicates={avaliadoresDuplicatas}
+									duplicateFields={avaliadoresDuplicateFields}
+								/>
+							}
+						/>
+						<Route path="/success" element={<SuccessPage />} />
+						<Route path="/allocation-config" element={<AllocationConfigPage />} />
+						<Route path="/allocation-loading" element={<AllocationLoadingPage />} />
+						<Route path="/allocation-result" element={<AllocationResultPage />} />
+					</Route>
 				</Routes>
 			</BrowserRouter>
 		</React.StrictMode>

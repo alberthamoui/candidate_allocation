@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import wailsLogo from "./assets/wails.png";
-import "./App.css";
+import {
+	ArrowUpTrayIcon,
+	CheckBadgeIcon,
+	CommandLineIcon,
+	DocumentChartBarIcon,
+	ShieldCheckIcon,
+} from "@heroicons/react/24/outline";
 import {
 	Greet,
 	GetAvaliadorMappingFieldInfos,
@@ -12,6 +17,13 @@ import {
 	SuggestMappingRestricao,
 } from "../wailsjs/go/main/App";
 import type { MappingDraft, MappingFieldInfo, MappingItem } from "./importTypes";
+import {
+	FieldLabel,
+	PrimaryButton,
+	SecondaryButton,
+	SectionCard,
+	StatusBadge,
+} from "./workflowShell";
 
 interface AppProps {
 	setMapping: (data: MappingDraft[]) => void;
@@ -122,69 +134,142 @@ function App({
 	}
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-100 flex flex-col items-center justify-center py-8">
-			<div className="bg-white shadow-xl rounded-2xl p-10 w-full max-w-md flex flex-col items-center space-y-8">
-				<img
-					src={wailsLogo}
-					alt="Wails Logo"
-					className="w-24 h-24 mb-2 drop-shadow-lg"
-				/>
-				<h1 className="text-3xl font-bold text-blue-700 mb-2 text-center">
-					Candidate Allocator
-				</h1>
-				<div
-					id="result"
-					className="text-lg font-medium text-gray-700 text-center"
-				>
-					{resultText}
-				</div>
-				<div
-					id="input"
-					className="flex flex-col items-center space-y-4 w-full"
-				>
-					<input
-						id="name"
-						onChange={updateName}
-						autoComplete="off"
-						name="input"
-						type="text"
-						className="border border-gray-300 p-3 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-300 transition"
-						placeholder="Digite seu nome"
-					/>
-					<button
-						onClick={greet}
-						className="bg-blue-500 hover:bg-blue-600 transition text-white px-6 py-2 rounded-lg shadow font-semibold w-full"
-					>
-						Greet
-					</button>
-				</div>
-				<div
-					id="file-section"
-					className="flex flex-col items-center space-y-4 w-full pt-4 border-t border-gray-200"
-				>
-					<label htmlFor="fileInput" className="w-full">
-						<input
-							type="file"
-							id="fileInput"
-							onChange={handleFileChange}
-							className="border border-gray-300 p-2 rounded-lg w-full bg-gray-50"
-						/>
-					</label>
-					<button
-						onClick={handleFile}
-						className="bg-green-500 hover:bg-green-600 transition text-white px-6 py-2 rounded-lg shadow font-semibold w-full"
-					>
-						Executar função de arquivo
-					</button>
-					{fileResult && (
-						<div
-							id="fileResult"
-							className="text-base font-medium text-red-700 bg-red-100 rounded p-2 w-full text-center"
-						>
-							{fileResult}
+		<div className="space-y-6">
+			<section className="executive-card executive-card-strong relative overflow-hidden p-8 md:p-10">
+				<div className="absolute inset-y-0 right-0 hidden w-1/3 bg-[radial-gradient(circle_at_top,rgba(178,122,68,0.18),transparent_62%)] lg:block" />
+				<div className="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
+					<div>
+						<StatusBadge tone="accent">Confiança, clareza e controle</StatusBadge>
+						<h2 className="mt-5 max-w-3xl text-4xl text-[var(--text)] md:text-5xl">
+							Conduza a alocação de candidatos com uma experiência feita para RH corporativo.
+						</h2>
+						<p className="mt-4 max-w-2xl text-base leading-8 text-[var(--muted)]">
+							Este fluxo importa a planilha, organiza o mapeamento das entidades,
+							revisa conflitos e prepara uma distribuição configurável sem expor a
+							operação a telas confusas ou decisões opacas.
+						</p>
+						<div className="mt-8 grid gap-4 md:grid-cols-3">
+							<div className="rounded-[24px] border border-[var(--line)] bg-white/70 p-4">
+								<ShieldCheckIcon className="h-7 w-7 text-[var(--accent-strong)]" />
+								<h3 className="mt-3 text-xl text-[var(--text)]">Confiável</h3>
+								<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+									Revisão por etapas, validação de duplicidades e rastreabilidade do processo.
+								</p>
+							</div>
+							<div className="rounded-[24px] border border-[var(--line)] bg-white/70 p-4">
+								<DocumentChartBarIcon className="h-7 w-7 text-[var(--accent-strong)]" />
+								<h3 className="mt-3 text-xl text-[var(--text)]">Configurable</h3>
+								<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+									Parâmetros e critérios adaptáveis para necessidades específicas de cada empresa.
+								</p>
+							</div>
+							<div className="rounded-[24px] border border-[var(--line)] bg-white/70 p-4">
+								<CheckBadgeIcon className="h-7 w-7 text-[var(--accent-strong)]" />
+								<h3 className="mt-3 text-xl text-[var(--text)]">Intuitivo</h3>
+								<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+									Ajuda contextual fixa e fluxo progressivo para evitar dúvida operacional.
+								</p>
+							</div>
 						</div>
-					)}
+					</div>
+
+					<div id="file-section" className="executive-panel-dark p-6 md:p-7">
+						<div className="executive-pill border-white/10 bg-white/5 text-[#f2debf]">
+							Entrada do Excel
+						</div>
+						<h3 className="mt-4 text-3xl text-white">Importar base principal</h3>
+						<p className="mt-3 text-sm leading-6 text-[#e2d3c1]">
+							Selecione a planilha oficial do processo seletivo. O sistema abrirá
+							o mapeamento de candidatos e preparará o restante do wizard.
+						</p>
+						<div className="mt-6 space-y-4">
+							<div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
+								<FieldLabel
+									label="Arquivo Excel"
+									description="Use a planilha consolidada do processo seletivo."
+								/>
+								<label htmlFor="fileInput" className="block">
+									<input
+										type="file"
+										id="fileInput"
+										onChange={handleFileChange}
+										className="executive-input w-full cursor-pointer border-white/10 bg-white/90 text-[var(--text)]"
+									/>
+								</label>
+							</div>
+							<PrimaryButton
+								onClick={handleFile}
+								className="w-full justify-center bg-[linear-gradient(135deg,#b27a44_0%,#85562e_100%)]"
+								data-testid="start-import-button"
+							>
+								<ArrowUpTrayIcon className="h-5 w-5" />
+								Executar função de arquivo
+							</PrimaryButton>
+							{fileResult && (
+								<div
+									id="fileResult"
+									className="rounded-[20px] border border-[rgba(156,66,63,0.24)] bg-[rgba(156,66,63,0.12)] px-4 py-3 text-sm font-semibold text-[#f7d6d2]"
+								>
+									{fileResult}
+								</div>
+							)}
+						</div>
+					</div>
 				</div>
+			</section>
+
+			<div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+				<SectionCard
+					title="Como o fluxo opera"
+					description="O sistema trabalha em uma sequência previsível. Isso reduz retrabalho e facilita auditoria interna."
+				>
+					<div className="grid gap-4 md:grid-cols-2">
+						{[
+							"Importação da planilha e leitura inicial das abas.",
+							"Mapeamento dos candidatos e revisão dos conflitos.",
+							"Conferência das restrições com foco no schema central.",
+							"Preparação dos avaliadores e configuração final da alocação.",
+						].map((item, index) => (
+							<div
+								key={item}
+								className="rounded-[22px] border border-[var(--line)] bg-white/70 px-4 py-4"
+							>
+								<div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-strong)]">
+									Etapa {index + 1}
+								</div>
+								<p className="mt-3 text-sm leading-6 text-[var(--text)]">{item}</p>
+							</div>
+						))}
+					</div>
+				</SectionCard>
+
+				<SectionCard
+					title="Console técnico"
+					description="Bloco secundário do ambiente Wails. Mantido apenas para testes e verificação local."
+					aside={<StatusBadge>Utilitário</StatusBadge>}
+				>
+					<div id="result" className="rounded-[20px] border border-[var(--line)] bg-white/80 px-4 py-4 text-sm text-[var(--muted)]">
+						{resultText}
+					</div>
+					<div id="input" className="mt-4 space-y-4">
+						<div>
+							<FieldLabel label="Nome para saudação" description="Usado pela função demonstrativa do backend Wails." />
+							<input
+								id="name"
+								onChange={updateName}
+								autoComplete="off"
+								name="input"
+								type="text"
+								className="executive-input"
+								placeholder="Digite seu nome"
+							/>
+						</div>
+						<SecondaryButton onClick={greet} className="w-full justify-center">
+							<CommandLineIcon className="h-5 w-5" />
+							Greet
+						</SecondaryButton>
+					</div>
+				</SectionCard>
 			</div>
 		</div>
 	);

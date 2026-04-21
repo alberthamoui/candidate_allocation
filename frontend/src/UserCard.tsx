@@ -86,21 +86,21 @@ export function UserCard({
 			key={userId}
 			initial={{ opacity: 0, y: 20 }}
 			animate={{ opacity: 1, y: 0 }}
-			className={`relative border-2 rounded-xl shadow-lg p-4 w-80 flex-shrink-0 transition-all duration-200 ${
+			className={`relative w-80 flex-shrink-0 rounded-[28px] border p-5 shadow-[0_20px_36px_rgba(24,35,45,0.12)] transition-all duration-200 ${
 				hasErrors
-					? "border-red-300 bg-red-50 shadow-red-100"
-					: "border-gray-200 bg-white hover:shadow-xl hover:border-blue-300"
+					? "border-[rgba(156,66,63,0.22)] bg-[rgba(156,66,63,0.08)]"
+					: "border-[var(--line)] bg-white/78 hover:border-[rgba(178,122,68,0.24)] hover:shadow-[0_24px_42px_rgba(24,35,45,0.14)]"
 			}`}
 		>
 			<div className="flex items-center justify-between mb-3">
 				<div className="flex items-center space-x-2">
-					<span className="text-sm font-bold text-gray-600">
+					<span className="text-sm font-bold text-[var(--muted)]">
 						ID: {userId}
 					</span>
 					{hasErrors && (
-						<div className="flex items-center space-x-1 bg-red-100 px-2 py-1 rounded-full">
-							<ExclamationTriangleIcon className="w-4 h-4 text-red-600" />
-							<span className="text-xs font-semibold text-red-600">
+						<div className="flex items-center space-x-1 rounded-full border border-[rgba(156,66,63,0.18)] bg-[rgba(156,66,63,0.12)] px-2 py-1">
+							<ExclamationTriangleIcon className="w-4 h-4 text-[var(--danger)]" />
+							<span className="text-xs font-semibold text-[var(--danger)]">
 								{errors.length} erro
 								{errors.length > 1 ? "s" : ""}
 							</span>
@@ -108,13 +108,13 @@ export function UserCard({
 					)}
 				</div>
 				<div className="flex items-center space-x-2">
-					<div className="flex items-center space-x-1 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+					<div className="flex items-center space-x-1 rounded-full border border-[var(--line)] bg-white/70 px-2 py-1 text-xs text-[var(--muted)]">
 						<PencilIcon className="w-3 h-3" />
 						<span>Editável</span>
 					</div>
 					<button
 						onClick={() => onDelete(userId)}
-						className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full transition-colors"
+						className="rounded-full p-1 text-[var(--danger)] transition-colors hover:bg-[rgba(156,66,63,0.12)]"
 						title="Deletar usuário"
 					>
 						<TrashIcon className="w-4 h-4" />
@@ -123,13 +123,13 @@ export function UserCard({
 			</div>
 
 			{hasErrors && (
-				<div className="mb-3 p-2 bg-red-100 border border-red-200 rounded-lg">
-					<div className="text-xs font-semibold text-red-700 mb-1">
+				<div className="mb-3 rounded-[18px] border border-[rgba(156,66,63,0.18)] bg-[rgba(156,66,63,0.1)] p-3">
+					<div className="mb-1 text-xs font-semibold text-[var(--danger)]">
 						Erros encontrados:
 					</div>
 					<div className="space-y-1">
 						{errors.map((error, idx) => (
-							<div key={idx} className="text-xs text-red-600">
+							<div key={idx} className="text-xs text-[var(--danger)]">
 								<span className="font-medium">
 									{error.field}:
 								</span>{" "}
@@ -148,18 +148,18 @@ export function UserCard({
 					return (
 						<div
 							key={field}
-							className={`p-2 rounded-lg border transition-all duration-200 ${
+							className={`rounded-[18px] border p-3 transition-all duration-200 ${
 								hasFieldError
-									? "border-red-300 bg-red-50"
-									: "border-gray-200 bg-gray-50 hover:bg-gray-100"
+									? "border-[rgba(156,66,63,0.2)] bg-[rgba(156,66,63,0.08)]"
+									: "border-[var(--line)] bg-[rgba(255,252,247,0.8)] hover:bg-white/80"
 							}`}
 						>
 							<div className="flex items-center justify-between mb-1">
-								<span className="text-xs font-semibold text-gray-700 capitalize">
+								<span className="text-xs font-semibold capitalize text-[var(--muted)]">
 									{formatFieldLabel(field)}
 								</span>
 								{hasFieldError && (
-									<ExclamationTriangleIcon className="w-3 h-3 text-red-500" />
+									<ExclamationTriangleIcon className="w-3 h-3 text-[var(--danger)]" />
 								)}
 							</div>
 
@@ -176,12 +176,12 @@ export function UserCard({
 			{allowExtras && (
 				<div className="mt-4 space-y-2">
 					<div className="flex items-center justify-between">
-						<span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+						<span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
 							Campos extras
 						</span>
 						<button
 							onClick={() => onAddExtraField(userId)}
-							className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+							className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-white/70 px-3 py-1 text-xs font-medium text-[var(--text)] hover:bg-white"
 							title="Adicionar campo extra"
 						>
 							<PlusIcon className="h-3 w-3" />
@@ -190,7 +190,7 @@ export function UserCard({
 					</div>
 
 					{Object.entries(extras).length === 0 && (
-						<div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+						<div className="rounded-[18px] border border-dashed border-[var(--line-strong)] bg-white/60 px-3 py-3 text-xs text-[var(--muted)]">
 							Nenhum campo extra adicionado.
 						</div>
 					)}
@@ -198,15 +198,15 @@ export function UserCard({
 					{Object.entries(extras).map(([key, value]) => (
 						<div
 							key={key}
-							className="rounded-lg border border-gray-200 bg-slate-50 p-2"
+							className="rounded-[18px] border border-[var(--line)] bg-[rgba(255,252,247,0.82)] p-3"
 						>
 							<div className="mb-2 flex items-center justify-between">
-								<span className="text-xs font-semibold text-gray-600">
+								<span className="text-xs font-semibold text-[var(--muted)]">
 									Extra
 								</span>
 								<button
 									onClick={() => onRemoveExtraField(userId, key)}
-									className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full transition-colors"
+									className="rounded-full p-1 text-[var(--danger)] transition-colors hover:bg-[rgba(156,66,63,0.12)]"
 									title="Remover campo extra"
 								>
 									<TrashIcon className="w-3 h-3" />
@@ -215,7 +215,7 @@ export function UserCard({
 
 							<div className="space-y-2">
 								<div>
-									<div className="mb-1 text-[11px] font-semibold text-gray-600">
+									<div className="mb-1 text-[11px] font-semibold text-[var(--muted)]">
 										Chave
 									</div>
 									<EditableCell
@@ -226,7 +226,7 @@ export function UserCard({
 									/>
 								</div>
 								<div>
-									<div className="mb-1 text-[11px] font-semibold text-gray-600">
+									<div className="mb-1 text-[11px] font-semibold text-[var(--muted)]">
 										Valor
 									</div>
 									<EditableCell
@@ -243,7 +243,7 @@ export function UserCard({
 			)}
 
 			{extraBtn && (
-				<div className="mt-4 pt-3 border-t border-gray-200">
+				<div className="mt-4 border-t border-[var(--line)] pt-3">
 					{extraBtn}
 				</div>
 			)}

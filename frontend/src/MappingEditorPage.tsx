@@ -2,10 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
 	ExclamationTriangleIcon,
+	InformationCircleIcon,
 	PlusIcon,
 	TrashIcon,
 } from "@heroicons/react/24/outline";
 import type { MappingDraft, MappingFieldInfo, MappingItem } from "./importTypes";
+import {
+	EmptyState,
+	HelpHint,
+	PrimaryButton,
+	SectionCard,
+	StickyActionBar,
+} from "./workflowShell";
 
 interface MappingEditorPageProps {
 	title: string;
@@ -16,6 +24,10 @@ interface MappingEditorPageProps {
 	onConfirm: (items: MappingItem[]) => Promise<void>;
 	confirmLabel: string;
 	allowExtraFields?: boolean;
+}
+
+function cn(...values: Array<string | false | null | undefined>) {
+	return values.filter(Boolean).join(" ");
 }
 
 export default function MappingEditorPage({
@@ -259,10 +271,10 @@ export default function MappingEditorPage({
 		if (manualExtra) {
 			return (
 				<div className="flex flex-wrap gap-2">
-					<span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+					<span className="inline-flex items-center rounded-full border border-[rgba(178,122,68,0.18)] bg-[rgba(178,122,68,0.12)] px-3 py-1 text-xs font-semibold text-[var(--accent-strong)]">
 						Extra
 					</span>
-					<span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
+					<span className="inline-flex items-center rounded-full border border-[rgba(18,48,71,0.14)] bg-white/80 px-3 py-1 text-xs font-semibold text-[var(--muted)]">
 						Null se sem coluna
 					</span>
 				</div>
@@ -272,7 +284,7 @@ export default function MappingEditorPage({
 		const fieldInfo = fieldInfoMap[variable];
 		if (!fieldInfo) {
 			return (
-				<span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+				<span className="inline-flex items-center rounded-full border border-[var(--line)] bg-white/80 px-3 py-1 text-xs font-semibold text-[var(--muted)]">
 					Disponivel
 				</span>
 			);
@@ -281,16 +293,16 @@ export default function MappingEditorPage({
 		return (
 			<div className="flex flex-wrap gap-2">
 				<span
-					className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+					className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
 						fieldInfo.required
-							? "bg-red-100 text-red-700"
-							: "bg-slate-100 text-slate-600"
+							? "border-[rgba(156,66,63,0.2)] bg-[rgba(156,66,63,0.12)] text-[var(--danger)]"
+							: "border-[var(--line)] bg-white/80 text-[var(--muted)]"
 					}`}
 				>
 					{fieldInfo.required ? "Obrigatorio" : "Opcional"}
 				</span>
 				{fieldInfo.unique && (
-					<span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
+					<span className="inline-flex items-center rounded-full border border-[rgba(178,122,68,0.18)] bg-[rgba(178,122,68,0.12)] px-3 py-1 text-xs font-semibold text-[var(--accent-strong)]">
 						Reconstrucao/Unico
 					</span>
 				)}
@@ -307,278 +319,335 @@ export default function MappingEditorPage({
 	);
 
 	return (
-		<div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-100 flex flex-col items-center py-12 px-4">
+		<div className="space-y-6">
 			{errorMsg && (
 				<div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
 					<motion.div
 						initial={{ scale: 0.9, opacity: 0 }}
 						animate={{ scale: 1, opacity: 1 }}
-						className="bg-white p-6 rounded-xl shadow-2xl max-w-md mx-4"
+						className="executive-card executive-card-strong mx-4 max-w-md p-6"
 					>
 						<div className="flex items-center space-x-3 mb-4">
-							<ExclamationTriangleIcon className="w-6 h-6 text-red-500" />
-							<h3 className="font-semibold text-gray-900">
+							<ExclamationTriangleIcon className="w-6 h-6 text-[var(--danger)]" />
+							<h3 className="font-semibold text-[var(--text)]">
 								Erro no mapeamento
 							</h3>
 						</div>
-						<p className="text-gray-700 mb-6">{errorMsg}</p>
-						<button
-							className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-							onClick={() => setErrorMsg(null)}
-						>
+						<p className="mb-6 text-sm leading-6 text-[var(--muted)]">{errorMsg}</p>
+						<PrimaryButton className="w-full justify-center" onClick={() => setErrorMsg(null)}>
 							Entendido
-						</button>
+						</PrimaryButton>
 					</motion.div>
 				</div>
 			)}
 
-			<div className="max-w-5xl w-full bg-white rounded-xl shadow-lg p-8 mb-8">
-				<h1 className="text-3xl font-bold mb-2 text-center text-gray-800">
-					{title}
-				</h1>
-				<p className="mb-2 text-gray-600 text-center">{description}</p>
-				<p className="mb-6 text-sm text-gray-500 text-center">
-					Os badges mostram se o campo e obrigatorio e se participa da
-					reconstrucao por identificador unico.
-				</p>
-
-				<div className="space-y-8">
-					<section>
-						<h2 className="text-lg font-semibold text-blue-800 mb-4 border-b pb-2">
-							Campos Principais
-						</h2>
-						<div className="overflow-x-auto">
-							<table className="w-full border-collapse">
-								<thead>
-									<tr className="bg-blue-600 text-white">
-										<th className="px-6 py-3 text-left rounded-tl-lg">
-											Variavel
-										</th>
-										<th className="px-6 py-3 text-left">
-											Regras
-										</th>
-										<th className="px-6 py-3 text-left rounded-tr-lg">
-											Coluna do Arquivo
-										</th>
-									</tr>
-								</thead>
-								<tbody>
-									{coreItems.map((item) => {
-										const index = items.findIndex(
-											(candidate) => candidate.clientId === item.clientId
-										);
-
-										return (
-											<tr
-												key={item.clientId}
-												className={`border-b border-gray-200 transition-colors ${
-													dragOverIndex === index ? "bg-blue-100" : ""
-												}`}
-											>
-												<td className="px-6 py-4 font-medium text-gray-700 capitalize">
-													{item.variavel.replace(/_/g, " ")}
-												</td>
-												<td className="px-6 py-4">
-													{renderBadges(item.variavel, false)}
-												</td>
-												<td className="px-6 py-4">
-													<div
-														draggable
-														onDragStart={(event) => onDragStart(event, index)}
-														onDragOver={(event) => onDragOver(event, index)}
-														onDragLeave={onDragLeave}
-														onDrop={(event) => onDrop(event, index)}
-														onDragEnd={onDragEnd}
-														className="flex items-center justify-between py-2 px-4 cursor-move bg-blue-50 rounded-lg border-2 border-blue-200 shadow-sm hover:bg-blue-100 transition-all"
-													>
-														<span>{item.nomeColuna || "Clique e arraste uma coluna"}</span>
-														<svg
-															className="h-5 w-5 text-blue-400"
-															fill="none"
-															viewBox="0 0 24 24"
-															stroke="currentColor"
-														>
-															<path
-																strokeLinecap="round"
-																strokeLinejoin="round"
-																strokeWidth={2}
-																d="M4 6h16M4 12h16M4 18h16"
-															/>
-														</svg>
-													</div>
-												</td>
-											</tr>
-										);
-									})}
-								</tbody>
-							</table>
+			<SectionCard
+				title={title}
+				description={description}
+				aside={
+					<div className="flex items-center gap-3 rounded-[20px] border border-[var(--line)] bg-white/70 px-4 py-3 text-sm text-[var(--muted)]">
+						<InformationCircleIcon className="h-5 w-5 text-[var(--accent-strong)]" />
+						Os badges mostram obrigatoriedade e participação na reconstrução única.
+					</div>
+				}
+			>
+				<div className="grid gap-4 md:grid-cols-3">
+					<div className="rounded-[24px] border border-[var(--line)] bg-white/70 px-5 py-5">
+						<div className="text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
+							Campos principais
 						</div>
-					</section>
+						<p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+							Mapeie primeiro os atributos estruturais. Eles sustentam identificação, regras e validações.
+						</p>
+					</div>
+					<div className="rounded-[24px] border border-[var(--line)] bg-white/70 px-5 py-5">
+						<div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
+							Campos extras
+							<HelpHint
+								label="Campos extras"
+								content="Extras preservam dados específicos de cada empresa. Se forem criados manualmente, precisam ter um nome válido antes de seguir."
+							/>
+						</div>
+						<p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+							Use extras para não perder informação útil que não faz parte do schema principal.
+						</p>
+					</div>
+					<div className="rounded-[24px] border border-[var(--line)] bg-white/70 px-5 py-5">
+						<div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
+							Colunas disponíveis
+							<HelpHint
+								label="Colunas disponíveis"
+								content="Essas colunas ainda não estão associadas a nenhum destino. Arraste-as para um campo principal ou extra quando fizer sentido."
+							/>
+						</div>
+						<p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+							O inventário restante permite revisar rapidamente o que ainda não foi aproveitado.
+						</p>
+					</div>
+				</div>
+			</SectionCard>
 
-					{allowExtraFields && (
-						<section>
-							<div className="flex justify-between items-center mb-4 border-b pb-2">
-								<h2 className="text-lg font-semibold text-purple-800">
-									Campos Extras
-								</h2>
+			<SectionCard
+				title="Campos Principais"
+				description="Arraste as colunas do arquivo para os campos abaixo. Cada destino mostra o papel estrutural daquele atributo."
+			>
+				<div className="space-y-4">
+					{coreItems.map((item) => {
+						const index = items.findIndex(
+							(candidate) => candidate.clientId === item.clientId
+						);
+
+						return (
+							<div
+								key={item.clientId}
+								className={cn(
+									"grid gap-4 rounded-[24px] border px-5 py-5 transition-all md:grid-cols-[1.1fr_1fr_1.3fr]",
+									dragOverIndex === index
+										? "border-[rgba(178,122,68,0.4)] bg-[rgba(178,122,68,0.1)]"
+										: "border-[var(--line)] bg-white/70"
+								)}
+							>
+								<div>
+									<div className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+										Variavel
+									</div>
+									<div className="mt-2 text-lg font-semibold capitalize text-[var(--text)]">
+										{item.variavel.replace(/_/g, " ")}
+									</div>
+								</div>
+								<div>
+									<div className="mb-2 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+										Regras
+									</div>
+									{renderBadges(item.variavel, false)}
+								</div>
+								<div>
+									<div className="mb-2 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+										Coluna do arquivo
+									</div>
+									<div
+										draggable
+										onDragStart={(event) => onDragStart(event, index)}
+										onDragOver={(event) => onDragOver(event, index)}
+										onDragLeave={onDragLeave}
+										onDrop={(event) => onDrop(event, index)}
+										onDragEnd={onDragEnd}
+										className="flex cursor-move items-center justify-between rounded-[20px] border border-[rgba(18,48,71,0.16)] bg-[rgba(18,48,71,0.05)] px-4 py-3 transition-all hover:border-[rgba(178,122,68,0.36)] hover:bg-[rgba(178,122,68,0.08)]"
+									>
+										<span className="text-sm font-medium text-[var(--text)]">
+											{item.nomeColuna || "Clique e arraste uma coluna"}
+										</span>
+										<svg
+											className="h-5 w-5 text-[var(--accent-strong)]"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke="currentColor"
+										>
+											<path
+												strokeLinecap="round"
+												strokeLinejoin="round"
+												strokeWidth={2}
+												d="M4 6h16M4 12h16M4 18h16"
+											/>
+										</svg>
+									</div>
+								</div>
+							</div>
+						);
+					})}
+				</div>
+			</SectionCard>
+
+			{allowExtraFields && (
+				<SectionCard
+					title="Campos Extras"
+					description="Crie campos adicionais quando a empresa precisar preservar contexto além do modelo principal."
+					aside={
+						<PrimaryButton onClick={addExtraMapping} className="justify-center" data-testid="add-extra-button">
+							<PlusIcon className="h-4 w-4" />
+							Adicionar Extra
+						</PrimaryButton>
+					}
+				>
+					{extraItems.length === 0 ? (
+						<EmptyState
+							title="Nenhum campo extra configurado"
+							description="Se a planilha trouxer contexto específico do cliente, adicione um campo extra e escolha se ele será ligado a uma coluna real ou seguirá como null quando estiver sem origem."
+							action={
 								<button
 									onClick={addExtraMapping}
-									className="inline-flex items-center gap-1 rounded-lg bg-purple-100 px-3 py-1 text-sm font-medium text-purple-700 hover:bg-purple-200 transition-colors"
+									className="executive-button-secondary"
 								>
 									<PlusIcon className="h-4 w-4" />
 									Adicionar Extra
 								</button>
-							</div>
-							<div className="overflow-x-auto">
-								<table className="w-full border-collapse">
-									<thead>
-										<tr className="bg-purple-600 text-white">
-											<th className="px-6 py-3 text-left rounded-tl-lg">
-												Nome do Campo
-											</th>
-											<th className="px-6 py-3 text-left">
-												Regras
-											</th>
-											<th className="px-6 py-3 text-left">
-												Coluna do Arquivo
-											</th>
-											<th className="px-6 py-3 text-center rounded-tr-lg w-20">
-												Acoes
-											</th>
-										</tr>
-									</thead>
-									<tbody>
-										{extraItems.map((item) => {
-											const index = items.findIndex(
-												(candidate) => candidate.clientId === item.clientId
-											);
+							}
+						/>
+					) : (
+						<div className="space-y-4">
+							{extraItems.map((item) => {
+								const index = items.findIndex(
+									(candidate) => candidate.clientId === item.clientId
+								);
 
-											return (
-												<tr
-													key={item.clientId}
-													className={`border-b border-gray-200 transition-colors ${
-														dragOverIndex === index ? "bg-purple-100" : ""
-													}`}
-												>
-													<td className="px-6 py-4">
-														<input
-															type="text"
-															value={item.variavel}
-															onChange={(event) =>
-																handleVariableChange(index, event.target.value)
-															}
-															onKeyDown={(event) => {
-																event.stopPropagation();
-															}}
-															className="w-full border border-gray-300 rounded-md px-3 py-1 focus:ring-purple-500 focus:border-purple-500 text-sm"
-															placeholder="Nome do campo extra"
-														/>
-													</td>
-													<td className="px-6 py-4">
-														{renderBadges(item.variavel, true)}
-													</td>
-													<td className="px-6 py-4">
-														<div
-															draggable
-															onDragStart={(event) => onDragStart(event, index)}
-															onDragOver={(event) => onDragOver(event, index)}
-															onDragLeave={onDragLeave}
-															onDrop={(event) => onDrop(event, index)}
-															onDragEnd={onDragEnd}
-															className="flex items-center justify-between py-2 px-4 cursor-move bg-purple-50 rounded-lg border-2 border-purple-200 shadow-sm hover:bg-purple-100 transition-all"
-														>
-															<span>{item.nomeColuna || "Sem coluna mapeada"}</span>
-															<svg
-																className="h-5 w-5 text-purple-400"
-																fill="none"
-																viewBox="0 0 24 24"
-																stroke="currentColor"
-															>
-																<path
-																	strokeLinecap="round"
-																	strokeLinejoin="round"
-																	strokeWidth={2}
-																	d="M4 6h16M4 12h16M4 18h16"
-																/>
-															</svg>
-														</div>
-													</td>
-													<td className="px-6 py-4 text-center">
-														<button
-															onClick={() => removeExtra(index)}
-															className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors"
-														>
-															<TrashIcon className="h-5 w-5" />
-														</button>
-													</td>
-												</tr>
-											);
-										})}
-									</tbody>
-								</table>
-							</div>
-						</section>
-					)}
-
-					{availableItems.length > 0 && (
-						<section>
-							<h2 className="text-lg font-semibold text-gray-600 mb-4 border-b pb-2">
-								Colunas Disponiveis
-							</h2>
-							<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-								{availableItems.map((item) => {
-									const index = items.findIndex(
-										(candidate) => candidate.clientId === item.clientId
-									);
-
-									return (
-										<div
-											key={item.clientId}
-											className={`p-4 rounded-lg border-2 transition-all cursor-move flex items-center justify-between ${
-												dragOverIndex === index
-													? "bg-gray-200 border-gray-400"
-													: "bg-gray-50 border-gray-200 hover:bg-gray-100"
-											}`}
-											draggable
-											onDragStart={(event) => onDragStart(event, index)}
-											onDragOver={(event) => onDragOver(event, index)}
-											onDragLeave={onDragLeave}
-											onDrop={(event) => onDrop(event, index)}
-											onDragEnd={onDragEnd}
-										>
-											<span className="text-sm font-medium text-gray-600 truncate mr-2">
-												{item.nomeColuna}
-											</span>
-											<svg
-												className="h-4 w-4 text-gray-400 shrink-0"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
-											>
-												<path
-													strokeLinecap="round"
-													strokeLinejoin="round"
-													strokeWidth={2}
-													d="M4 6h16M4 12h16M4 18h16"
+								return (
+									<div
+										key={item.clientId}
+										className={cn(
+											"grid gap-4 rounded-[24px] border px-5 py-5 transition-all md:grid-cols-[1fr_1fr_1.1fr_auto]",
+											dragOverIndex === index
+												? "border-[rgba(178,122,68,0.4)] bg-[rgba(178,122,68,0.1)]"
+												: "border-[var(--line)] bg-white/70"
+										)}
+									>
+										<div>
+											<div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+												Nome do campo
+												<HelpHint
+													label="Nome do campo extra"
+													content="O nome é normalizado para gerar a chave final. Ele não pode colidir com campos principais nem com outro extra."
 												/>
-											</svg>
+											</div>
+											<input
+												type="text"
+												value={item.variavel}
+												onChange={(event) =>
+													handleVariableChange(index, event.target.value)
+												}
+												onKeyDown={(event) => {
+													event.stopPropagation();
+												}}
+												className="executive-input"
+												placeholder="Nome do campo extra"
+											/>
 										</div>
-									);
-								})}
-							</div>
-						</section>
+										<div>
+											<div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+												Regras
+												<HelpHint
+													label="Null se sem coluna"
+													content="Quando um campo extra manual é mantido sem coluna, ele segue como null para preservar a estrutura sem inventar um valor."
+												/>
+											</div>
+											{renderBadges(item.variavel, true)}
+										</div>
+										<div>
+											<div className="mb-2 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+												Coluna do arquivo
+											</div>
+											<div
+												draggable
+												onDragStart={(event) => onDragStart(event, index)}
+												onDragOver={(event) => onDragOver(event, index)}
+												onDragLeave={onDragLeave}
+												onDrop={(event) => onDrop(event, index)}
+												onDragEnd={onDragEnd}
+												className="flex cursor-move items-center justify-between rounded-[20px] border border-[rgba(18,48,71,0.16)] bg-[rgba(18,48,71,0.05)] px-4 py-3 transition-all hover:border-[rgba(178,122,68,0.36)] hover:bg-[rgba(178,122,68,0.08)]"
+											>
+												<span className="text-sm font-medium text-[var(--text)]">
+													{item.nomeColuna || "Sem coluna mapeada"}
+												</span>
+												<svg
+													className="h-5 w-5 text-[var(--accent-strong)]"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+												>
+													<path
+														strokeLinecap="round"
+														strokeLinejoin="round"
+														strokeWidth={2}
+														d="M4 6h16M4 12h16M4 18h16"
+													/>
+												</svg>
+											</div>
+										</div>
+										<div className="flex items-end justify-end">
+											<button
+												onClick={() => removeExtra(index)}
+												className="rounded-full border border-[rgba(156,66,63,0.18)] bg-[rgba(156,66,63,0.1)] p-3 text-[var(--danger)] transition-colors hover:bg-[rgba(156,66,63,0.16)]"
+												aria-label="Remover campo extra"
+											>
+												<TrashIcon className="h-5 w-5" />
+											</button>
+										</div>
+									</div>
+								);
+							})}
+						</div>
 					)}
-				</div>
-			</div>
+				</SectionCard>
+			)}
 
-			<motion.button
-				onClick={handleConfirm}
-				whileHover={{ scale: 1.05 }}
-				whileTap={{ scale: 0.95 }}
-				className="bg-blue-600 hover:bg-blue-700 text-white px-12 py-4 rounded-xl shadow-lg font-bold text-lg transition-all"
-			>
-				{confirmLabel}
-			</motion.button>
+			{availableItems.length > 0 && (
+				<SectionCard
+					title="Colunas Disponiveis"
+					description="Essas colunas seguem livres para remapeamento. Use-as como reserva para reorganizar o layout da entidade."
+				>
+					<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+						{availableItems.map((item) => {
+							const index = items.findIndex(
+								(candidate) => candidate.clientId === item.clientId
+							);
+
+							return (
+								<div
+									key={item.clientId}
+									className={cn(
+										"flex cursor-move items-center justify-between rounded-[22px] border px-4 py-4 transition-all",
+										dragOverIndex === index
+											? "border-[rgba(178,122,68,0.4)] bg-[rgba(178,122,68,0.1)]"
+											: "border-[var(--line)] bg-white/70 hover:border-[rgba(178,122,68,0.28)] hover:bg-[rgba(178,122,68,0.08)]"
+									)}
+									draggable
+									onDragStart={(event) => onDragStart(event, index)}
+									onDragOver={(event) => onDragOver(event, index)}
+									onDragLeave={onDragLeave}
+									onDrop={(event) => onDrop(event, index)}
+									onDragEnd={onDragEnd}
+								>
+									<span className="mr-3 truncate text-sm font-semibold text-[var(--text)]">
+										{item.nomeColuna}
+									</span>
+									<svg
+										className="h-4 w-4 shrink-0 text-[var(--accent-strong)]"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+									>
+										<path
+											strokeLinecap="round"
+											strokeLinejoin="round"
+											strokeWidth={2}
+											d="M4 6h16M4 12h16M4 18h16"
+										/>
+									</svg>
+								</div>
+							);
+						})}
+					</div>
+				</SectionCard>
+			)}
+
+			<StickyActionBar>
+				<div>
+					<div className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+						Próxima etapa
+					</div>
+					<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+						Quando o mapeamento estiver consistente, avance para a revisão da entidade.
+					</p>
+				</div>
+				<motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+					<PrimaryButton
+						onClick={handleConfirm}
+						className="px-8 py-4 text-base"
+						data-testid="mapping-confirm-button"
+					>
+						{confirmLabel}
+					</PrimaryButton>
+				</motion.div>
+			</StickyActionBar>
 		</div>
 	);
 }

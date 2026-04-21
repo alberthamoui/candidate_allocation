@@ -7,7 +7,7 @@ import (
 	"log"
 )
 
-func carregarHorarios(db *sql.DB) (map[int]*types.Horario, error) {
+func CarregarHorarios(db *sql.DB) (map[int]*types.Horario, error) {
 	horarios := make(map[int]*types.Horario)
 	rows, err := db.Query(`SELECT id, opcao FROM opcoes_horario`)
 	if err != nil {
@@ -31,7 +31,7 @@ func carregarHorarios(db *sql.DB) (map[int]*types.Horario, error) {
 	return horarios, nil
 }
 
-func carregarDisponibilidades(db *sql.DB, horarios map[int]*types.Horario) (map[int][]int, error) {
+func CarregarDisponibilidades(db *sql.DB, horarios map[int]*types.Horario) (map[int][]int, error) {
 	prefs := make(map[int][]int)
 	rows, err := db.Query(`SELECT pessoa_id, horario_id, preferencia FROM disponibilidade ORDER BY pessoa_id, preferencia ASC`)
 	if err != nil {
@@ -62,7 +62,7 @@ func carregarDisponibilidades(db *sql.DB, horarios map[int]*types.Horario) (map[
 	return prefs, nil
 }
 
-func carregarAvaliadores(db *sql.DB) ([]*types.Avaliador, error) {
+func CarregarAvaliadores(db *sql.DB) ([]*types.Avaliador, error) {
 	rows, err := db.Query(`SELECT id, nome, email FROM avaliador`)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao carregar avaliadores: %w", err)
@@ -85,7 +85,7 @@ func carregarAvaliadores(db *sql.DB) ([]*types.Avaliador, error) {
 	return avals, nil
 }
 
-func carregarRestricoes(db *sql.DB) (map[int]map[int]bool, error) {
+func CarregarRestricoes(db *sql.DB) (map[int]map[int]bool, error) {
 	restr := make(map[int]map[int]bool)
 
 	rows, err := db.Query(`

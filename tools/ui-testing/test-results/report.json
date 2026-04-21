@@ -16,7 +16,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/tools/ui-testing/test-results",
+        "outputDir": "/tmp/candidate-allocation-playwright",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -87,12 +87,12 @@
                       "workerIndex": 0,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 373,
+                      "duration": 851,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-04-21T01:54:03.540Z",
+                      "startTime": "2026-04-21T18:07:50.279Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -121,12 +121,12 @@
                       "workerIndex": 1,
                       "parallelIndex": 1,
                       "status": "passed",
-                      "duration": 441,
+                      "duration": 1005,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-04-21T01:54:03.544Z",
+                      "startTime": "2026-04-21T18:07:50.295Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -136,7 +136,7 @@
               ],
               "id": "c4396361884a96dbe527-07442dc90a3b582d9feb",
               "file": "01-home.spec.ts",
-              "line": 12,
+              "line": 13,
               "column": 7
             },
             {
@@ -155,12 +155,12 @@
                       "workerIndex": 2,
                       "parallelIndex": 2,
                       "status": "passed",
-                      "duration": 422,
+                      "duration": 908,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-04-21T01:54:03.535Z",
+                      "startTime": "2026-04-21T18:07:50.290Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -170,7 +170,41 @@
               ],
               "id": "c4396361884a96dbe527-3592b394cd1b6ffa2a52",
               "file": "01-home.spec.ts",
-              "line": 26,
+              "line": 27,
+              "column": 7
+            },
+            {
+              "title": "Deve abrir a ajuda contextual da página inicial",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 1227,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-21T18:07:50.287Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "c4396361884a96dbe527-b6b67c35a09490e0070c",
+              "file": "01-home.spec.ts",
+              "line": 38,
               "column": 7
             }
           ]
@@ -203,15 +237,15 @@
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 3,
-                      "parallelIndex": 3,
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
                       "status": "passed",
-                      "duration": 1078,
+                      "duration": 1933,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-04-21T01:54:03.539Z",
+                      "startTime": "2026-04-21T18:07:50.279Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -237,15 +271,15 @@
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 4,
-                      "parallelIndex": 4,
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 782,
+                      "duration": 1564,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-04-21T01:54:03.537Z",
+                      "startTime": "2026-04-21T18:07:51.387Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -271,15 +305,15 @@
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
+                      "workerIndex": 2,
+                      "parallelIndex": 2,
                       "status": "passed",
-                      "duration": 633,
+                      "duration": 1795,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-04-21T01:54:04.041Z",
+                      "startTime": "2026-04-21T18:07:51.451Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -322,15 +356,15 @@
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 2,
-                      "parallelIndex": 2,
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
                       "status": "passed",
-                      "duration": 1480,
+                      "duration": 2222,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-04-21T01:54:04.091Z",
+                      "startTime": "2026-04-21T18:07:51.553Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -356,15 +390,15 @@
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 1,
-                      "parallelIndex": 1,
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
                       "status": "passed",
-                      "duration": 1791,
+                      "duration": 2557,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-04-21T01:54:04.110Z",
+                      "startTime": "2026-04-21T18:07:51.804Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -410,12 +444,12 @@
                       "workerIndex": 4,
                       "parallelIndex": 4,
                       "status": "passed",
-                      "duration": 4594,
+                      "duration": 5567,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-04-21T01:54:04.445Z",
+                      "startTime": "2026-04-21T18:07:52.462Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -431,13 +465,64 @@
           ]
         }
       ]
+    },
+    {
+      "title": "05-allocation.spec.ts",
+      "file": "05-allocation.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Allocation Flow UI",
+          "file": "05-allocation.spec.ts",
+          "line": 4,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should config, load and display results",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5154,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-21T18:07:52.992Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "47ce5fd0ba39b93af41b-5636bfe05c2e1e24da9a",
+              "file": "05-allocation.spec.ts",
+              "line": 7,
+              "column": 7
+            }
+          ]
+        }
+      ]
     }
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-04-21T01:54:03.234Z",
-    "duration": 5834.763,
-    "expected": 9,
+    "startTime": "2026-04-21T18:07:49.749Z",
+    "duration": 8441.081,
+    "expected": 11,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

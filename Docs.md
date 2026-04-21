@@ -15,6 +15,72 @@ Cada entidade passa por duas etapas separadas:
 
 Enquanto o usuário ainda não salvou a etapa atual, ele pode voltar da revisão para o mapeamento e ajustar as colunas. Depois do salvamento, o fluxo segue para a próxima entidade.
 
+## Frontend Executivo
+
+O frontend agora usa um shell visual compartilhado para todas as rotas do wizard desktop.
+
+Peças centrais:
+
+- [`frontend/src/workflowShell.tsx`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/frontend/src/workflowShell.tsx): layout global, barra lateral com etapas, cabeçalho premium, drawer fixo de ajuda e componentes visuais reutilizáveis
+- [`frontend/src/workflowMeta.ts`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/frontend/src/workflowMeta.ts): fonte única do conteúdo contextual por rota, incluindo título, resumo e ajuda da página
+- [`frontend/src/index.css`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/frontend/src/index.css): tokens visuais globais com tipografia, paleta, sombras, superfícies e classes base do design system
+
+Direção adotada:
+
+- estética clara e institucional com tom “luxuoso executivo”
+- tipografia serif para títulos e sans humanista para corpo
+- paleta baseada em marfim quente, azul-ardósia e acento bronze
+- mesma linguagem visual em importação, mapeamento, revisão, configuração, loading e resultado
+
+## Ajuda Contextual
+
+O padrão de ajuda passou a ser híbrido:
+
+- botão fixo `Ajuda da página` sempre no mesmo lugar, abrindo drawer lateral
+- ícones `?` inline apenas em elementos com maior chance de gerar dúvida
+
+O conteúdo da ajuda é estático no frontend e mapeado por rota em `workflowMeta.ts`.
+
+Isso reduz duplicação e permite manter:
+
+- objetivo da página
+- instruções de uso
+- impacto das decisões/configurações
+- glossário curto dos elementos mais importantes
+
+## Estrutura das Telas
+
+As telas foram reorganizadas sem alterar contratos com o backend:
+
+- home: hero de importação e bloco técnico do `Greet` rebaixado para utilitário
+- mapeamento: três áreas visuais estáveis, com campos principais, extras e colunas disponíveis
+- revisão: painel operacional com métricas, duplicados priorizados e barra fixa de salvamento
+- sucesso: checkpoint institucional antes da configuração
+- configuração: seções separadas para parâmetros base, critérios soft e leitura de impacto
+- loading: tela de processamento coerente com o shell global
+- resultado: dashboard executivo com filtros, grupos por horário e painel lateral de não alocados
+
+## Bindings do Wails em Rotas Diretas
+
+As telas de configuração e processamento agora usam [`frontend/src/wailsReady.ts`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/frontend/src/wailsReady.ts) para esperar os bindings do Wails antes de chamar métodos do backend.
+
+Isso evita crash quando o usuário ou um teste Playwright abre diretamente rotas como:
+
+- `/allocation-config`
+- `/allocation-loading`
+
+Sem essa espera, chamadas imediatas para `window.go.main.App.*` podem falhar antes do runtime terminar de inicializar no browser de desenvolvimento.
+
+## UI Testing
+
+Os testes de UI continuam em `tools/ui-testing`, mas agora com alguns ajustes importantes para convivência com o modo Wails dev:
+
+- a suíte usa `data-testid` nos pontos críticos de navegação para reduzir fragilidade visual
+- `playwright.config.ts` grava artefatos temporários em `/tmp/candidate-allocation-playwright`
+- os diretórios `test-results/` e `tools/ui-testing/test-results/` possuem `go.mod` local para impedir que artefatos do Playwright contaminem o `go mod tidy` executado pelo `wails dev`
+
+Isso evita que nomes de diretório gerados por falha de teste virem pseudo-pacotes Go inválidos dentro do módulo principal.
+
 ## Fluxo Atual do Frontend
 
 Ordem das telas:
@@ -421,3 +487,14 @@ A configuração principal fica no `.golangci.yml`, com a listagem de todos os l
 Foi criado um analyzer específico localizado em `tools/unexported/main.go`. A responsabilidade dele é buscar funções exportadas (com inicial maiúscula) que não estão sendo chamadas fora do seu pacote de origem e sugerir que elas se tornem privadas (unexported).
 - **Como funciona:** O script varre o módulo inteiro usando `go/packages`, constrói um índice de definições e referências e aponta métodos "vazando" a não ser que estejam em uma allowlist (como os métodos do `App` usados pelo Wails).
 - **Como executar:** Ao invés de executar apenas `golangci-lint run`, é recomendado utilizar `make lint`, que cuidará de buildar a ferramenta e executar ambos os checks (o golangci-lint padrão e o nosso analyzer customizado).
+
+## Alocação UI
+
+Foi adicionada uma interface de carregamento `AllocationLoadingPage.tsx` e uma tela de resultados `AllocationResultPage.tsx`. O backend foi atualizado com uma função `RunAllocation` em `app.go` para fazer a ponte com o Wails. A interface mostra de forma cronológica os horários e separa claramente os grupos, colocando os avaliadores no final das listas com destaque visual. Também contém áreas para filtros de critérios (Soft/Hard) e lista de candidatos não alocados.
+
+- Adicionado `AllocationConfigPage.tsx` para definir grupos, mínimo/máximo de pessoas e critérios soft. Integrei com o `exact_solver.go` substituindo o antigo simulador.
+
+- Expandido `AllocationConfigPage.tsx` para conter um construtor de Soft Criteria (Criar, Editar, Deletar), passando tipos nativos suportados pelo Go (ex: min_value, balanced_distribution, etc) e a coluna de filtragem com threshold para o exact solver.
+
+- Adicionado sistema de listagem dinâmica das opções e colunas nos soft criterias a partir do BD.
+- Adicionado barra de pesquisa livre na tela de resultado.

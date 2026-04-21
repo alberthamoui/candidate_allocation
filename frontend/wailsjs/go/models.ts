@@ -150,6 +150,119 @@ export namespace logic {
 
 }
 
+export namespace main {
+	
+	export class UIAvaliador {
+	    id: number;
+	    nome: string;
+	    sigla: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UIAvaliador(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.nome = source["nome"];
+	        this.sigla = source["sigla"];
+	    }
+	}
+	export class UICandidate {
+	    id: number;
+	    nome: string;
+	    semestre: number;
+	    curso: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UICandidate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.nome = source["nome"];
+	        this.semestre = source["semestre"];
+	        this.curso = source["curso"];
+	    }
+	}
+	export class UIMesa {
+	    id: number;
+	    horario: string;
+	    descricao: string;
+	    candidatos: UICandidate[];
+	    avaliadores: UIAvaliador[];
+	
+	    static createFrom(source: any = {}) {
+	        return new UIMesa(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.horario = source["horario"];
+	        this.descricao = source["descricao"];
+	        this.candidatos = this.convertValues(source["candidatos"], UICandidate);
+	        this.avaliadores = this.convertValues(source["avaliadores"], UIAvaliador);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class UIAllocationResult {
+	    status: string;
+	    mesas: UIMesa[];
+	    naoAlocados: UICandidate[];
+	
+	    static createFrom(source: any = {}) {
+	        return new UIAllocationResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.mesas = this.convertValues(source["mesas"], UIMesa);
+	        this.naoAlocados = this.convertValues(source["naoAlocados"], UICandidate);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+
+}
+
 export namespace types {
 	
 	export class Avaliador {

@@ -13,7 +13,7 @@ test.describe('Suite 4: A Jornada Completa (Happy Path)', () => {
     // 2. Mapeamento Candidatos -> Verify Candidatos
     await expect(page.locator('h1', { hasText: 'Mapeamento de Candidatos' })).toBeVisible({ timeout: 15000 });
     await page.waitForTimeout(1000);
-    await page.click('button:has-text("Revisar candidatos")');
+    await page.getByTestId('mapping-confirm-button').click();
     
     // 3. Verify Candidatos -> Mapeamento Restrições
     await expect(page.locator('h1', { hasText: 'Verificação de Usuários' })).toBeVisible({ timeout: 15000 });
@@ -28,12 +28,12 @@ test.describe('Suite 4: A Jornada Completa (Happy Path)', () => {
         await page.waitForTimeout(200); // Wait for React state
         resolveBtns = page.locator('button:has-text("Aceitar Este")');
     }
-    await page.click('button:has-text("Salvar Dados")');
+    await page.getByTestId('verification-save-button').click();
     
     // 4. Mapeamento Restrições -> Verify Restrições
     await expect(page.locator('h1', { hasText: 'Mapeamento de Restricoes' })).toBeVisible({ timeout: 15000 });
     await page.waitForTimeout(1000);
-    await page.click('button:has-text("Revisar restricoes")');
+    await page.getByTestId('mapping-confirm-button').click();
 
     // 5. Verify Restrições -> Mapeamento Avaliadores
     await expect(page.locator('h1', { hasText: 'Verificação de Restrições' })).toBeVisible({ timeout: 15000 });
@@ -48,12 +48,12 @@ test.describe('Suite 4: A Jornada Completa (Happy Path)', () => {
         await page.waitForTimeout(200);
         resolveBtns = page.locator('button:has-text("Aceitar Este")');
     }
-    await page.click('button:has-text("Salvar Dados")');
+    await page.getByTestId('verification-save-button').click();
 
     // 6. Mapeamento Avaliadores -> Verify Avaliadores
     await expect(page.locator('h1', { hasText: 'Mapeamento de Avaliadores' })).toBeVisible({ timeout: 15000 });
     await page.waitForTimeout(1000);
-    await page.click('button:has-text("Revisar avaliadores")');
+    await page.getByTestId('mapping-confirm-button').click();
 
     // 7. Verify Avaliadores -> Success
     await expect(page.locator('h1', { hasText: 'Verificação de Avaliadores' })).toBeVisible({ timeout: 15000 });
@@ -68,11 +68,11 @@ test.describe('Suite 4: A Jornada Completa (Happy Path)', () => {
         await page.waitForTimeout(200);
         resolveBtns = page.locator('button:has-text("Aceitar Este")');
     }
-    await page.click('button:has-text("Salvar Dados")');
+    await page.getByTestId('verification-save-button').click();
 
     // 8. Success Page
     await expect(page.locator('h1', { hasText: 'Tudo Pronto!' })).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('text=Os candidatos e restrições foram salvos com sucesso')).toBeVisible();
+    await expect(page.locator('text=A preparação da base terminou com sucesso')).toBeVisible();
     
     // Validate the button to return to home
     const restartBtn = page.locator('button:has-text("Nova Importação")');

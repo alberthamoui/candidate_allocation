@@ -7,6 +7,15 @@ import {
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { UserCard, type MapUsuario, type UserExtras } from "./UserCard";
+import {
+	EmptyState,
+	MetricPill,
+	PrimaryButton,
+	SecondaryButton,
+	SectionCard,
+	StatusBadge,
+	StickyActionBar,
+} from "./workflowShell";
 
 interface EntityVerificationViewProps {
 	title: string;
@@ -236,6 +245,9 @@ export default function EntityVerificationView({
 	}
 
 	const duplicateKeys = duplicateFields;
+	const uniqueCount = Object.keys(editedEntities)
+		.map(Number)
+		.filter((id) => !isDuplicate(id)).length;
 
 	function acceptOne(group: number[], idAccepted: number) {
 		setAcceptedIds((s) => new Set(s).add(idAccepted));
@@ -371,140 +383,104 @@ export default function EntityVerificationView({
 	};
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+		<div className="space-y-6">
 			{errorMsg && (
 				<div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
 					<motion.div
 						initial={{ scale: 0.9, opacity: 0 }}
 						animate={{ scale: 1, opacity: 1 }}
-						className="bg-white p-6 rounded-xl shadow-2xl max-w-md mx-4"
+						className="executive-card executive-card-strong mx-4 max-w-md p-6"
 					>
 						<div className="flex items-center space-x-3 mb-4">
-							<ExclamationTriangleIcon className="w-6 h-6 text-red-500" />
-							<h3 className="font-semibold text-gray-900">
+							<ExclamationTriangleIcon className="w-6 h-6 text-[var(--danger)]" />
+							<h3 className="font-semibold text-[var(--text)]">
 								Erro de Validação
 							</h3>
 						</div>
-						<p className="text-gray-700 mb-6">{errorMsg}</p>
-						<button
-							className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-							onClick={() => setErrorMsg(null)}
-						>
+						<p className="mb-6 text-sm leading-6 text-[var(--muted)]">{errorMsg}</p>
+						<PrimaryButton className="w-full justify-center" onClick={() => setErrorMsg(null)}>
 							Entendido
-						</button>
+						</PrimaryButton>
 					</motion.div>
 				</div>
 			)}
 
-			<div className="bg-white shadow-sm border-b">
-				<div className="max-w-7xl mx-auto px-6 py-6">
-					<div className="flex items-center justify-between">
-						<div>
-							<h1 className="text-3xl font-bold text-gray-900">
-								{title}
-							</h1>
-							<p className="text-gray-600 mt-1">
-								{subtitle}
-							</p>
-						</div>
-						<div className="flex items-center space-x-4 text-sm">
-							<div className="flex items-center space-x-2 bg-red-100 px-3 py-2 rounded-lg">
-								<div className="w-3 h-3 bg-red-500 rounded-full"></div>
-								<span>
-									{dupGroups.length} grupos duplicados
-								</span>
-							</div>
-							<div className="flex items-center space-x-2 bg-blue-100 px-3 py-2 rounded-lg">
-								<div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-								<span>
-									{
-										Object.keys(editedEntities).filter(
-											(id) => !isDuplicate(Number(id))
-										).length
-									}{" "}
-									únicos
-								</span>
-							</div>
-							{backRoute && (
-								<button
-									onClick={() => navigate(backRoute)}
-									className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-50"
-								>
-									Voltar ao mapeamento
-								</button>
-							)}
-						</div>
+			<SectionCard
+				title={title}
+				description={subtitle}
+				aside={
+					<div className="flex flex-wrap gap-3">
+						<StatusBadge tone={dupGroups.length > 0 ? "danger" : "success"}>
+							{dupGroups.length} grupos duplicados
+						</StatusBadge>
+						<StatusBadge tone="accent">{uniqueCount} registros únicos</StatusBadge>
+						{backRoute ? (
+							<SecondaryButton onClick={() => navigate(backRoute)}>
+								Voltar ao mapeamento
+							</SecondaryButton>
+						) : null}
 					</div>
+				}
+			>
+				<div className="grid gap-4 md:grid-cols-3">
+					<MetricPill label="Conflitos em aberto" value={dupGroups.length} tone={dupGroups.length > 0 ? "danger" : "success"} />
+					<MetricPill label="Registros prontos" value={uniqueCount} tone="accent" />
+					<MetricPill label="Entidade" value={title.replace("Verificação de ", "")} />
 				</div>
-			</div>
+			</SectionCard>
 
-			<div className="max-w-7xl mx-auto px-6 py-8 space-y-12">
-				{dupGroups.length > 0 && (
-					<div className="space-y-8">
-						<h2 className="text-2xl font-bold text-gray-900 flex items-center space-x-3">
-							<ExclamationTriangleIcon className="w-8 h-8 text-red-500" />
-							<span>Grupos Duplicados - Ação Necessária</span>
-						</h2>
-
+			{dupGroups.length > 0 ? (
+				<SectionCard
+					title="Grupos Duplicados"
+					description="Esses conjuntos exigem decisão explícita antes do salvamento. O sistema não persiste registros ambíguos."
+				>
+					<div className="space-y-6">
 						{dupGroups.map((group, idx) => (
 							<motion.div
 								key={idx}
 								initial={{ opacity: 0, y: 20 }}
 								animate={{ opacity: 1, y: 0 }}
-								transition={{ delay: idx * 0.1 }}
-								className="border-2 border-red-300 rounded-2xl shadow-xl bg-white overflow-hidden"
+								transition={{ delay: idx * 0.08 }}
+								className="overflow-hidden rounded-[28px] border border-[rgba(156,66,63,0.18)] bg-[rgba(156,66,63,0.08)]"
 							>
-								<div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-6">
-									<div className="flex justify-between items-center">
+								<div className="border-b border-[rgba(156,66,63,0.16)] px-6 py-5">
+									<div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
 										<div>
-											<h3 className="text-xl font-bold">
-												Grupo Duplicado #{idx + 1}
-											</h3>
-											<p className="text-red-100 mt-1">
-												IDs conflitantes:{" "}
-												{group.join(", ")} • Escolha uma
-												ação
+											<div className="text-xs uppercase tracking-[0.18em] text-[var(--danger)]">
+												Ação necessária
+											</div>
+											<h2 className="mt-2 text-2xl text-[var(--text)]">Grupo Duplicado #{idx + 1}</h2>
+											<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+												IDs conflitantes: {group.join(", ")}. Escolha um registro, aceite todos quando o conflito não for real ou remova o grupo inteiro.
 											</p>
 										</div>
-										<div className="flex space-x-3">
-											<motion.button
-												whileHover={{ scale: 1.02 }}
-												whileTap={{ scale: 0.98 }}
-												className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-xl font-semibold transition-colors shadow-lg"
+										<div className="flex flex-wrap gap-3">
+											<PrimaryButton
+												className="bg-[linear-gradient(135deg,#256454_0%,#184c40_100%)]"
 												onClick={() => acceptAll(group)}
 											>
-												<CheckCircleIcon className="w-5 h-5 inline mr-2" />
+												<CheckCircleIcon className="h-5 w-5" />
 												Aceitar Todos
-											</motion.button>
-											<motion.button
-												whileHover={{ scale: 1.02 }}
-												whileTap={{ scale: 0.98 }}
-												className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-xl font-semibold transition-colors shadow-lg"
-												onClick={() => rejectAll(group)}
-											>
-												<XMarkIcon className="w-5 h-5 inline mr-2" />
+											</PrimaryButton>
+											<SecondaryButton onClick={() => rejectAll(group)}>
+												<XMarkIcon className="h-5 w-5" />
 												Recusar Todos
-											</motion.button>
+											</SecondaryButton>
 										</div>
 									</div>
 								</div>
-
-								<div className="p-8">
-									<div className="flex flex-wrap gap-6 justify-center">
+								<div className="p-6">
+									<div className="flex flex-wrap justify-center gap-6">
 										{group.map((id) =>
 											renderEntityCard(
 												id,
-												<motion.button
-													whileHover={{ scale: 1.02 }}
-													whileTap={{ scale: 0.98 }}
-													className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all"
-													onClick={() =>
-														acceptOne(group, id)
-													}
+												<PrimaryButton
+													className="w-full justify-center bg-[linear-gradient(135deg,#256454_0%,#184c40_100%)]"
+													onClick={() => acceptOne(group, id)}
 												>
-													<CheckCircleIcon className="w-5 h-5 inline mr-2" />
+													<CheckCircleIcon className="h-5 w-5" />
 													Aceitar Este
-												</motion.button>
+												</PrimaryButton>
 											)
 										)}
 									</div>
@@ -512,62 +488,65 @@ export default function EntityVerificationView({
 							</motion.div>
 						))}
 					</div>
-				)}
+				</SectionCard>
+			) : (
+				<SectionCard
+					title="Conflitos resolvidos"
+					description="Nenhum grupo duplicado está bloqueando o salvamento nesta etapa."
+				>
+					<EmptyState
+						title="Base pronta para persistência"
+						description="Todos os conflitos desta tela foram resolvidos. Revise os registros únicos abaixo e avance para a próxima entidade quando estiver satisfeito."
+					/>
+				</SectionCard>
+			)}
 
-				<div className="space-y-6">
-					<h2 className="text-2xl font-bold text-gray-900 flex items-center space-x-3">
-						<CheckCircleIcon className="w-8 h-8 text-green-500" />
-						<span>Registros Únicos</span>
-					</h2>
-
-					<div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-						<div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-6">
-							<h3 className="text-xl font-semibold">
-								Dados Validados
-							</h3>
-							<p className="text-blue-100 mt-1">
-								{
-									Object.keys(editedEntities).filter(
-										(id) => !isDuplicate(Number(id))
-									).length
-								}{" "}
-								registros sem conflitos
-							</p>
-						</div>
-
-						<div className="p-8">
-							<div className="flex flex-wrap gap-6 justify-center">
-								{Object.keys(editedEntities)
-									.map(Number)
-									.filter((id) => !isDuplicate(id))
-									.map((id) => renderEntityCard(id))}
-							</div>
-						</div>
+			<SectionCard
+				title="Registros Únicos"
+				description="Os cartões abaixo representam os dados prontos ou já validados para esta entidade."
+			>
+				{uniqueCount === 0 ? (
+					<EmptyState
+						title="Nenhum registro único disponível"
+						description="Enquanto houver apenas grupos conflitantes, esta área permanecerá vazia. Resolva os duplicados para liberar registros prontos."
+					/>
+				) : (
+					<div className="flex flex-wrap justify-center gap-6">
+						{Object.keys(editedEntities)
+							.map(Number)
+							.filter((id) => !isDuplicate(id))
+							.map((id) => renderEntityCard(id))}
 					</div>
+				)}
+			</SectionCard>
+
+			<StickyActionBar>
+				<div>
+					<div className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+						Estado do salvamento
+					</div>
+					<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+						{dupGroups.length > 0
+							? "Resolva todos os grupos duplicados antes de persistir esta entidade."
+							: "Sem conflitos pendentes. Os dados podem ser salvos e o fluxo seguirá para a próxima etapa."}
+					</p>
 				</div>
-				<div className="flex justify-center pt-8">
-					<motion.button
-						whileHover={{
-							scale: dupGroups.length === 0 ? 1.02 : 1,
-						}}
-						whileTap={{ scale: dupGroups.length === 0 ? 0.98 : 1 }}
+				<motion.div whileHover={{ scale: dupGroups.length === 0 ? 1.02 : 1 }} whileTap={{ scale: dupGroups.length === 0 ? 0.98 : 1 }}>
+					<PrimaryButton
 						onClick={saveAll}
 						disabled={dupGroups.length > 0}
-						className={`px-12 py-4 rounded-xl font-bold text-lg shadow-xl transition-all ${
-							dupGroups.length > 0
-								? "bg-gray-400 text-gray-200 cursor-not-allowed"
-								: "bg-gradient-to-r from-green-600 to-green-700 text-white hover:shadow-2xl cursor-pointer"
-						}`}
+						className={`px-8 py-4 text-base ${dupGroups.length > 0 ? "cursor-not-allowed opacity-50" : ""}`}
+						data-testid="verification-save-button"
 					>
-						<CheckCircleIcon className="w-6 h-6 inline mr-3" />
+						<CheckCircleIcon className="h-5 w-5" />
 						{dupGroups.length > 0
 							? `Resolva ${dupGroups.length} grupo${
 									dupGroups.length > 1 ? "s" : ""
 							  } duplicado${dupGroups.length > 1 ? "s" : ""}`
 							: "Salvar Dados"}
-					</motion.button>
-				</div>
-			</div>
+					</PrimaryButton>
+				</motion.div>
+			</StickyActionBar>
 		</div>
 	);
 }

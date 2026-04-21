@@ -30,7 +30,7 @@ func fatorialBig(n int) *big.Int {
 	return result
 }
 
-func gerarMesas(horarios map[int]*types.Horario, avals []*types.Avaliador) ([]*types.Mesa, map[int][]*types.Mesa) {
+func GerarMesas(horarios map[int]*types.Horario, avals []*types.Avaliador) ([]*types.Mesa, map[int][]*types.Mesa) {
 	var todas []*types.Mesa
 	porDia := make(map[int][]*types.Mesa)
 
@@ -88,7 +88,7 @@ func podeAlocarNoHorario(h *types.Horario, pid int, restr map[int]map[int]bool) 
 	return true
 }
 
-func fazerAlocacaoMesas(mesas []*types.Mesa, porDia map[int][]*types.Mesa, prefs map[int][]int, restr map[int]map[int]bool) types.ResultadoAlocacao {
+func FazerAlocacaoMesas(mesas []*types.Mesa, porDia map[int][]*types.Mesa, prefs map[int][]int, restr map[int]map[int]bool) types.ResultadoAlocacao {
 	aloc := make(map[int]int)
 	alocados := make(map[int]bool)
 	pontuacao := 0
@@ -140,26 +140,26 @@ func Run(db *sql.DB) error {
 
 	fmt.Println("---- INICIANDO ALOCAÇÃO ----")
 
-	avals, err := carregarAvaliadores(db)
+	avals, err := CarregarAvaliadores(db)
 	if err != nil {
 		return err
 	}
-	restr, err := carregarRestricoes(db)
+	restr, err := CarregarRestricoes(db)
 	if err != nil {
 		return err
 	}
-	horarios, err := carregarHorarios(db)
+	horarios, err := CarregarHorarios(db)
 	if err != nil {
 		return err
 	}
-	prefs, err := carregarDisponibilidades(db, horarios)
+	prefs, err := CarregarDisponibilidades(db, horarios)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("---- DADOS CARREGADOS ----")
 
-	mesas, porDia := gerarMesas(horarios, avals)
+	mesas, porDia := GerarMesas(horarios, avals)
 	fmt.Println("\n---- MESAS GERADAS ----")
 	for _, m := range mesas {
 		fmt.Printf("Mesa %d → %s | Avaliadores: %v\n", m.ID, m.Descricao, m.Avaliadores)
@@ -167,7 +167,7 @@ func Run(db *sql.DB) error {
 	fmt.Println(strings.Repeat("-", 60))
 
 	start := time.Now()
-	res := fazerAlocacaoMesas(mesas, porDia, prefs, restr)
+	res := FazerAlocacaoMesas(mesas, porDia, prefs, restr)
 
 	mapMesa := make(map[int]*types.Mesa, len(mesas))
 	for _, m := range mesas {

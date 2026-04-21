@@ -46,6 +46,10 @@ export function GetCandidateMappingFieldInfos() {
   return window['go']['main']['App']['GetCandidateMappingFieldInfos']();
 }
 
+export function GetCriteriaOptions() {
+  return window['go']['main']['App']['GetCriteriaOptions']();
+}
+
 export function GetRestricaoMappingFieldInfos() {
   return window['go']['main']['App']['GetRestricaoMappingFieldInfos']();
 }
@@ -64,6 +68,10 @@ export function NormalizePreferenceScheduleMappings(arg1) {
 
 export function NormalizeSoftCriteria(arg1) {
   return window['go']['main']['App']['NormalizeSoftCriteria'](arg1);
+}
+
+export function RunAllocation(arg1) {
+  return window['go']['main']['App']['RunAllocation'](arg1);
 }
 
 export function SaveAvaliadoresFromMaps(arg1) {
