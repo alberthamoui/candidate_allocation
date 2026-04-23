@@ -5,5 +5,11 @@
 			"command": ["goimports", "-w", "$FILE"],
 			"extensions": [".go"]
 		}
+	},
+	"tools": {
+		"ui_inspector": true
+	},
+	"permission": {
+		"ui_inspector": "allow"
 	}
 }

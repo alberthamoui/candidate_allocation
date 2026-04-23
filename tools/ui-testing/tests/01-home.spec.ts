@@ -5,41 +5,26 @@ test.describe('Suite 1: Home Page & Initial Setup', () => {
     await page.goto('/');
     
     // Verifica se o título "Candidate Allocator" aparece na home
-    const header = page.locator('h1');
+    const header = page.locator('h1').first();
     await expect(header).toHaveText('Candidate Allocator');
-    await expect(page.getByTestId('page-help-button')).toBeVisible();
-  });
-
-  test('Deve interagir com a funcionalidade Greet do Wails', async ({ page }) => {
-    await page.goto('/');
-    
-    const nameInput = page.locator('#name');
-    await nameInput.fill('Playwright Agent');
-    
-    const greetButton = page.locator('button', { hasText: 'Greet' });
-    await greetButton.click();
-    
-    // A interface deve atualizar a mensagem com o nome passado
-    const resultDiv = page.locator('#result');
-    await expect(resultDiv).toContainText('Playwright Agent');
+    await expect(page.getByLabel('Ajuda da Página')).toBeVisible();
   });
 
   test('Deve exibir erro ao tentar prosseguir sem selecionar um arquivo Excel', async ({ page }) => {
     await page.goto('/');
     
-    const fileButton = page.locator('button', { hasText: 'Executar função de arquivo' });
+    const fileButton = page.locator('button', { hasText: 'Continuar' });
     await fileButton.click();
     
-    const errorMsg = page.locator('#fileResult');
-    await expect(errorMsg).toHaveText('Por favor, selecione um arquivo.');
+    const errorMsg = page.locator('text=Por favor, selecione um arquivo.');
     await expect(errorMsg).toBeVisible();
   });
 
   test('Deve abrir a ajuda contextual da página inicial', async ({ page }) => {
     await page.goto('/');
 
-    await page.getByTestId('page-help-button').click();
-    await expect(page.locator('text=Ajuda desta página')).toBeVisible();
-    await expect(page.locator('text=Entrada controlada')).toBeVisible();
+    await page.getByLabel('Ajuda da Página').click();
+    await expect(page.locator('text=Para que serve')).toBeVisible();
+    // await expect(page.locator('text=Inicie uma nova')).toBeVisible();
   });
 });

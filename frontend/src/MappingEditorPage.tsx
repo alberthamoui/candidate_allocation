@@ -1,3 +1,4 @@
+import { HelpIcon } from "./components/Tooltip";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -9,7 +10,7 @@ import {
 import type { MappingDraft, MappingFieldInfo, MappingItem } from "./importTypes";
 import {
 	EmptyState,
-	HelpHint,
+	
 	PrimaryButton,
 	SectionCard,
 	StickyActionBar,
@@ -343,44 +344,31 @@ export default function MappingEditorPage({
 
 			<SectionCard
 				title={title}
-				description={description}
-				aside={
-					<div className="flex items-center gap-3 rounded-[20px] border border-[var(--line)] bg-white/70 px-4 py-3 text-sm text-[var(--muted)]">
-						<InformationCircleIcon className="h-5 w-5 text-[var(--accent-strong)]" />
-						Os badges mostram obrigatoriedade e participação na reconstrução única.
-					</div>
-				}
 			>
 				<div className="grid gap-4 md:grid-cols-3">
-					<div className="rounded-[24px] border border-[var(--line)] bg-white/70 px-5 py-5">
-						<div className="text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
+					<div className="minimal-panel p-5">
+						<div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
 							Campos principais
 						</div>
-						<p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+						<p className="text-sm text-gray-600">
 							Mapeie primeiro os atributos estruturais. Eles sustentam identificação, regras e validações.
 						</p>
 					</div>
-					<div className="rounded-[24px] border border-[var(--line)] bg-white/70 px-5 py-5">
-						<div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
+					<div className="minimal-panel p-5">
+						<div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
 							Campos extras
-							<HelpHint
-								label="Campos extras"
-								content="Extras preservam dados específicos de cada empresa. Se forem criados manualmente, precisam ter um nome válido antes de seguir."
-							/>
+							<HelpIcon text="Extras preservam dados específicos de cada empresa. Se forem criados manualmente, precisam ter um nome válido antes de seguir." />
 						</div>
-						<p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+						<p className="text-sm text-gray-600">
 							Use extras para não perder informação útil que não faz parte do schema principal.
 						</p>
 					</div>
-					<div className="rounded-[24px] border border-[var(--line)] bg-white/70 px-5 py-5">
-						<div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
+					<div className="minimal-panel p-5">
+						<div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
 							Colunas disponíveis
-							<HelpHint
-								label="Colunas disponíveis"
-								content="Essas colunas ainda não estão associadas a nenhum destino. Arraste-as para um campo principal ou extra quando fizer sentido."
-							/>
+							<HelpIcon text="Essas colunas ainda não estão associadas a nenhum destino. Arraste-as para um campo principal ou extra quando fizer sentido." />
 						</div>
-						<p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+						<p className="text-sm text-gray-600">
 							O inventário restante permite revisar rapidamente o que ainda não foi aproveitado.
 						</p>
 					</div>
@@ -389,7 +377,6 @@ export default function MappingEditorPage({
 
 			<SectionCard
 				title="Campos Principais"
-				description="Arraste as colunas do arquivo para os campos abaixo. Cada destino mostra o papel estrutural daquele atributo."
 			>
 				<div className="space-y-4">
 					{coreItems.map((item) => {
@@ -401,28 +388,28 @@ export default function MappingEditorPage({
 							<div
 								key={item.clientId}
 								className={cn(
-									"grid gap-4 rounded-[24px] border px-5 py-5 transition-all md:grid-cols-[1.1fr_1fr_1.3fr]",
+									"grid gap-4 rounded-xl border px-5 py-5 transition-all md:grid-cols-[1.1fr_1fr_1.3fr]",
 									dragOverIndex === index
-										? "border-[rgba(178,122,68,0.4)] bg-[rgba(178,122,68,0.1)]"
-										: "border-[var(--line)] bg-white/70"
+										? "border-blue-300 bg-blue-50/50"
+										: "border-gray-200 bg-white"
 								)}
 							>
 								<div>
-									<div className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+									<div className="text-xs font-medium uppercase tracking-wider text-gray-400 mb-1">
 										Variavel
 									</div>
-									<div className="mt-2 text-lg font-semibold capitalize text-[var(--text)]">
+									<div className="text-sm font-semibold capitalize text-gray-900">
 										{item.variavel.replace(/_/g, " ")}
 									</div>
 								</div>
 								<div>
-									<div className="mb-2 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+									<div className="mb-1 text-xs font-medium uppercase tracking-wider text-gray-400">
 										Regras
 									</div>
 									{renderBadges(item.variavel, false)}
 								</div>
 								<div>
-									<div className="mb-2 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+									<div className="mb-1 text-xs font-medium uppercase tracking-wider text-gray-400">
 										Coluna do arquivo
 									</div>
 									<div
@@ -432,13 +419,13 @@ export default function MappingEditorPage({
 										onDragLeave={onDragLeave}
 										onDrop={(event) => onDrop(event, index)}
 										onDragEnd={onDragEnd}
-										className="flex cursor-move items-center justify-between rounded-[20px] border border-[rgba(18,48,71,0.16)] bg-[rgba(18,48,71,0.05)] px-4 py-3 transition-all hover:border-[rgba(178,122,68,0.36)] hover:bg-[rgba(178,122,68,0.08)]"
+										className="flex cursor-move items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 transition-all hover:border-blue-300 hover:bg-blue-50/30"
 									>
-										<span className="text-sm font-medium text-[var(--text)]">
+										<span className="text-sm font-medium text-gray-700">
 											{item.nomeColuna || "Clique e arraste uma coluna"}
 										</span>
 										<svg
-											className="h-5 w-5 text-[var(--accent-strong)]"
+											className="h-4 w-4 text-gray-400"
 											fill="none"
 											viewBox="0 0 24 24"
 											stroke="currentColor"
@@ -461,7 +448,6 @@ export default function MappingEditorPage({
 			{allowExtraFields && (
 				<SectionCard
 					title="Campos Extras"
-					description="Crie campos adicionais quando a empresa precisar preservar contexto além do modelo principal."
 					aside={
 						<PrimaryButton onClick={addExtraMapping} className="justify-center" data-testid="add-extra-button">
 							<PlusIcon className="h-4 w-4" />
@@ -474,13 +460,13 @@ export default function MappingEditorPage({
 							title="Nenhum campo extra configurado"
 							description="Se a planilha trouxer contexto específico do cliente, adicione um campo extra e escolha se ele será ligado a uma coluna real ou seguirá como null quando estiver sem origem."
 							action={
-								<button
-									onClick={addExtraMapping}
-									className="executive-button-secondary"
-								>
-									<PlusIcon className="h-4 w-4" />
-									Adicionar Extra
-								</button>
+										<button
+											onClick={addExtraMapping}
+											className="minimal-btn-secondary"
+										>
+											<PlusIcon className="h-4 w-4" />
+											Adicionar Extra
+										</button>
 							}
 						/>
 					) : (
@@ -503,10 +489,7 @@ export default function MappingEditorPage({
 										<div>
 											<div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
 												Nome do campo
-												<HelpHint
-													label="Nome do campo extra"
-													content="O nome é normalizado para gerar a chave final. Ele não pode colidir com campos principais nem com outro extra."
-												/>
+												<HelpIcon text="O nome é normalizado para gerar a chave final. Ele não pode colidir com campos principais nem com outro extra." />
 											</div>
 											<input
 												type="text"
@@ -524,10 +507,7 @@ export default function MappingEditorPage({
 										<div>
 											<div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
 												Regras
-												<HelpHint
-													label="Null se sem coluna"
-													content="Quando um campo extra manual é mantido sem coluna, ele segue como null para preservar a estrutura sem inventar um valor."
-												/>
+												<HelpIcon text="Quando um campo extra manual é mantido sem coluna, ele segue como null para preservar a estrutura sem inventar um valor." />
 											</div>
 											{renderBadges(item.variavel, true)}
 										</div>
@@ -582,7 +562,6 @@ export default function MappingEditorPage({
 			{availableItems.length > 0 && (
 				<SectionCard
 					title="Colunas Disponiveis"
-					description="Essas colunas seguem livres para remapeamento. Use-as como reserva para reorganizar o layout da entidade."
 				>
 					<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
 						{availableItems.map((item) => {

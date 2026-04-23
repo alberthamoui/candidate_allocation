@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from "react";
+import { HelpIcon } from "./components/Tooltip";
 import { useLocation } from "react-router-dom";
 import {
 	EmptyState,
 	FieldLabel,
-	HelpHint,
+	
 	MetricPill,
 	SectionCard,
 	StatusBadge,
@@ -138,10 +139,7 @@ export default function AllocationResultPage() {
 					<div className="rounded-[24px] border border-[var(--line)] bg-[rgba(178,122,68,0.08)] px-5 py-4">
 						<div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
 							Legenda de destaque
-							<HelpHint
-								label="Legenda de destaque"
-								content="Semestre e curso podem ser usados separadamente ou juntos. Quando ambos estiverem ativos, o sistema destaca a combinação com maior ênfase."
-							/>
+							<HelpIcon text="Semestre e curso podem ser usados separadamente ou juntos. Quando ambos estiverem ativos, o sistema destaca a combinação com maior ênfase." />
 						</div>
 						<p className="mt-3 text-sm leading-6 text-[var(--muted)]">
 							Busca livre destaca em dourado. Semestre destaca em azul-ardósia. Curso destaca em verde. A combinação semestre + curso destaca em vermelho de exceção.

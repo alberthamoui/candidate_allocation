@@ -7,7 +7,7 @@ test.describe('Allocation Flow UI', () => {
   test('should config, load and display results', async ({ page }) => {
     await page.goto('/');
     await page.setInputFiles('#fileInput', sampleFilePath);
-    await page.click('button:has-text("Executar função de arquivo")');
+    await page.click('button:has-text("Continuar")');
 
     await expect(page.locator('h1', { hasText: 'Mapeamento de Candidatos' })).toBeVisible({ timeout: 15000 });
     await page.getByTestId('mapping-confirm-button').click();
@@ -54,9 +54,9 @@ test.describe('Allocation Flow UI', () => {
 
     await expect(page.locator('h1', { hasText: 'Configurações de Alocação' })).toBeVisible();
     await page.locator('input[type="number"]').nth(0).fill('3');
-    await page.getByTestId('page-help-button').click();
-    await expect(page.locator('text=Ajuda desta página')).toBeVisible();
-    await page.locator('button:has-text("Fechar")').click();
+    await page.getByLabel('Ajuda da Página').click();
+    await expect(page.locator('text=Para que serve')).toBeVisible();
+    await page.getByLabel('Fechar').click();
 
     await page.getByTestId('add-criterion-button').click();
     await expect(page.locator('select').first()).toBeVisible();

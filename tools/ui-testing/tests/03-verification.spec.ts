@@ -8,7 +8,7 @@ test.describe('Suite 3: Edição Inline e Validação (EntityVerificationView)',
     // Faz o fluxo inicial silenciosamente
     await page.goto('/');
     await page.setInputFiles('#fileInput', sampleFilePath);
-    await page.click('button:has-text("Executar função de arquivo")');
+    await page.click('button:has-text("Continuar")');
     
     // Esperar a página de Mapeamento
     await expect(page.locator('h1', { hasText: 'Mapeamento de Candidatos' })).toBeVisible({ timeout: 15000 });

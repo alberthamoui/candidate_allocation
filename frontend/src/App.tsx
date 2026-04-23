@@ -1,14 +1,7 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 import {
-	ArrowUpTrayIcon,
-	CheckBadgeIcon,
-	CommandLineIcon,
-	DocumentChartBarIcon,
-	ShieldCheckIcon,
-} from "@heroicons/react/24/outline";
-import {
-	Greet,
 	GetAvaliadorMappingFieldInfos,
 	GetCandidateMappingFieldInfos,
 	GetRestricaoMappingFieldInfos,
@@ -20,9 +13,6 @@ import type { MappingDraft, MappingFieldInfo, MappingItem } from "./importTypes"
 import {
 	FieldLabel,
 	PrimaryButton,
-	SecondaryButton,
-	SectionCard,
-	StatusBadge,
 } from "./workflowShell";
 
 interface AppProps {
@@ -42,19 +32,11 @@ function App({
 	setAvaliadorFieldInfos,
 	setRestricaoFieldInfos,
 }: AppProps) {
-	const [resultText, setResultText] = useState(
-		"Por favor, digite seu nome abaixo 👇"
-	);
-	const [name, setName] = useState("");
 	const [fileResult, setFileResult] = useState("");
 	const [file, setFile] = useState<File | null>(null);
-	const updateName = (e: React.ChangeEvent<HTMLInputElement>) =>
-		setName(e.target.value);
-	const updateResultText = (result: string) => setResultText(result);
+	const [isLoading, setIsLoading] = useState(false);
 	const navigate = useNavigate();
-	function greet() {
-		Greet(name).then(updateResultText);
-	}
+
 	function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
 		const selected = e.target.files?.[0] ?? null;
 		if (!selected) return;
@@ -87,15 +69,16 @@ function App({
 
 	async function handleFile() {
 		if (file) {
+			setIsLoading(true);
 			const reader = new FileReader();
 			reader.onload = async (event) => {
 				try {
 					const fileData = event.target?.result;
 					if (!fileData) {
 						setFileResult("Erro ao ler o arquivo.");
+						setIsLoading(false);
 						return;
 					}
-					// Converte o ArrayBuffer para Uint8Array
 					const data = new Uint8Array(fileData as ArrayBuffer);
 					const mappingCandidatos = await SuggestMapping(Array.from(data), 5);
 					const [
@@ -125,6 +108,7 @@ function App({
 					navigate("/mapping");
 				} catch (error) {
 					setFileResult("Erro ao processar o arquivo: " + error);
+					setIsLoading(false);
 				}
 			};
 			reader.readAsArrayBuffer(file);
@@ -134,142 +118,45 @@ function App({
 	}
 
 	return (
-		<div className="space-y-6">
-			<section className="executive-card executive-card-strong relative overflow-hidden p-8 md:p-10">
-				<div className="absolute inset-y-0 right-0 hidden w-1/3 bg-[radial-gradient(circle_at_top,rgba(178,122,68,0.18),transparent_62%)] lg:block" />
-				<div className="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
-					<div>
-						<StatusBadge tone="accent">Confiança, clareza e controle</StatusBadge>
-						<h2 className="mt-5 max-w-3xl text-4xl text-[var(--text)] md:text-5xl">
-							Conduza a alocação de candidatos com uma experiência feita para RH corporativo.
-						</h2>
-						<p className="mt-4 max-w-2xl text-base leading-8 text-[var(--muted)]">
-							Este fluxo importa a planilha, organiza o mapeamento das entidades,
-							revisa conflitos e prepara uma distribuição configurável sem expor a
-							operação a telas confusas ou decisões opacas.
-						</p>
-						<div className="mt-8 grid gap-4 md:grid-cols-3">
-							<div className="rounded-[24px] border border-[var(--line)] bg-white/70 p-4">
-								<ShieldCheckIcon className="h-7 w-7 text-[var(--accent-strong)]" />
-								<h3 className="mt-3 text-xl text-[var(--text)]">Confiável</h3>
-								<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-									Revisão por etapas, validação de duplicidades e rastreabilidade do processo.
-								</p>
-							</div>
-							<div className="rounded-[24px] border border-[var(--line)] bg-white/70 p-4">
-								<DocumentChartBarIcon className="h-7 w-7 text-[var(--accent-strong)]" />
-								<h3 className="mt-3 text-xl text-[var(--text)]">Configurable</h3>
-								<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-									Parâmetros e critérios adaptáveis para necessidades específicas de cada empresa.
-								</p>
-							</div>
-							<div className="rounded-[24px] border border-[var(--line)] bg-white/70 p-4">
-								<CheckBadgeIcon className="h-7 w-7 text-[var(--accent-strong)]" />
-								<h3 className="mt-3 text-xl text-[var(--text)]">Intuitivo</h3>
-								<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-									Ajuda contextual fixa e fluxo progressivo para evitar dúvida operacional.
-								</p>
-							</div>
-						</div>
-					</div>
-
-					<div id="file-section" className="executive-panel-dark p-6 md:p-7">
-						<div className="executive-pill border-white/10 bg-white/5 text-[#f2debf]">
-							Entrada do Excel
-						</div>
-						<h3 className="mt-4 text-3xl text-white">Importar base principal</h3>
-						<p className="mt-3 text-sm leading-6 text-[#e2d3c1]">
-							Selecione a planilha oficial do processo seletivo. O sistema abrirá
-							o mapeamento de candidatos e preparará o restante do wizard.
-						</p>
-						<div className="mt-6 space-y-4">
-							<div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
-								<FieldLabel
-									label="Arquivo Excel"
-									description="Use a planilha consolidada do processo seletivo."
-								/>
-								<label htmlFor="fileInput" className="block">
-									<input
-										type="file"
-										id="fileInput"
-										onChange={handleFileChange}
-										className="executive-input w-full cursor-pointer border-white/10 bg-white/90 text-[var(--text)]"
-									/>
-								</label>
-							</div>
-							<PrimaryButton
-								onClick={handleFile}
-								className="w-full justify-center bg-[linear-gradient(135deg,#b27a44_0%,#85562e_100%)]"
-								data-testid="start-import-button"
-							>
-								<ArrowUpTrayIcon className="h-5 w-5" />
-								Executar função de arquivo
-							</PrimaryButton>
-							{fileResult && (
-								<div
-									id="fileResult"
-									className="rounded-[20px] border border-[rgba(156,66,63,0.24)] bg-[rgba(156,66,63,0.12)] px-4 py-3 text-sm font-semibold text-[#f7d6d2]"
-								>
-									{fileResult}
-								</div>
-							)}
-						</div>
-					</div>
+		<div className="flex flex-col items-center justify-center min-h-[70vh] max-w-lg mx-auto w-full">
+			<div className="w-full minimal-panel p-8">
+				<div className="mb-8 text-center">
+					<h1 className="text-2xl font-semibold mb-2">Importação de Dados</h1>
+					<p className="text-sm text-gray-500">
+						Selecione a planilha (.xlsx) para iniciar um novo processo de alocação.
+					</p>
 				</div>
-			</section>
 
-			<div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-				<SectionCard
-					title="Como o fluxo opera"
-					description="O sistema trabalha em uma sequência previsível. Isso reduz retrabalho e facilita auditoria interna."
-				>
-					<div className="grid gap-4 md:grid-cols-2">
-						{[
-							"Importação da planilha e leitura inicial das abas.",
-							"Mapeamento dos candidatos e revisão dos conflitos.",
-							"Conferência das restrições com foco no schema central.",
-							"Preparação dos avaliadores e configuração final da alocação.",
-						].map((item, index) => (
-							<div
-								key={item}
-								className="rounded-[22px] border border-[var(--line)] bg-white/70 px-4 py-4"
-							>
-								<div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-strong)]">
-									Etapa {index + 1}
-								</div>
-								<p className="mt-3 text-sm leading-6 text-[var(--text)]">{item}</p>
-							</div>
-						))}
+				<div className="space-y-6">
+					<div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
+						<FieldLabel
+							label="Arquivo Excel"
+						/>
+						<input
+							type="file"
+							id="fileInput"
+							onChange={handleFileChange}
+							className="minimal-input mt-2 cursor-pointer bg-white"
+							accept=".xlsx,.xls,.csv"
+						/>
 					</div>
-				</SectionCard>
-
-				<SectionCard
-					title="Console técnico"
-					description="Bloco secundário do ambiente Wails. Mantido apenas para testes e verificação local."
-					aside={<StatusBadge>Utilitário</StatusBadge>}
-				>
-					<div id="result" className="rounded-[20px] border border-[var(--line)] bg-white/80 px-4 py-4 text-sm text-[var(--muted)]">
-						{resultText}
-					</div>
-					<div id="input" className="mt-4 space-y-4">
-						<div>
-							<FieldLabel label="Nome para saudação" description="Usado pela função demonstrativa do backend Wails." />
-							<input
-								id="name"
-								onChange={updateName}
-								autoComplete="off"
-								name="input"
-								type="text"
-								className="executive-input"
-								placeholder="Digite seu nome"
-							/>
+					
+					<PrimaryButton
+						onClick={handleFile}
+						className="w-full py-2.5 text-base"
+						data-testid="start-import-button"
+						disabled={isLoading}
+					>
+						<ArrowUpTrayIcon className="h-5 w-5" />
+						{isLoading ? "Processando..." : "Continuar"}
+					</PrimaryButton>
+					
+					{fileResult && (
+						<div className="bg-red-50 text-red-600 border border-red-100 rounded-lg p-3 text-sm font-medium text-center">
+							{fileResult}
 						</div>
-						<SecondaryButton onClick={greet} className="w-full justify-center">
-							<CommandLineIcon className="h-5 w-5" />
-							Greet
-						</SecondaryButton>
-					</div>
-				</SectionCard>
+					)}
+				</div>
 			</div>
 		</div>
 	);

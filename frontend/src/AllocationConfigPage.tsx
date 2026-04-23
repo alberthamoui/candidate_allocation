@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { HelpIcon } from "./components/Tooltip";
 import { useNavigate } from "react-router-dom";
 import { TrashIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { GetCriteriaOptions } from "../wailsjs/go/main/App";
 import {
 	EmptyState,
 	FieldLabel,
-	HelpHint,
+	
 	MetricPill,
 	PrimaryButton,
 	SectionCard,
@@ -264,10 +265,7 @@ export default function AllocationConfigPage() {
 												<div>
 													<div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
 														Regra {idx + 1}
-														<HelpHint
-															label="Tipo de regra"
-															content={CRITERION_HELP[criterion.type] || "Regra desejável aplicada à distribuição."}
-														/>
+														<HelpIcon text={CRITERION_HELP[criterion.type] || "Regra desejável aplicada à distribuição."} />
 													</div>
 													<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
 														{CRITERION_HELP[criterion.type] || "Regra desejável aplicada à distribuição."}
@@ -407,10 +405,7 @@ export default function AllocationConfigPage() {
 							<div className="rounded-[24px] border border-[var(--line)] bg-white/70 p-5">
 								<div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
 									Boas práticas
-									<HelpHint
-										label="Boas práticas"
-										content="Comece com parâmetros realistas e poucos critérios soft. Depois refine com base na leitura do resultado."
-									/>
+									<HelpIcon text="Comece com parâmetros realistas e poucos critérios soft. Depois refine com base na leitura do resultado." />
 								</div>
 								<ul className="mt-3 space-y-3 text-sm leading-6 text-[var(--muted)]">
 									<li>Mantenha o mínimo e máximo coerentes com a capacidade real de entrevistas.</li>

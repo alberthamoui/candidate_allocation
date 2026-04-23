@@ -10,7 +10,7 @@ test.describe('Suite 2: Regras e Erros de Mapeamento (MappingEditorPage)', () =>
     
     // O Playwright permite upload headless por id
     await page.setInputFiles('#fileInput', sampleFilePath);
-    await page.click('button:has-text("Executar função de arquivo")');
+    await page.click('button:has-text("Continuar")');
     
     // Esperar navegação para a página de Mapeamento
     const header = page.locator('h1', { hasText: 'Mapeamento de Candidatos' });
