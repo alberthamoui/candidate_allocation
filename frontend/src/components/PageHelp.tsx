@@ -15,10 +15,10 @@ export const PageHelp = ({ title, description, impacts, videoId }: PageHelpProps
     <>
       <button 
         onClick={() => setIsOpen(true)}
-        className="fixed top-3 right-6 w-8 h-8 rounded-full minimal-btn-secondary z-[60] flex items-center justify-center text-sm font-medium shadow-sm bg-white hover:bg-gray-50 hover:scale-105 transition-all text-gray-600"
+        className="fixed top-4 right-6 z-[60] inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--line)] bg-white text-base font-semibold leading-none text-gray-600 shadow-sm transition-all hover:bg-gray-50 hover:scale-105"
         aria-label="Ajuda da Página"
       >
-        ?
+        <span className="leading-none select-none">?</span>
       </button>
 
       <AnimatePresence>

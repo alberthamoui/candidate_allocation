@@ -1,24 +1,62 @@
 const { chromium } = require('@playwright/test');
 const fs = require('fs');
 
+function parseArgs(argv) {
+  const args = {};
+
+  for (let i = 2; i < argv.length; i++) {
+    const arg = argv[i];
+    if (!arg.startsWith('--')) {
+      continue;
+    }
+
+    if (arg.includes('=')) {
+      const parts = arg.split('=');
+      args[parts[0]] = parts.slice(1).join('=');
+      continue;
+    }
+
+    const next = argv[i + 1];
+    if (next && !next.startsWith('--')) {
+      args[arg] = next;
+      i++;
+      continue;
+    }
+
+    args[arg] = 'true';
+  }
+
+  return args;
+}
+
+function shouldCaptureScreenshot(args) {
+  return args['--screenshot'] === 'true';
+}
+
+function buildSuccessMessage({ stdout, pngPath, htmlPath, a11yPath, captureScreenshot }) {
+  const lines = [
+    'Success! Generated artifacts:',
+  ];
+
+  if (captureScreenshot) {
+    lines.push(`  - Screenshot:     ${pngPath}`);
+  }
+
+  lines.push(
+    `  - HTML DOM:       ${htmlPath}`,
+    `  - Accessibility:  ${a11yPath}`,
+  );
+
+  return `${lines.join('\n')}\n${stdout ? `\n${stdout}` : ''}`.trim();
+}
+
 async function run() {
   // Parse command line arguments
-  const args = {};
-  for (let i = 2; i < process.argv.length; i++) {
-    const arg = process.argv[i];
-    if (arg.startsWith('--')) {
-      if (arg.includes('=')) {
-        const parts = arg.split('=');
-        args[parts[0]] = parts.slice(1).join('=');
-      } else {
-        args[arg] = process.argv[i + 1];
-        i++;
-      }
-    }
-  }
+  const args = parseArgs(process.argv);
 
   const route = args['--route'] || '/';
   const outPrefix = args['--out-prefix'] || '/tmp/agent_inspect';
+  const captureScreenshot = shouldCaptureScreenshot(args);
   // Use the baseURL from the playwright config
   const baseURL = 'http://localhost:34115';
 
@@ -57,10 +95,6 @@ async function run() {
       await page.waitForTimeout(waitTime);
     }
 
-    // 3. Captures (Vision + Structure + Semantics)
-    const pngPath = `${outPrefix}.png`;
-    await page.screenshot({ path: pngPath, fullPage: true });
-    
     const htmlPath = `${outPrefix}.html`;
     const html = await page.content();
     fs.writeFileSync(htmlPath, html);
@@ -75,10 +109,19 @@ async function run() {
       fs.writeFileSync(a11yPath, JSON.stringify({ error: "Not available" }));
     }
 
-    console.log(`Success! Generated artifacts:`);
-    console.log(`  - Screenshot:     ${pngPath}`);
-    console.log(`  - HTML DOM:       ${htmlPath}`);
-    console.log(`  - Accessibility:  ${a11yPath}`);
+    let pngPath = null;
+    if (captureScreenshot) {
+      pngPath = `${outPrefix}.png`;
+      await page.screenshot({ path: pngPath, fullPage: true });
+    }
+
+    console.log(buildSuccessMessage({
+      stdout: '',
+      pngPath,
+      htmlPath,
+      a11yPath,
+      captureScreenshot,
+    }));
   } catch (error) {
     console.error('Error during inspection:', error);
     process.exit(1);
@@ -87,4 +130,13 @@ async function run() {
   }
 }
 
-run();
+if (require.main === module) {
+  run();
+}
+
+module.exports = {
+  parseArgs,
+  shouldCaptureScreenshot,
+  buildSuccessMessage,
+  run,
+};

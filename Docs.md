@@ -81,6 +81,10 @@ Os testes de UI continuam em `tools/ui-testing`, mas agora com alguns ajustes im
 
 Isso evita que nomes de diretório gerados por falha de teste virem pseudo-pacotes Go inválidos dentro do módulo principal.
 
+O inspector visual agora só gera screenshot quando o parâmetro `screenshot=true` é passado. Por padrão ele salva apenas HTML e árvore de acessibilidade para reduzir o consumo da cota de screenshots na sessão.
+
+O shell visual também ganhou um ajuste de alinhamento no header fixo e no botão de ajuda da página para reduzir o aspecto desalinhado nas rotas principais.
+
 ## Fluxo Atual do Frontend
 
 Ordem das telas:

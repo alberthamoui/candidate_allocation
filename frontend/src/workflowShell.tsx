@@ -89,13 +89,15 @@ export function StickyActionBar({ children, className }: { children: ReactNode; 
 
 function CompactHeader({ title, kicker }: { title: string, kicker: string }) {
 	return (
-		<header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-100 flex items-center justify-between px-6 py-3">
-			<div className="flex items-center gap-3">
-				<StatusBadge tone="neutral">{kicker}</StatusBadge>
-				<h1 className="text-sm font-semibold text-gray-800">{title}</h1>
-			</div>
-			<div className="flex items-center gap-4 pr-10">
-				<Link to="/" className="text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors">Início</Link>
+		<header className="sticky top-0 z-40 border-b border-gray-100 bg-white/85 backdrop-blur-md">
+			<div className="mx-auto flex w-full max-w-[1200px] items-center justify-between px-4 py-3 md:px-8">
+				<div className="flex min-w-0 items-center gap-3">
+					<StatusBadge tone="neutral">{kicker}</StatusBadge>
+					<h1 className="truncate text-sm font-semibold text-gray-800">{title}</h1>
+				</div>
+				<div className="flex items-center gap-4">
+					<Link to="/" className="text-xs font-medium text-gray-500 transition-colors hover:text-gray-900">Início</Link>
+				</div>
 			</div>
 		</header>
 	);
@@ -103,25 +105,27 @@ function CompactHeader({ title, kicker }: { title: string, kicker: string }) {
 
 function CompactTimeline({ currentStepIndex }: { currentStepIndex: number }) {
 	return (
-		<div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-50 flex h-10 text-xs font-medium overflow-hidden">
-			{WORKFLOW_STEPS.map((step, index) => {
-				const active = index === currentStepIndex;
-				const completed = currentStepIndex > index;
-				return (
-					<div 
-						key={step.key} 
-						className={cn(
-							"flex-1 flex items-center justify-center border-r border-gray-100 last:border-r-0 transition-colors px-2 truncate",
-							active ? "text-[var(--accent)] bg-blue-50/30 font-semibold" :
-							completed ? "text-gray-800" :
-							"text-gray-400"
-						)}
-					>
-						<span className="hidden md:inline mr-1.5 opacity-50">{index + 1}.</span>
-						<span className="truncate">{step.label}</span>
-					</div>
-				);
-			})}
+		<div className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 text-xs font-medium backdrop-blur-md">
+			<div className="mx-auto flex h-11 w-full max-w-[1200px] overflow-hidden px-0 md:px-8">
+				{WORKFLOW_STEPS.map((step, index) => {
+					const active = index === currentStepIndex;
+					const completed = currentStepIndex > index;
+					return (
+						<div
+							key={step.key}
+							className={cn(
+								"flex-1 flex items-center justify-center border-r border-gray-100 last:border-r-0 transition-colors px-2 truncate",
+								active ? "text-[var(--accent)] bg-blue-50/30 font-semibold" :
+								completed ? "text-gray-800" :
+								"text-gray-400"
+							)}
+						>
+							<span className="hidden md:inline mr-1.5 opacity-50">{index + 1}.</span>
+							<span className="truncate">{step.label}</span>
+						</div>
+					);
+				})}
+			</div>
 		</div>
 	);
 }

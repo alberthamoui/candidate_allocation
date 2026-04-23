@@ -39,6 +39,6 @@ export function Tooltip({ content, children }: TooltipProps) {
 
 export const HelpIcon = ({ text }: { text: string }) => (
   <Tooltip content={<div className="font-sans leading-relaxed text-xs">{text}</div>}>
-    <span className="minimal-help-icon">?</span>
+    <span className="minimal-help-icon leading-none select-none">?</span>
   </Tooltip>
 );

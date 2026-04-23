@@ -11,7 +11,7 @@
     "grepInvert": null,
     "maxFailures": 0,
     "metadata": {
-      "actualWorkers": 5
+      "actualWorkers": 1
     },
     "preserveOutput": "always",
     "projects": [
@@ -20,7 +20,7 @@
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
-          "actualWorkers": 5
+          "actualWorkers": 1
         },
         "id": "chromium",
         "name": "chromium",
@@ -59,20 +59,20 @@
   },
   "suites": [
     {
-      "title": "01-home.spec.ts",
-      "file": "01-home.spec.ts",
+      "title": "06-layout.spec.ts",
+      "file": "06-layout.spec.ts",
       "column": 0,
       "line": 0,
       "specs": [],
       "suites": [
         {
-          "title": "Suite 1: Home Page & Initial Setup",
-          "file": "01-home.spec.ts",
+          "title": "Layout polish",
+          "file": "06-layout.spec.ts",
           "line": 3,
           "column": 6,
           "specs": [
             {
-              "title": "A página carrega corretamente e exibe o título principal",
+              "title": "header and help affordances remain visible",
               "ok": true,
               "tags": [],
               "tests": [
@@ -87,12 +87,12 @@
                       "workerIndex": 0,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 582,
+                      "duration": 579,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-04-23T15:54:12.691Z",
+                      "startTime": "2026-04-23T17:09:32.671Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -100,383 +100,9 @@
                   "status": "expected"
                 }
               ],
-              "id": "c4396361884a96dbe527-d03f3800927d878d7123",
-              "file": "01-home.spec.ts",
+              "id": "7512a63dc93e72af0aa3-3b25e0810495239465f6",
+              "file": "06-layout.spec.ts",
               "line": 4,
-              "column": 7
-            },
-            {
-              "title": "Deve exibir erro ao tentar prosseguir sem selecionar um arquivo Excel",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 1,
-                      "parallelIndex": 1,
-                      "status": "passed",
-                      "duration": 575,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-04-23T15:54:12.694Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "c4396361884a96dbe527-3592b394cd1b6ffa2a52",
-              "file": "01-home.spec.ts",
-              "line": 13,
-              "column": 7
-            },
-            {
-              "title": "Deve abrir a ajuda contextual da página inicial",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 2,
-                      "parallelIndex": 2,
-                      "status": "passed",
-                      "duration": 641,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-04-23T15:54:12.690Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "c4396361884a96dbe527-b6b67c35a09490e0070c",
-              "file": "01-home.spec.ts",
-              "line": 23,
-              "column": 7
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "title": "02-mapping-erros.spec.ts",
-      "file": "02-mapping-erros.spec.ts",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "Suite 2: Regras e Erros de Mapeamento (MappingEditorPage)",
-          "file": "02-mapping-erros.spec.ts",
-          "line": 4,
-          "column": 6,
-          "specs": [
-            {
-              "title": "Deve exibir erro ao tentar prosseguir com Campo Extra Vazio",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 3,
-                      "parallelIndex": 3,
-                      "status": "passed",
-                      "duration": 1027,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-04-23T15:54:12.703Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "973b974f17ec6e226f0e-793488f653586cdadae8",
-              "file": "02-mapping-erros.spec.ts",
-              "line": 20,
-              "column": 7
-            },
-            {
-              "title": "Deve impedir Campo Extra com mesmo nome de um Campo Principal (Core Field)",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 4,
-                      "parallelIndex": 4,
-                      "status": "passed",
-                      "duration": 747,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-04-23T15:54:12.691Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "973b974f17ec6e226f0e-a759feb2c1509b80134e",
-              "file": "02-mapping-erros.spec.ts",
-              "line": 37,
-              "column": 7
-            },
-            {
-              "title": "Deve impedir dois Campos Extras gerando a mesma chave normalizada",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 613,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-04-23T15:54:13.386Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "973b974f17ec6e226f0e-12e1053e51ef3bbe941b",
-              "file": "02-mapping-erros.spec.ts",
-              "line": 55,
-              "column": 7
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "title": "03-verification.spec.ts",
-      "file": "03-verification.spec.ts",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "Suite 3: Edição Inline e Validação (EntityVerificationView)",
-          "file": "03-verification.spec.ts",
-          "line": 4,
-          "column": 6,
-          "specs": [
-            {
-              "title": "Deve bloquear salvamento quando houver duplicatas e resolver duplicata com sucesso",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 1,
-                      "parallelIndex": 1,
-                      "status": "passed",
-                      "duration": 1114,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-04-23T15:54:13.385Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "4c2e639dd2efed4fb18d-64a7cbbeb4bcf0d4eca3",
-              "file": "03-verification.spec.ts",
-              "line": 24,
-              "column": 7
-            },
-            {
-              "title": "Edição inline de um campo do usuário",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 2,
-                      "parallelIndex": 2,
-                      "status": "passed",
-                      "duration": 2716,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-04-23T15:54:13.450Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "4c2e639dd2efed4fb18d-0429a75610c1a26a7b26",
-              "file": "03-verification.spec.ts",
-              "line": 50,
-              "column": 7
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "title": "04-full-journey.spec.ts",
-      "file": "04-full-journey.spec.ts",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "Suite 4: A Jornada Completa (Happy Path)",
-          "file": "04-full-journey.spec.ts",
-          "line": 4,
-          "column": 6,
-          "specs": [
-            {
-              "title": "Deve completar o fluxo inteiro com sucesso (Wizard)",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 4,
-                      "parallelIndex": 4,
-                      "status": "passed",
-                      "duration": 4316,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-04-23T15:54:13.578Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "7ed35a89b75a49d267a0-16b48ee6f21bba66ce37",
-              "file": "04-full-journey.spec.ts",
-              "line": 7,
-              "column": 7
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "title": "05-allocation.spec.ts",
-      "file": "05-allocation.spec.ts",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "Allocation Flow UI",
-          "file": "05-allocation.spec.ts",
-          "line": 4,
-          "column": 6,
-          "specs": [
-            {
-              "title": "should config, load and display results",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 3,
-                      "parallelIndex": 3,
-                      "status": "passed",
-                      "duration": 2295,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-04-23T15:54:13.845Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "47ce5fd0ba39b93af41b-5636bfe05c2e1e24da9a",
-              "file": "05-allocation.spec.ts",
-              "line": 7,
               "column": 7
             }
           ]
@@ -486,9 +112,9 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-04-23T15:54:12.352Z",
-    "duration": 5576.861,
-    "expected": 10,
+    "startTime": "2026-04-23T17:09:32.205Z",
+    "duration": 1176.477,
+    "expected": 1,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

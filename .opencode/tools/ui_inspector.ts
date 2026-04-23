@@ -12,6 +12,7 @@ export default tool({
     click: tool.schema.string().optional().describe("Seletor CSS para clicar antes de capturar"),
     fill: tool.schema.string().optional().describe("No formato 'seletor:texto' para preencher um input antes de capturar"),
     wait: tool.schema.number().optional().describe("Milissegundos para esperar a tela estabilizar"),
+    screenshot: tool.schema.boolean().optional().default(false).describe("Se verdadeiro, também captura screenshot; caso contrário, salva apenas HTML e acessibilidade"),
   },
   async execute(args, context) {
     const script = path.join(context.worktree, "tools/ui-testing/agent_inspect.js");
@@ -22,6 +23,7 @@ export default tool({
     if (args.click) cmd += ` --click="${args.click}"`;
     if (args.fill) cmd += ` --fill="${args.fill}"`;
     if (args.wait) cmd += ` --wait="${args.wait}"`;
+    if (args.screenshot) cmd += ` --screenshot=true`;
 
     try {
       // Executa o script do playwright
@@ -33,8 +35,9 @@ Logs da execução:
 ${stdout}
 
 Os artefatos foram salvos. Você (IA) deve usar a sua ferramenta 'Read' para analisar:
-1. Imagem: ${outPrefix}.png
+1. HTML: ${outPrefix}.html
 2. Árvore de Acessibilidade: ${outPrefix}_a11y.json
+${args.screenshot ? `3. Imagem: ${outPrefix}.png\n` : ``}
       `.trim();
     } catch (error) {
       return `❌ Erro ao acessar o Front-end. O 'wails dev' está rodando no porto 34115? 
