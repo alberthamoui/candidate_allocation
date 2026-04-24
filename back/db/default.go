@@ -23,7 +23,7 @@ func EnsureDefaultDatabase() error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if err := EnsureAppSchema(db); err != nil {
 		return fmt.Errorf("erro ao sincronizar schema do banco: %w", err)

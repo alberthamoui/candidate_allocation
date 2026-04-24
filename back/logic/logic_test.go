@@ -16,6 +16,8 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/xuri/excelize/v2"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type testSheet struct {
@@ -111,7 +113,7 @@ func fetchStrings(t *testing.T, db *sql.DB, query string) []string {
 	if err != nil {
 		t.Fatalf("failed to query strings: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var values []string
 	for rows.Next() {
@@ -833,6 +835,7 @@ func TestSaveUsuariosFromMapsSupportsCurrentCandidateSchema(t *testing.T) {
 			}
 
 			var got sql.NullString
+			// #nosec G201 - test query uses controlled metadata column names.
 			query := fmt.Sprintf(`SELECT CAST("%s" AS TEXT) FROM pessoa LIMIT 1`, field.ColumnName)
 			if err := db.QueryRow(query).Scan(&got); err != nil {
 				t.Fatalf("failed to query persisted candidate field %s: %v", field.ColumnName, err)
@@ -1082,6 +1085,7 @@ func TestSave(t *testing.T) {
 				}
 
 				var got sql.NullString
+				// #nosec G201 - test query uses controlled metadata column names.
 				query := fmt.Sprintf(`SELECT CAST("%s" AS TEXT) FROM avaliador LIMIT 1`, field.ColumnName)
 				if err := db.QueryRow(query).Scan(&got); err != nil {
 					t.Fatalf("failed to query persisted avaliador field %s: %v", field.ColumnName, err)
@@ -1436,7 +1440,7 @@ func candidateHeaderForVariable(variable string) string {
 		if strings.HasPrefix(variable, "opcao ") {
 			return "Opcao " + strings.TrimPrefix(variable, "opcao ")
 		}
-		return strings.Title(strings.ReplaceAll(variable, "_", " "))
+		return cases.Title(language.English).String(strings.ReplaceAll(variable, "_", " "))
 	}
 }
 
@@ -1535,7 +1539,7 @@ func avaliadorHeaders() []string {
 		case "sigla":
 			headers = append(headers, "Sigla")
 		default:
-			headers = append(headers, strings.Title(strings.ReplaceAll(field, "_", " ")))
+			headers = append(headers, cases.Title(language.English).String(strings.ReplaceAll(field, "_", " ")))
 		}
 	}
 	return headers

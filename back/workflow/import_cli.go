@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,14 +38,15 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 		fmt.Println("Erro ao abrir banco para limpeza:", err)
 		panic(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if err := dbpkg.ClearDatabase(db); err != nil {
 		fmt.Println("Erro ao limpar banco:", err)
 		panic(err)
 	}
 
-	data, err := os.ReadFile(filePath)
+	// #nosec G304 - CLI input path is user-provided and handled as a local file.
+	data, err := os.ReadFile(filepath.Clean(filePath))
 	if err != nil {
 		return fmt.Errorf("erro ao ler o arquivo %q: %w", filePath, err)
 	}
@@ -313,14 +315,14 @@ func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Cand
 	reader := bufio.NewReader(in)
 	detections := logic.DetectUniquePreferenceValues(candidatos)
 
-	fmt.Fprintln(out, "\n---- PASSO 5: MAPEAMENTO DE PREFERENCIAS ----")
+	_, _ = fmt.Fprintln(out, "\n---- PASSO 5: MAPEAMENTO DE PREFERENCIAS ----")
 	if len(detections) == 0 {
-		fmt.Fprintln(out, "Nenhuma preferencia foi detectada nos candidatos.")
+		_, _ = fmt.Fprintln(out, "Nenhuma preferencia foi detectada nos candidatos.")
 	}
 
 	mappings := make([]types.PreferenceScheduleMapping, 0, len(detections))
 	for _, detection := range detections {
-		fmt.Fprintf(out, "\nPreferencia detectada: %s (%s, %d ocorrencias)\n",
+		_, _ = fmt.Fprintf(out, "\nPreferencia detectada: %s (%s, %d ocorrencias)\n",
 			detection.ValorOriginal, detection.ValorNormalizado, detection.Ocorrencias)
 
 		dia, err := promptLineWithDefault(reader, out, "Dia real", "segunda")
@@ -346,8 +348,8 @@ func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Cand
 	defaults := logic.DefaultAllocationParams()
 	params := defaults
 
-	fmt.Fprintln(out, "\n---- PASSO 6: PARAMETROS DE ALOCACAO ----")
-	fmt.Fprintf(out, "Grupos por horario [%d]: ", defaults.GruposPorHorario)
+	_, _ = fmt.Fprintln(out, "\n---- PASSO 6: PARAMETROS DE ALOCACAO ----")
+	_, _ = fmt.Fprintf(out, "Grupos por horario [%d]: ", defaults.GruposPorHorario)
 	if value, err := readOptionalLine(reader); err != nil {
 		return types.AllocationConfiguration{}, err
 	} else if value != "" {
@@ -358,7 +360,7 @@ func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Cand
 		params.GruposPorHorario = parsed
 	}
 
-	fmt.Fprintf(out, "Minimo de pessoas por grupo [%d]: ", defaults.MinPessoasPorGrupo)
+	_, _ = fmt.Fprintf(out, "Minimo de pessoas por grupo [%d]: ", defaults.MinPessoasPorGrupo)
 	if value, err := readOptionalLine(reader); err != nil {
 		return types.AllocationConfiguration{}, err
 	} else if value != "" {
@@ -369,7 +371,7 @@ func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Cand
 		params.MinPessoasPorGrupo = parsed
 	}
 
-	fmt.Fprintf(out, "Maximo de pessoas por grupo [%d]: ", defaults.MaxPessoasPorGrupo)
+	_, _ = fmt.Fprintf(out, "Maximo de pessoas por grupo [%d]: ", defaults.MaxPessoasPorGrupo)
 	if value, err := readOptionalLine(reader); err != nil {
 		return types.AllocationConfiguration{}, err
 	} else if value != "" {
@@ -380,7 +382,7 @@ func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Cand
 		params.MaxPessoasPorGrupo = parsed
 	}
 
-	fmt.Fprintf(out, "Avaliadores por grupo [%d]: ", defaults.AvaliadoresPorGrupo)
+	_, _ = fmt.Fprintf(out, "Avaliadores por grupo [%d]: ", defaults.AvaliadoresPorGrupo)
 	if value, err := readOptionalLine(reader); err != nil {
 		return types.AllocationConfiguration{}, err
 	} else if value != "" {
@@ -402,7 +404,7 @@ func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Cand
 		return config, err
 	}
 
-	fmt.Fprintln(out, "\n---- RESUMO DA CONFIGURACAO ----")
+	_, _ = fmt.Fprintln(out, "\n---- RESUMO DA CONFIGURACAO ----")
 	printAllocationQuantities(out, config.Normalized.Params, len(candidatos), len(config.Normalized.PreferenceMappings))
 
 	return config, nil
@@ -428,7 +430,7 @@ func collectSoftCriteria(reader *bufio.Reader, out io.Writer, candidatos []types
 	}
 
 	criteria := make([]types.SoftCriterion, 0)
-	fmt.Fprintln(out, "\nConfiguracao de criterios soft:")
+	_, _ = fmt.Fprintln(out, "\nConfiguracao de criterios soft:")
 	for {
 		addMore, err := promptYesNo(reader, out, "Deseja adicionar um criterio soft? (s/N): ")
 		if err != nil {
@@ -438,9 +440,9 @@ func collectSoftCriteria(reader *bufio.Reader, out io.Writer, candidatos []types
 			return criteria, nil
 		}
 
-		fmt.Fprintln(out, "\nTipos de criterio disponiveis:")
+		_, _ = fmt.Fprintln(out, "\nTipos de criterio disponiveis:")
 		for i, option := range options {
-			fmt.Fprintf(out, "[%d] %s - %s\n", i+1, option.Label, option.Description)
+			_, _ = fmt.Fprintf(out, "[%d] %s - %s\n", i+1, option.Label, option.Description)
 		}
 		optionIndex, err := promptChoiceIndex(reader, out, "Tipo do criterio: ", len(options))
 		if err != nil {
@@ -448,9 +450,9 @@ func collectSoftCriteria(reader *bufio.Reader, out io.Writer, candidatos []types
 		}
 		selectedOption := options[optionIndex]
 
-		fmt.Fprintln(out, "\nColunas elegiveis:")
+		_, _ = fmt.Fprintln(out, "\nColunas elegiveis:")
 		for i, column := range columns {
-			fmt.Fprintf(out, "[%d] %s\n", i+1, column.Label)
+			_, _ = fmt.Fprintf(out, "[%d] %s\n", i+1, column.Label)
 		}
 		columnIndex, err := promptChoiceIndex(reader, out, "Coluna do criterio: ", len(columns))
 		if err != nil {
@@ -466,9 +468,9 @@ func collectSoftCriteria(reader *bufio.Reader, out io.Writer, candidatos []types
 			return nil, fmt.Errorf("a coluna %q nao possui valores unicos selecionaveis", selectedColumn.Key)
 		}
 
-		fmt.Fprintf(out, "\nValores unicos de %s:\n", selectedColumn.Label)
+		_, _ = fmt.Fprintf(out, "\nValores unicos de %s:\n", selectedColumn.Label)
 		for i, detection := range detections {
-			fmt.Fprintf(out, "[%d] %s (%d ocorrencias)\n", i+1, detection.ValorOriginal, detection.Ocorrencias)
+			_, _ = fmt.Fprintf(out, "[%d] %s (%d ocorrencias)\n", i+1, detection.ValorOriginal, detection.Ocorrencias)
 		}
 
 		var selectedValues []string
@@ -509,7 +511,7 @@ func collectSoftCriteria(reader *bufio.Reader, out io.Writer, candidatos []types
 			return nil, err
 		}
 
-		fmt.Fprintf(out, "Resumo do criterio: %s\n", formatSoftCriterion(criterion))
+		_, _ = fmt.Fprintf(out, "Resumo do criterio: %s\n", formatSoftCriterion(criterion))
 		confirm, err := promptYesNo(reader, out, "Confirmar criterio? (s/N): ")
 		if err != nil {
 			return nil, err
@@ -527,17 +529,17 @@ func formatSoftCriterion(criterion types.SoftCriterion) string {
 func printAllocationQuantities(out io.Writer, params types.AllocationParams, totalPeople, scheduleCount int) {
 	count := logic.CountPossibleAllocationQuantitiesAcrossSchedules(params, totalPeople, scheduleCount)
 
-	fmt.Fprintln(out, "\n---- QUANTIDADES POSSIVEIS DE ALOCACAO ----")
+	_, _ = fmt.Fprintln(out, "\n---- QUANTIDADES POSSIVEIS DE ALOCACAO ----")
 	if count == 0 {
-		fmt.Fprintf(out, "Nenhuma distribuicao valida para %d candidatos e %d horarios com os parametros atuais.\n", totalPeople, scheduleCount)
+		_, _ = fmt.Fprintf(out, "Nenhuma distribuicao valida para %d candidatos e %d horarios com os parametros atuais.\n", totalPeople, scheduleCount)
 		return
 	}
 
-	fmt.Fprintf(out, "Quantidade total de alocacoes distintas: %d\n", count)
+	_, _ = fmt.Fprintf(out, "Quantidade total de alocacoes distintas: %d\n", count)
 }
 
 func promptYesNo(reader *bufio.Reader, out io.Writer, label string) (bool, error) {
-	fmt.Fprint(out, label)
+	_, _ = fmt.Fprint(out, label)
 	value, err := readOptionalLine(reader)
 	if err != nil {
 		return false, err
@@ -548,7 +550,7 @@ func promptYesNo(reader *bufio.Reader, out io.Writer, label string) (bool, error
 
 func promptChoiceIndex(reader *bufio.Reader, out io.Writer, label string, max int) (int, error) {
 	for {
-		fmt.Fprint(out, label)
+		_, _ = fmt.Fprint(out, label)
 		value, err := readOptionalLine(reader)
 		if err != nil {
 			return 0, err
@@ -557,13 +559,13 @@ func promptChoiceIndex(reader *bufio.Reader, out io.Writer, label string, max in
 		if err == nil && index >= 1 && index <= max {
 			return index - 1, nil
 		}
-		fmt.Fprintln(out, "Escolha invalida.")
+		_, _ = fmt.Fprintln(out, "Escolha invalida.")
 	}
 }
 
 func promptMultiChoiceIndices(reader *bufio.Reader, out io.Writer, label string, max int) ([]int, error) {
 	for {
-		fmt.Fprint(out, label)
+		_, _ = fmt.Fprint(out, label)
 		value, err := readOptionalLine(reader)
 		if err != nil {
 			return nil, err
@@ -592,13 +594,13 @@ func promptMultiChoiceIndices(reader *bufio.Reader, out io.Writer, label string,
 		if valid && len(indices) > 0 {
 			return indices, nil
 		}
-		fmt.Fprintln(out, "Selecao invalida.")
+		_, _ = fmt.Fprintln(out, "Selecao invalida.")
 	}
 }
 
 func promptPositiveInt(reader *bufio.Reader, out io.Writer, label string) (int, error) {
 	for {
-		fmt.Fprint(out, label)
+		_, _ = fmt.Fprint(out, label)
 		value, err := readOptionalLine(reader)
 		if err != nil {
 			return 0, err
@@ -607,30 +609,28 @@ func promptPositiveInt(reader *bufio.Reader, out io.Writer, label string) (int, 
 		if err == nil && parsed > 0 {
 			return parsed, nil
 		}
-		fmt.Fprintln(out, "Numero invalido.")
+		_, _ = fmt.Fprintln(out, "Numero invalido.")
 	}
 }
 
 func promptLineWithDefault(reader *bufio.Reader, out io.Writer, label, defaultValue string) (string, error) {
-	for {
-		fmt.Fprintf(out, "%s [%s]: ", label, defaultValue)
-		value, err := readOptionalLine(reader)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return defaultValue, nil
-			}
-			return "", err
-		}
-		if value == "" {
+	_, _ = fmt.Fprintf(out, "%s [%s]: ", label, defaultValue)
+	value, err := readOptionalLine(reader)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
 			return defaultValue, nil
 		}
-		return value, nil
+		return "", err
 	}
+	if value == "" {
+		return defaultValue, nil
+	}
+	return value, nil
 }
 
 func promptRequiredLine(reader *bufio.Reader, out io.Writer, label string) (string, error) {
 	for {
-		fmt.Fprint(out, label)
+		_, _ = fmt.Fprint(out, label)
 		value, err := readOptionalLine(reader)
 		if err != nil {
 			return "", err
@@ -638,7 +638,7 @@ func promptRequiredLine(reader *bufio.Reader, out io.Writer, label string) (stri
 		if value != "" {
 			return value, nil
 		}
-		fmt.Fprintln(out, "Valor obrigatorio.")
+		_, _ = fmt.Fprintln(out, "Valor obrigatorio.")
 	}
 }
 

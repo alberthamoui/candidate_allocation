@@ -13,7 +13,7 @@ func CarregarHorarios(db *sql.DB) (map[int]*types.Horario, error) {
 	if err != nil {
 		return nil, fmt.Errorf("erro ao carregar horarios: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var h types.Horario
@@ -37,7 +37,7 @@ func CarregarDisponibilidades(db *sql.DB, horarios map[int]*types.Horario) (map[
 	if err != nil {
 		return nil, fmt.Errorf("erro ao carregar disponibilidades: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var pid, hid, pref int
@@ -67,7 +67,7 @@ func CarregarAvaliadores(db *sql.DB) ([]*types.Avaliador, error) {
 	if err != nil {
 		return nil, fmt.Errorf("erro ao carregar avaliadores: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var avals []*types.Avaliador
 	for rows.Next() {
@@ -95,7 +95,7 @@ func CarregarRestricoes(db *sql.DB) (map[int]map[int]bool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("erro ao carregar restricoes NaoPosso: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var aid, cid int
@@ -119,7 +119,7 @@ func CarregarRestricoes(db *sql.DB) (map[int]map[int]bool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("erro ao carregar restricoes PrefiroNao: %w", err)
 	}
-	defer rows2.Close()
+	defer func() { _ = rows2.Close() }()
 
 	for rows2.Next() {
 		var aid, cid int

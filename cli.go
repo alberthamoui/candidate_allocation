@@ -33,7 +33,7 @@ func runCLI(args []string) error {
 	optionCount := flagSet.Int("opcoes", defaultCLIOptionCount, "quantidade de opcoes de horario esperadas na aba de candidatos")
 
 	flagSet.Usage = func() {
-		fmt.Fprintf(flagSet.Output(), "Uso: %s cli -file arquivo.xlsx [-opcoes %d]\n", os.Args[0], defaultCLIOptionCount)
+		_, _ = fmt.Fprintf(flagSet.Output(), "Uso: %s cli -file arquivo.xlsx [-opcoes %d]\n", os.Args[0], defaultCLIOptionCount)
 		flagSet.PrintDefaults()
 	}
 

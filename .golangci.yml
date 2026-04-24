@@ -12,7 +12,6 @@ linters:
     - staticcheck
     - unused
     - gosec
-    - revive
 
 issues:
   exclude-rules:

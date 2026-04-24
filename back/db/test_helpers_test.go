@@ -45,7 +45,7 @@ func fetchColumnSet(t *testing.T, db *sql.DB, table string) map[string]struct{} 
 	if err != nil {
 		t.Fatalf("failed to inspect table %s: %v", table, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	columns := make(map[string]struct{})
 	for rows.Next() {
@@ -76,7 +76,7 @@ func fetchIndexSet(t *testing.T, db *sql.DB, table string) map[string]struct{} {
 	if err != nil {
 		t.Fatalf("failed to inspect indexes for %s: %v", table, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	indexes := make(map[string]struct{})
 	for rows.Next() {
@@ -113,6 +113,7 @@ func selectColumnAsText(t *testing.T, db *sql.DB, table, column string, id int64
 	t.Helper()
 
 	var value sql.NullString
+	// #nosec G201 - test helper uses controlled table and column names.
 	query := fmt.Sprintf(`SELECT CAST("%s" AS TEXT) FROM "%s" WHERE id = ?`, column, table)
 	if err := db.QueryRow(query, id).Scan(&value); err != nil {
 		t.Fatalf("failed to query %s.%s: %v", table, column, err)
@@ -156,6 +157,7 @@ func firstNonUniqueField(t *testing.T, fields []types.FieldSchema) types.FieldSc
 func createUniqueIndex(t *testing.T, db *sql.DB, table, column string) {
 	t.Helper()
 
+	// #nosec G201 - test helper uses controlled table and column names.
 	stmt := fmt.Sprintf(
 		`CREATE UNIQUE INDEX "%s" ON "%s" ("%s") WHERE "%s" IS NOT NULL`,
 		fmt.Sprintf("idx_%s_%s_unique", table, column),
@@ -212,6 +214,7 @@ func insertLegacyRow(t *testing.T, db *sql.DB, table string, fields []types.Fiel
 		args = append(args, syntheticDBValue(field, idx))
 	}
 
+	// #nosec G201 - test helper uses controlled table and column names.
 	query := fmt.Sprintf(`INSERT INTO "%s" (%s) VALUES (%s)`, table, strings.Join(columns, ", "), strings.Join(values, ", "))
 	if _, err := db.Exec(query, args...); err != nil {
 		t.Fatalf("failed to seed legacy row in %s: %v", table, err)
@@ -259,7 +262,10 @@ func setSyntheticFieldValue(t *testing.T, field types.FieldSchema, dest reflect.
 		dest.SetInt(value)
 		return strconv.FormatInt(value, 10)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		value := uint64(100 + idx)
+		value := uint64(100)
+		for i := 0; i < idx; i++ {
+			value++
+		}
 		dest.SetUint(value)
 		return strconv.FormatUint(value, 10)
 	case reflect.Float32, reflect.Float64:

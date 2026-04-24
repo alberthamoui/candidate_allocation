@@ -38,6 +38,7 @@ func InsertStruct(db *sql.DB, table string, value interface{}, fields []types.Fi
 		args = append(args, arg)
 	}
 
+	// #nosec G201 - table and column names come from internal schema metadata.
 	stmt := fmt.Sprintf(
 		`INSERT INTO "%s" (%s) VALUES (%s)`,
 		table,
@@ -92,7 +93,11 @@ func valueForDB(field types.FieldSchema, value reflect.Value) (interface{}, erro
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return value.Int(), nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return int64(value.Uint()), nil
+		const maxInt64 = int64(^uint64(0) >> 1)
+		if value.Uint() > uint64(maxInt64) {
+			return nil, fmt.Errorf("campo %s excede o limite de int64", field.JSONName)
+		}
+		return int64(value.Uint()), nil // #nosec G115 - validated above
 	case reflect.Float32, reflect.Float64:
 		return value.Float(), nil
 	case reflect.Bool:

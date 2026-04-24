@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math/big"
 	"math/rand"
-	"sort"
 	"strings"
 	"time"
 )
@@ -22,19 +20,13 @@ const (
 	MELHOR_CASO              = 50
 )
 
-func fatorialBig(n int) *big.Int {
-	result := big.NewInt(1)
-	for i := 2; i <= n; i++ {
-		result.Mul(result, big.NewInt(int64(i)))
-	}
-	return result
-}
-
 func GerarMesas(horarios map[int]*types.Horario, avals []*types.Avaliador) ([]*types.Mesa, map[int][]*types.Mesa) {
 	var todas []*types.Mesa
 	porDia := make(map[int][]*types.Mesa)
 
-	rand.Seed(time.Now().UnixNano())
+	seed := time.Now().UnixNano()
+	// #nosec G404 - local randomized ordering only.
+	rng := rand.New(rand.NewSource(seed))
 
 	for _, h := range horarios {
 		for i := 0; i < MESAS_POR_HORARIO; i++ {
@@ -45,8 +37,8 @@ func GerarMesas(horarios map[int]*types.Horario, avals []*types.Avaliador) ([]*t
 				Descricao: fmt.Sprintf("%s – mesa %d", h.Descricao, i+1),
 			}
 
-			n := rand.Intn(MAX_AVALIADORES_POR_MESA-MIN_AVALIADORES_POR_MESA+1) + MIN_AVALIADORES_POR_MESA
-			rand.Shuffle(len(avals), func(i, j int) { avals[i], avals[j] = avals[j], avals[i] })
+			n := rng.Intn(MAX_AVALIADORES_POR_MESA-MIN_AVALIADORES_POR_MESA+1) + MIN_AVALIADORES_POR_MESA
+			rng.Shuffle(len(avals), func(i, j int) { avals[i], avals[j] = avals[j], avals[i] })
 			for k := 0; k < n; k++ {
 				m.Avaliadores = append(m.Avaliadores, avals[k].ID)
 			}
@@ -58,23 +50,6 @@ func GerarMesas(horarios map[int]*types.Horario, avals []*types.Avaliador) ([]*t
 
 	return todas, porDia
 }
-
-func filtrarHorariosValidos(horarios map[int]*types.Horario) []*types.Horario {
-	var valid []*types.Horario
-	for _, h := range horarios {
-		if len(h.Candidatos) >= MIN_PESSOAS_POR_MESA {
-			valid = append(valid, h)
-		}
-	}
-	return valid
-}
-
-func sortHorariosPorCandidatos(hs []*types.Horario) {
-	sort.SliceStable(hs, func(i, j int) bool {
-		return len(hs[i].Candidatos) < len(hs[j].Candidatos)
-	})
-}
-
 func podeAvaliar(avID, pid int, restr map[int]map[int]bool) bool {
 	return !restr[avID][pid]
 }

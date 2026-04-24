@@ -14,9 +14,6 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-//go:embed build/appicon.png
-var icon []byte
-
 func main() {
 	if cliArgs, cliMode := detectCLIMode(os.Args[1:]); cliMode {
 		if err := runCLI(cliArgs); err != nil {
@@ -40,6 +37,8 @@ func main() {
 		Assets:           assets,
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
+		OnBeforeClose:    app.beforeClose,
+		OnShutdown:       app.shutdown,
 		Bind: []interface{}{
 			app,
 		},

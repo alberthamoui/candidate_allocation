@@ -492,6 +492,14 @@ Foi criado um analyzer específico localizado em `tools/unexported/main.go`. A r
 - **Como funciona:** O script varre o módulo inteiro usando `go/packages`, constrói um índice de definições e referências e aponta métodos "vazando" a não ser que estejam em uma allowlist (como os métodos do `App` usados pelo Wails).
 - **Como executar:** Ao invés de executar apenas `golangci-lint run`, é recomendado utilizar `make lint`, que cuidará de buildar a ferramenta e executar ambos os checks (o golangci-lint padrão e o nosso analyzer customizado).
 
+### Limpeza Recente
+
+- foram removidos helpers de processo de teste que não eram usados
+- o uso de `rand.Seed` foi substituído por geradores locais
+- os fluxos de escrita/leitura passaram a tratar `Close` explicitamente
+- funções e tipos exportados passaram a ter documentação para manter o `revive` limpo
+- `beforeClose` limpa o estado transitório do app e `shutdown` também remove o sentinel temporário usado pelo smoke test do Wails
+
 ## Alocação UI
 
 Foi adicionada uma interface de carregamento `AllocationLoadingPage.tsx` e uma tela de resultados `AllocationResultPage.tsx`. O backend foi atualizado com uma função `RunAllocation` em `app.go` para fazer a ponte com o Wails. A interface mostra de forma cronológica os horários e separa claramente os grupos, colocando os avaliadores no final das listas com destaque visual. Também contém áreas para filtros de critérios (Soft/Hard) e lista de candidatos não alocados.

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -91,5 +94,37 @@ func TestAppCriterionHelpersDelegate(t *testing.T) {
 		MaxPessoasPorGrupo: 2,
 	}, 4, 2); total != 12 {
 		t.Fatalf("expected 12 possible allocations across schedules, got %d", total)
+	}
+}
+
+func TestAppLifecycleHooksClearTransientStateAndRemoveSmokeFile(t *testing.T) {
+	app := NewApp()
+	app.ctx = context.Background()
+	app.excelData = []byte("payload")
+	app.nOpcoes = 3
+
+	if prevent := app.beforeClose(context.Background()); prevent {
+		t.Fatal("expected beforeClose to allow shutdown")
+	}
+	if app.ctx != nil || app.excelData != nil || app.nOpcoes != 0 {
+		t.Fatalf("expected transient state to be cleared, got ctx=%v excelData=%v nOpcoes=%d", app.ctx, app.excelData, app.nOpcoes)
+	}
+
+	tempDir := t.TempDir()
+	smokePath := filepath.Join(tempDir, "wails-smoke.txt")
+	if err := os.WriteFile(smokePath, []byte("ok"), 0o600); err != nil {
+		t.Fatalf("failed to create smoke sentinel: %v", err)
+	}
+	t.Setenv("CANDIDATE_ALLOCATOR_WAILS_SMOKE_FILE", smokePath)
+
+	app.excelData = []byte("payload")
+	app.nOpcoes = 7
+	app.shutdown(context.Background())
+
+	if app.ctx != nil || app.excelData != nil || app.nOpcoes != 0 {
+		t.Fatalf("expected shutdown to clear transient state, got ctx=%v excelData=%v nOpcoes=%d", app.ctx, app.excelData, app.nOpcoes)
+	}
+	if _, err := os.Stat(smokePath); !os.IsNotExist(err) {
+		t.Fatalf("expected smoke sentinel to be removed, got err=%v", err)
 	}
 }

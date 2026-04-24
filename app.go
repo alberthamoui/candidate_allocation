@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"time"
@@ -44,7 +45,7 @@ func (a *App) startup(ctx context.Context) {
 		fmt.Println("Erro ao abrir banco para limpeza:", err)
 		panic(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if err := dbpkg.ClearDatabase(db); err != nil {
 		fmt.Println("Erro ao limpar banco:", err)
@@ -54,19 +55,16 @@ func (a *App) startup(ctx context.Context) {
 	writeWailsSmokeSentinel()
 }
 
-// domReady is called after front-end resources have been loaded
-func (a App) domReady(ctx context.Context) {
-}
-
-// beforeClose is called when the application is about to quit,
-// either by clicking the window close button or calling runtime.Quit.
-// Returning true will cause the application to continue, false will continue shutdown as normal.
-func (a *App) beforeClose(ctx context.Context) (prevent bool) {
+// beforeClose clears transient state before the app exits.
+func (a *App) beforeClose(_ context.Context) (prevent bool) {
+	a.clearTransientState()
 	return false
 }
 
-// shutdown is called at application termination
-func (a *App) shutdown(ctx context.Context) {
+// shutdown clears transient state and removes the smoke sentinel.
+func (a *App) shutdown(_ context.Context) {
+	a.clearTransientState()
+	removeWailsSmokeSentinel()
 }
 
 // O fluxo equivalente via terminal foi movido para cli.go.
@@ -216,13 +214,13 @@ func (a *App) GetCriteriaOptions() (map[string][]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	rows, err := db.Query("SELECT semestre, curso, extras FROM pessoa")
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	optsMap := make(map[string]map[string]bool)
 	optsMap["semestre"] = make(map[string]bool)
@@ -272,7 +270,7 @@ func (a *App) RunAllocation(params types.AllocationParams) (UIAllocationResult, 
 	if err != nil {
 		return UIAllocationResult{}, err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// 1. Fetch Horarios
 	horarios, err := allocation.CarregarHorarios(db)
@@ -304,14 +302,16 @@ func (a *App) RunAllocation(params types.AllocationParams) (UIAllocationResult, 
 				restrPrefiroN[aid][cid] = true
 			}
 		}
-		rows.Close()
+		_ = rows.Close()
 	}
 
 	// 4. Create Groups (mesas) using params
 	var solverGroups []types.SolverGroup
 	uiMesasMap := make(map[int]UIMesa)
 
-	rand.Seed(time.Now().UnixNano())
+	seed := time.Now().UnixNano()
+	// #nosec G404 - local randomized ordering only.
+	rng := rand.New(rand.NewSource(seed))
 
 	for _, h := range horarios {
 		for i := 0; i < params.GruposPorHorario; i++ {
@@ -324,7 +324,7 @@ func (a *App) RunAllocation(params types.AllocationParams) (UIAllocationResult, 
 
 			shuffled := make([]*types.Avaliador, len(avals))
 			copy(shuffled, avals)
-			rand.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
+			rng.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
 
 			var evalIDs []int
 			var uiEvals []UIAvaliador
@@ -365,7 +365,7 @@ func (a *App) RunAllocation(params types.AllocationParams) (UIAllocationResult, 
 	if err != nil {
 		return UIAllocationResult{}, err
 	}
-	defer candRows.Close()
+	defer func() { _ = candRows.Close() }()
 
 	var solverCandidates []types.SolverCandidate
 	candMap := make(map[int]UICandidate)
@@ -491,7 +491,24 @@ func writeWailsSmokeSentinel() {
 		return
 	}
 
-	if err := os.WriteFile(path, []byte("ok"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Clean(path), []byte("ok"), 0o600); err != nil {
 		fmt.Println("Erro ao escrever sentinel do smoke test do Wails:", err)
 	}
+}
+
+func removeWailsSmokeSentinel() {
+	path := os.Getenv("CANDIDATE_ALLOCATOR_WAILS_SMOKE_FILE")
+	if path == "" {
+		return
+	}
+
+	if err := os.Remove(filepath.Clean(path)); err != nil && !os.IsNotExist(err) {
+		fmt.Println("Erro ao remover sentinel do smoke test do Wails:", err)
+	}
+}
+
+func (a *App) clearTransientState() {
+	a.ctx = nil
+	a.excelData = nil
+	a.nOpcoes = 0
 }

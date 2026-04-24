@@ -25,7 +25,7 @@ func TestRunCLIRejectsMissingFile(t *testing.T) {
 func TestRunCLIReturnsErrorForUnreadableWorkbook(t *testing.T) {
 	withTempWorkingDir(t, func(tmpDir string) {
 		filePath := filepath.Join(tmpDir, "invalid.xlsx")
-		if err := os.WriteFile(filePath, []byte("not-an-xlsx"), 0o644); err != nil {
+		if err := os.WriteFile(filePath, []byte("not-an-xlsx"), 0o600); err != nil {
 			t.Fatalf("failed to create invalid workbook: %v", err)
 		}
 

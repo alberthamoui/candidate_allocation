@@ -62,6 +62,7 @@ func TestWailsModelsContainCandidateCriterionColumnFields(t *testing.T) {
 
 func TestWailsModelsContainAllocationParamsFields(t *testing.T) {
 	modelsPath := filepath.Join("frontend", "wailsjs", "go", "models.ts")
+	// #nosec G304 - test reads a generated local file.
 	content, err := os.ReadFile(modelsPath)
 	if err != nil {
 		t.Fatalf("failed to read %s: %v", modelsPath, err)
@@ -112,6 +113,7 @@ func TestWailsModelsContainAllocationConfigurationFields(t *testing.T) {
 	})
 
 	modelsPath := filepath.Join("frontend", "wailsjs", "go", "models.ts")
+	// #nosec G304 - test reads a generated local file.
 	content, err := os.ReadFile(modelsPath)
 	if err != nil {
 		t.Fatalf("failed to read %s: %v", modelsPath, err)
@@ -157,6 +159,7 @@ func TestWailsModelsContainAllocationConfigurationFields(t *testing.T) {
 
 func TestWailsAppBindingsContainNewAllocationHelpers(t *testing.T) {
 	bindingsPath := filepath.Join("frontend", "wailsjs", "go", "main", "App.d.ts")
+	// #nosec G304 - test reads a generated local file.
 	content, err := os.ReadFile(bindingsPath)
 	if err != nil {
 		t.Fatalf("failed to read %s: %v", bindingsPath, err)
@@ -183,6 +186,7 @@ func TestWailsAppBindingsContainNewAllocationHelpers(t *testing.T) {
 
 func TestWailsModelsDoNotGenerateInvalidStringClass(t *testing.T) {
 	modelsPath := filepath.Join("frontend", "wailsjs", "go", "models.ts")
+	// #nosec G304 - test reads a generated local file.
 	content, err := os.ReadFile(modelsPath)
 	if err != nil {
 		t.Fatalf("failed to read %s: %v", modelsPath, err)
@@ -201,6 +205,7 @@ func assertWailsModelContainsJSONFields(t *testing.T, className string, fields [
 	t.Helper()
 
 	modelsPath := filepath.Join("frontend", "wailsjs", "go", "models.ts")
+	// #nosec G304 - test reads a generated local file.
 	content, err := os.ReadFile(modelsPath)
 	if err != nil {
 		t.Fatalf("failed to read %s: %v", modelsPath, err)

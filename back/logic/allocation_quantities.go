@@ -204,12 +204,6 @@ func enumeratePossibleAllocationQuantities(groupsLeft, minPerGroup, maxPerGroup,
 	return result
 }
 
-func enumeratePossibleAllocationQuantitiesWithEmptySlots(groupsLeft, minPerGroup, maxPerGroup, remaining int) [][]int {
-	result := make([][]int, 0)
-	enumerateAllocationQuantitiesWithEmptySlots(groupsLeft, minPerGroup, maxPerGroup, remaining, make([]int, 0, groupsLeft), &result)
-	return result
-}
-
 func enumerateAllocationQuantities(groupsLeft, minPerGroup, maxPerGroup, remaining int, current []int, result *[][]int) {
 	if groupsLeft == 0 {
 		if remaining == 0 {
@@ -234,38 +228,6 @@ func enumerateAllocationQuantities(groupsLeft, minPerGroup, maxPerGroup, remaini
 		enumerateAllocationQuantities(groupsLeft-1, minPerGroup, maxPerGroup, remaining-peopleInGroup, current, result)
 		current = current[:len(current)-1]
 	}
-}
-
-func enumerateAllocationQuantitiesWithEmptySlots(groupsLeft, minPerGroup, maxPerGroup, remaining int, current []int, result *[][]int) {
-	if groupsLeft == 0 {
-		if remaining == 0 {
-			allocation := append([]int(nil), current...)
-			*result = append(*result, allocation)
-		}
-		return
-	}
-
-	for peopleInGroup := 0; peopleInGroup <= minInt(maxPerGroup, remaining); peopleInGroup++ {
-		if peopleInGroup > 0 && peopleInGroup < minPerGroup {
-			continue
-		}
-		if remaining-peopleInGroup > (groupsLeft-1)*maxPerGroup {
-			continue
-		}
-		current = append(current, peopleInGroup)
-		enumerateAllocationQuantitiesWithEmptySlots(groupsLeft-1, minPerGroup, maxPerGroup, remaining-peopleInGroup, current, result)
-		current = current[:len(current)-1]
-	}
-}
-
-func countLabeledAllocations(totalPeople int, quantities []int) int {
-	remaining := totalPeople
-	total := 1
-	for _, groupSize := range quantities {
-		total *= binomialCoefficient(remaining, groupSize)
-		remaining -= groupSize
-	}
-	return total
 }
 
 func binomialCoefficient(n, k int) int {

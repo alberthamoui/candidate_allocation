@@ -98,7 +98,7 @@ func BuildUsuariosWithMapping(data []byte, nOpcoes int, mappingItems []types.Map
 	if err != nil {
 		return UsuariosResponse{}, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	sheet := file.GetSheetName(0)
 	rows, err := file.GetRows(sheet)
@@ -119,10 +119,10 @@ func BuildUsuariosWithMapping(data []byte, nOpcoes int, mappingItems []types.Map
 		}
 		users = append(users, u)
 	}
-	users_limpo, duplicatedIndices := processData(users)
+	usersLimpo, duplicatedIndices := processData(users)
 
 	return UsuariosResponse{
-		Usuarios:        users_limpo,
+		Usuarios:        usersLimpo,
 		Duplicates:      duplicatedIndices,
 		DuplicateFields: types.CandidateDuplicateFieldNames(),
 	}, nil
@@ -145,7 +145,7 @@ func BuildAvaliadoresWithMapping(data []byte, mappingItems []types.MappingItem) 
 	if err != nil {
 		return AvaliadoresResponse{}, fmt.Errorf("erro abrindo excel: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// 2ª aba (índice 1) onde estão os avaliadores
 	sheet := file.GetSheetName(1)
@@ -296,7 +296,7 @@ func GetRowsFromSheet(data []byte, sheetIndex int) ([][]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	sheet := file.GetSheetName(sheetIndex)
 	if sheet == "" {
@@ -586,7 +586,9 @@ func fillDb(db *sql.DB, data interface{}) {
 				if !ok || horarioID == 0 {
 					continue
 				}
-				dbpkg.AddDisponibilidade(db, id, horarioID, int64(idx+1))
+				if _, err := dbpkg.AddDisponibilidade(db, id, horarioID, int64(idx+1)); err != nil {
+					fmt.Printf("Erro ao adicionar disponibilidade para candidato %d: %v\n", id, err)
+				}
 			}
 		}
 	case []types.Avaliador:
@@ -653,7 +655,7 @@ func Save(data interface{}) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	switch data.(type) {
 	case []types.Candidato, []types.Avaliador, []types.Restricao:
@@ -848,40 +850,9 @@ func typeSupportsExtrasField[T any]() bool {
 	return false
 }
 
-func validateMappingItems(mappingItems []types.MappingItem) error {
+func validateMappingItems(_ []types.MappingItem) error {
 	// Permitimos índices negativos, eles serão ignorados durante o processamento
 	return nil
-}
-
-func collectUnusedColumnExtras(row []string, header []string, mappingItems []types.MappingItem) map[string]string {
-	usedColumns := make(map[int]bool, len(mappingItems))
-	for _, item := range mappingItems {
-		if item.Indice >= 0 && item.Indice < len(header) {
-			usedColumns[item.Indice] = true
-		}
-	}
-
-	extras := make(map[string]string)
-	extraKeys := make(map[string]bool)
-	for index, columnName := range header {
-		if usedColumns[index] || index >= len(row) {
-			continue
-		}
-
-		value := strings.TrimSpace(row[index])
-		if value == "" {
-			continue
-		}
-
-		key := extraColumnKey(columnName, index, extraKeys)
-		extras[key] = value
-		extraKeys[key] = true
-	}
-
-	if len(extras) == 0 {
-		return nil
-	}
-	return extras
 }
 
 func extraColumnKey(columnName string, index int, existing map[string]bool) string {

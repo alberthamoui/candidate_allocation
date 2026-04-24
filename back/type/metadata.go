@@ -1,3 +1,4 @@
+// Package types defines the shared domain models and metadata helpers.
 package types
 
 import (
@@ -6,6 +7,7 @@ import (
 	"strings"
 )
 
+// FieldSchema describes one struct field and its persistence metadata.
 type FieldSchema struct {
 	Index      int
 	GoName     string
@@ -19,10 +21,12 @@ type FieldSchema struct {
 	Kind       reflect.Kind
 }
 
+// CandidateFields returns the candidate field metadata.
 func CandidateFields() []FieldSchema {
 	return DescribeStruct(Candidato{})
 }
 
+// CandidateDuplicateFieldNames returns candidate fields used for duplicate checks.
 func CandidateDuplicateFieldNames() []string {
 	fields := CandidateFields()
 	duplicates := make([]string, 0, len(fields))
@@ -34,10 +38,12 @@ func CandidateDuplicateFieldNames() []string {
 	return duplicates
 }
 
+// AvaliadorFields returns the evaluator field metadata.
 func AvaliadorFields() []FieldSchema {
 	return DescribeStruct(Avaliador{})
 }
 
+// AvaliadorDuplicateFieldNames returns evaluator fields used for duplicate checks.
 func AvaliadorDuplicateFieldNames() []string {
 	fields := AvaliadorFields()
 	duplicates := make([]string, 0, len(fields))
@@ -49,6 +55,7 @@ func AvaliadorDuplicateFieldNames() []string {
 	return duplicates
 }
 
+// CandidateMappingFieldInfos returns candidate fields available in the mapper.
 func CandidateMappingFieldInfos(optionCount int) []MappingFieldInfo {
 	fields := CandidateFields()
 	infos := make([]MappingFieldInfo, 0, len(fields)+optionCount)
@@ -71,6 +78,7 @@ func CandidateMappingFieldInfos(optionCount int) []MappingFieldInfo {
 	return infos
 }
 
+// AvaliadorMappingFieldInfos returns evaluator fields available in the mapper.
 func AvaliadorMappingFieldInfos() []MappingFieldInfo {
 	fields := AvaliadorFields()
 	infos := make([]MappingFieldInfo, 0, len(fields))
@@ -85,6 +93,7 @@ func AvaliadorMappingFieldInfos() []MappingFieldInfo {
 	return infos
 }
 
+// RestricaoMappingFieldInfos returns restriction fields available in the mapper.
 func RestricaoMappingFieldInfos() []MappingFieldInfo {
 	fieldNames := RestricaoFieldNames()
 	infos := make([]MappingFieldInfo, 0, len(fieldNames))
@@ -96,10 +105,12 @@ func RestricaoMappingFieldInfos() []MappingFieldInfo {
 	return infos
 }
 
+// RestricaoFieldNames returns the JSON field names for restrictions.
 func RestricaoFieldNames() []string {
 	return JSONFieldNames(Restricao{})
 }
 
+// JSONFieldNames returns the JSON names for the fields of a struct.
 func JSONFieldNames(model interface{}) []string {
 	typ := reflect.TypeOf(model)
 	if typ.Kind() == reflect.Pointer {
@@ -117,6 +128,7 @@ func JSONFieldNames(model interface{}) []string {
 	return fields
 }
 
+// DescribeStruct returns the persistence metadata for a struct.
 func DescribeStruct(model interface{}) []FieldSchema {
 	typ := reflect.TypeOf(model)
 	if typ.Kind() == reflect.Pointer {
