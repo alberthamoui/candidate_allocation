@@ -6,3 +6,4 @@ anotacoes.txt
 *.sqlite
 *.sqlite3
 *.sqlite-journal
+insper.db
