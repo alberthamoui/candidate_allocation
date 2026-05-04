@@ -7,3 +7,4 @@ anotacoes.txt
 *.sqlite3
 *.sqlite-journal
 insper.db
+tools/bin/*
