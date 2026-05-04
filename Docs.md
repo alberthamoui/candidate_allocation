@@ -32,6 +32,9 @@ Direção adotada:
 - paleta baseada em marfim quente, azul-ardósia e acento bronze
 - mesma linguagem visual em importação, mapeamento, revisão, configuração, loading e resultado
 - as telas de mapeamento mantêm o bloco de título/descrição da etapa, mas não exibem mais o card introdutório de três colunas; a explicação fica concentrada na ajuda contextual do `?`
+- a navegação entre rotas agora reseta o scroll da janela para o topo; o comportamento de popups modais, como a ajuda da página, não altera esse fluxo porque não troca de rota
+- a ajuda contextual abre como modal sobre a mesma rota, então não dispara o reset de scroll
+- o gatilho de ajuda foi movido para o header global para evitar sobreposição visual com o título da página
 
 ## Ajuda Contextual
 

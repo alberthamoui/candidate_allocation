@@ -15,6 +15,7 @@ import AllocationResultPage from "./AllocationResultPage";
 import AllocationConfigPage from "./AllocationConfigPage";
 import type { MappingDraft, MappingFieldInfo } from "./importTypes";
 import { WorkflowLayout } from "./workflowShell";
+import ScrollToTop from "./ScrollToTop";
 
 function Root() {
 	const [mappingData, setMappingData] = useState<MappingDraft[] | null>(null);
@@ -37,6 +38,7 @@ function Root() {
 	return (
 		<React.StrictMode>
 			<BrowserRouter>
+				<ScrollToTop />
 				<Routes>
 					<Route element={<WorkflowLayout />}>
 						<Route

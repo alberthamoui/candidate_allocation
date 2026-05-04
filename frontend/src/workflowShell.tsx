@@ -1,8 +1,8 @@
-import React, { ButtonHTMLAttributes, ReactNode, useMemo } from "react";
+import React, { ButtonHTMLAttributes, ReactNode, useMemo, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { getCurrentStepIndex, getPageMeta, WORKFLOW_STEPS } from "./workflowMeta";
-import { PageHelp } from "./components/PageHelp";
 import { HelpIcon } from "./components/Tooltip";
+import { PageHelp } from "./components/PageHelp";
 
 function cn(...values: Array<string | false | null | undefined>) {
 	return values.filter(Boolean).join(" ");
@@ -87,7 +87,7 @@ export function StickyActionBar({ children, className }: { children: ReactNode; 
 	);
 }
 
-function CompactHeader({ title, kicker }: { title: string, kicker: string }) {
+function CompactHeader({ title, kicker, onHelpClick }: { title: string, kicker: string; onHelpClick: () => void }) {
 	return (
 		<header className="sticky top-0 z-40 border-b border-gray-100 bg-white/85 backdrop-blur-md">
 			<div className="mx-auto flex w-full max-w-[1200px] items-center justify-between px-4 py-3 md:px-8">
@@ -96,6 +96,13 @@ function CompactHeader({ title, kicker }: { title: string, kicker: string }) {
 					<h1 className="truncate text-sm font-semibold text-gray-800">{title}</h1>
 				</div>
 				<div className="flex items-center gap-4">
+					<button
+						onClick={onHelpClick}
+						className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] bg-white text-base font-semibold leading-none text-gray-600 shadow-sm transition-all hover:bg-gray-50 hover:scale-105"
+						aria-label="Ajuda da Página"
+					>
+						<span className="leading-none select-none">?</span>
+					</button>
 					<Link to="/" className="text-xs font-medium text-gray-500 transition-colors hover:text-gray-900">Início</Link>
 				</div>
 			</div>
@@ -134,16 +141,19 @@ export function WorkflowLayout() {
 	const location = useLocation();
 	const meta = useMemo(() => getPageMeta(location.pathname), [location.pathname]);
 	const currentStepIndex = getCurrentStepIndex(location.pathname);
+	const [isHelpOpen, setIsHelpOpen] = useState(false);
 
 	return (
 		<div className="min-h-screen bg-[var(--bg-subtle)] pb-[160px] flex flex-col">
-			<CompactHeader title={meta.title} kicker={meta.kicker} />
+			<CompactHeader title={meta.title} kicker={meta.kicker} onHelpClick={() => setIsHelpOpen(true)} />
 			
 			<main className="flex-1 w-full max-w-[1200px] mx-auto px-4 py-8 md:px-8">
 				<Outlet />
 			</main>
 			
 			<PageHelp 
+				isOpen={isHelpOpen}
+				onClose={() => setIsHelpOpen(false)}
 				title={meta.panelTitle} 
 				description={meta.panelSummary}
 				impacts={

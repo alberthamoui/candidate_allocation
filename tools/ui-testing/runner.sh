@@ -22,6 +22,8 @@ fi
 
 # Determine if the user passed a specific spec file
 SPEC_FILE=$1
+echo "Waiting for app readiness..."
+sleep 5
 if [ -z "$SPEC_FILE" ]; then
     echo "Running all Playwright tests headlessly..."
     npx playwright test

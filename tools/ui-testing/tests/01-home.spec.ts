@@ -7,7 +7,6 @@ test.describe('Suite 1: Home Page & Initial Setup', () => {
     // Verifica se o título "Candidate Allocator" aparece na home
     const header = page.locator('h1').first();
     await expect(header).toHaveText('Candidate Allocator');
-    await expect(page.getByLabel('Ajuda da Página')).toBeVisible();
   });
 
   test('Deve exibir erro ao tentar prosseguir sem selecionar um arquivo Excel', async ({ page }) => {
@@ -23,7 +22,7 @@ test.describe('Suite 1: Home Page & Initial Setup', () => {
   test('Deve abrir a ajuda contextual da página inicial', async ({ page }) => {
     await page.goto('/');
 
-    await page.getByLabel('Ajuda da Página').click();
+    await page.locator('header').getByLabel('Ajuda da Página').click();
     await expect(page.locator('text=Para que serve')).toBeVisible();
     // await expect(page.locator('text=Inicie uma nova')).toBeVisible();
   });
