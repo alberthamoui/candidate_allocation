@@ -13,8 +13,11 @@ test.describe('Suite 2: Regras e Erros de Mapeamento (MappingEditorPage)', () =>
     await page.click('button:has-text("Continuar")');
     
     // Esperar navegação para a página de Mapeamento
-    const header = page.locator('h1', { hasText: 'Mapeamento de Candidatos' });
+    const header = page.getByRole('main').getByRole('heading', { name: 'Mapeamento de Candidatos' });
     await expect(header).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Mapeie primeiro os atributos estruturais.')).toHaveCount(0);
+    await expect(page.getByText('Use extras para não perder informação útil')).toHaveCount(0);
+    await expect(page.getByText('O inventário restante permite revisar rapidamente')).toHaveCount(0);
   });
 
   test('Deve exibir erro ao tentar prosseguir com Campo Extra Vazio', async ({ page }) => {

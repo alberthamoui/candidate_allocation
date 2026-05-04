@@ -11,14 +11,14 @@ test.describe('Suite 3: Edição Inline e Validação (EntityVerificationView)',
     await page.click('button:has-text("Continuar")');
     
     // Esperar a página de Mapeamento
-    await expect(page.locator('h1', { hasText: 'Mapeamento de Candidatos' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('main').getByRole('heading', { name: 'Mapeamento de Candidatos' })).toBeVisible({ timeout: 15000 });
     
     // Clicar em "Revisar candidatos" para ir para a tela de Verificação
     await page.waitForTimeout(500); // pequeno timeout para react state settle
     await page.click('button:has-text("Revisar candidatos")');
     
     // Esperar a página de Verificação
-    await expect(page.locator('h1', { hasText: 'Verificação de Usuários' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('main').getByRole('heading', { name: 'Verificação de Usuários' })).toBeVisible({ timeout: 15000 });
   });
 
   test('Deve bloquear salvamento quando houver duplicatas e resolver duplicata com sucesso', async ({ page }) => {

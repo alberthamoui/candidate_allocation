@@ -342,42 +342,12 @@ export default function MappingEditorPage({
 				</div>
 			)}
 
-			<SectionCard
-				title={title}
-			>
-				<div className="grid gap-4 md:grid-cols-3">
-					<div className="minimal-panel p-5">
-						<div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
-							Campos principais
-						</div>
-						<p className="text-sm text-gray-600">
-							Mapeie primeiro os atributos estruturais. Eles sustentam identificação, regras e validações.
-						</p>
-					</div>
-					<div className="minimal-panel p-5">
-						<div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
-							Campos extras
-							<HelpIcon text="Extras preservam dados específicos de cada empresa. Se forem criados manualmente, precisam ter um nome válido antes de seguir." />
-						</div>
-						<p className="text-sm text-gray-600">
-							Use extras para não perder informação útil que não faz parte do schema principal.
-						</p>
-					</div>
-					<div className="minimal-panel p-5">
-						<div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
-							Colunas disponíveis
-							<HelpIcon text="Essas colunas ainda não estão associadas a nenhum destino. Arraste-as para um campo principal ou extra quando fizer sentido." />
-						</div>
-						<p className="text-sm text-gray-600">
-							O inventário restante permite revisar rapidamente o que ainda não foi aproveitado.
-						</p>
-					</div>
-				</div>
-			</SectionCard>
+			<div className="space-y-2">
+				<h1 className="text-2xl font-semibold text-[var(--text)]">{title}</h1>
+				<p className="text-sm leading-6 text-[var(--muted)]">{description}</p>
+			</div>
 
-			<SectionCard
-				title="Campos Principais"
-			>
+			<SectionCard title="Campos Principais">
 				<div className="space-y-4">
 					{coreItems.map((item) => {
 						const index = items.findIndex(

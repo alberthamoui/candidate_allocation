@@ -45,10 +45,10 @@ Se quiser mudar a quantidade de opcoes de horario esperadas na aba de candidatos
 go run . cli -file caminho/para/arquivo.xlsx -opcoes 5
 ```
 
-Para rodar o Linter se roda assim
+Para rodar o Linter se roda assim que vai rodar o linter do go e o que eu fiz para o meu codigo
 
 ```bash
-golangci-lint run
+ make lint
 ```
 
 ## About
@@ -72,13 +72,17 @@ npm install
 This project includes a fully isolated, headless UI testing environment built with Playwright to verify the application's frontend.
 
 ### For Humans: How to run tests
+
 The tests target the development server. Make sure you have the Wails dev server running:
 
 1. Start your application in dev mode:
+
    ```bash
    wails dev
    ```
+
 2. In a new terminal, run the tests:
+
    ```bash
    cd tools/ui-testing
    npm install # (first time only)
@@ -86,11 +90,17 @@ The tests target the development server. Make sure you have the Wails dev server
    ```
 
 ### For the AI Agent: How to use this for verification
+
 The testing infrastructure is built to be "agent-friendly" and completely headless. When building UI features, the agent should:
+
 1. Ensure the app is running in the background (`wails dev &`).
 2. Navigate to `tools/ui-testing` and run `./runner.sh`.
 3. If tests fail, read the generated JSON report at `tools/ui-testing/test-results/report.json` to understand why.
 4. If a visual layout needs verification, tests can be configured to take screenshots (e.g., `await page.screenshot({ path: 'ui-state.png' });`), which will be placed in the `test-results/` folder for analysis.
+
+# Permitir que o opencode acesse a ui
+
+va no arquivo `opencode.josn` e coloque tools  `true` e permission `allow` se não tiver assim ele não vai ter a tool de vizualizar a ui.
 
 ## Live Development
 

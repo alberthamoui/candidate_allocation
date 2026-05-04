@@ -31,6 +31,7 @@ Direção adotada:
 - tipografia serif para títulos e sans humanista para corpo
 - paleta baseada em marfim quente, azul-ardósia e acento bronze
 - mesma linguagem visual em importação, mapeamento, revisão, configuração, loading e resultado
+- as telas de mapeamento mantêm o bloco de título/descrição da etapa, mas não exibem mais o card introdutório de três colunas; a explicação fica concentrada na ajuda contextual do `?`
 
 ## Ajuda Contextual
 
