@@ -77,6 +77,28 @@ type SoftCriterion struct {
 	Threshold      int               `json:"threshold"`
 }
 
+// WorkflowStep describes one official workflow step shared by CLI and Wails.
+type WorkflowStep struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	Required bool   `json:"required"`
+}
+
+// SoftCriterionOption describes one selectable soft criterion in the workflow.
+type SoftCriterionOption struct {
+	Type              SoftCriterionType `json:"type"`
+	Label             string            `json:"label"`
+	Description       string            `json:"description"`
+	RequiresThreshold bool              `json:"requiresThreshold"`
+}
+
+// WorkflowDefinition is the single backend contract consumed by CLI and Wails.
+type WorkflowDefinition struct {
+	Steps                   []WorkflowStep        `json:"steps"`
+	DefaultAllocationParams AllocationParams      `json:"defaultAllocationParams"`
+	SoftCriterionOptions    []SoftCriterionOption `json:"softCriterionOptions"`
+}
+
 // AllocationParams contains the editable allocation parameters.
 type AllocationParams struct {
 	GruposPorHorario    int             `json:"gruposPorHorario"`

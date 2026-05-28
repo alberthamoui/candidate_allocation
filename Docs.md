@@ -522,15 +522,16 @@ Limite conhecido:
 
 ### P1 - Manter CLI e Wails sincronizados
 
-O CLI em `back/workflow/import_cli.go` e o aplicativo Wails devem representar o mesmo workflow funcional. Quando uma etapa muda em um lado, o outro lado precisa receber a mesma regra, especialmente em:
+O workflow oficial agora fica centralizado em [`back/logic/workflow_definition.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/logic/workflow_definition.go). Esse arquivo é a fonte única para:
 
 - ordem das etapas
-- configuração de alocação
-- validação de parâmetros
-- critérios soft
-- execução ou não execução do solver
+- defaults de configuração de alocação
+- opções de critérios soft
+- flags como `requiresThreshold`
 
-Essa prioridade reduz divergência entre testes de backend e comportamento real usado pela interface.
+O CLI em [`back/workflow/import_cli.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/workflow/import_cli.go) deve manter apenas a interação de terminal e consumir `logic.WorkflowDefinition()`, `logic.DefaultAllocationParams()` e `logic.SoftCriterionOptions()` para regras. O Wails expõe o mesmo contrato por `GetWorkflowDefinition` e `GetSoftCriterionOptions`, e o frontend deve renderizar a partir desses métodos, sem listas próprias de critérios ou defaults hardcoded.
+
+Para mudanças simples de workflow que não alterem layout nem formato público do contrato, a validação rápida é `go test ./...` e `make lint`. Os testes Go cobrem se o Wails continua expondo o mesmo contrato do backend e se os bindings gerados incluem os tipos necessários. Rode `tools/ui-testing` quando a mudança alterar tela, navegação, assinatura Wails, shape JSON consumido pela UI ou comportamento visível.
 
 ### P1 - Consolidar testes de UI como verificação confiável
 

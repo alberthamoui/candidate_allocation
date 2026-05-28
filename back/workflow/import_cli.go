@@ -416,20 +416,8 @@ func collectAllocationSetup(in io.Reader, out io.Writer, candidatos []types.Cand
 	return config, nil
 }
 
-type softCriterionOption struct {
-	Type        types.SoftCriterionType
-	Label       string
-	Description string
-}
-
 func collectSoftCriteria(reader *bufio.Reader, out io.Writer, candidatos []types.Candidato) ([]types.SoftCriterion, error) {
-	options := []softCriterionOption{
-		{Type: types.SoftCriterionMinValue, Label: "Minimo por valor unico", Description: "Se existe o valor selecionado no grupo, garanta pelo menos N"},
-		{Type: types.SoftCriterionAtLeastOneEach, Label: "Pelo menos 1 de cada valor", Description: "Garanta representacao para os valores selecionados"},
-		{Type: types.SoftCriterionBalancedDistribution, Label: "Distribuicao equilibrada", Description: "Espalhe os valores selecionados entre os grupos"},
-		{Type: types.SoftCriterionGroupTogether, Label: "Agrupamento", Description: "Prefira manter os valores selecionados juntos"},
-		{Type: types.SoftCriterionMaxValue, Label: "Maximo por valor unico", Description: "Limite o numero de pessoas do valor selecionado por grupo"},
-	}
+	options := logic.SoftCriterionOptions()
 	columns := logic.ListCandidateCriterionColumns(candidatos)
 	if len(columns) == 0 {
 		return []types.SoftCriterion{}, nil
@@ -504,7 +492,7 @@ func collectSoftCriteria(reader *bufio.Reader, out io.Writer, candidatos []types
 			SelectedValues: selectedValues,
 		}
 
-		if selectedOption.Type == types.SoftCriterionMinValue || selectedOption.Type == types.SoftCriterionMaxValue {
+		if selectedOption.RequiresThreshold {
 			threshold, err := promptPositiveInt(reader, out, "Numero N: ")
 			if err != nil {
 				return nil, err

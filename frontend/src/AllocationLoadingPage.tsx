@@ -4,6 +4,7 @@ import {
 	BuildAllocationConfigurationFromDatabase,
 	RunAllocation,
 	CountPossibleAllocationQuantitiesAcrossSchedules,
+	GetWorkflowDefinition,
 } from "../wailsjs/go/main/App";
 import { MetricPill, SectionCard, StatusBadge } from "./workflowShell";
 import { waitForWailsBindings } from "./wailsReady";
@@ -19,13 +20,11 @@ export default function AllocationLoadingPage() {
 			try {
 				await waitForWailsBindings();
 
-				const params = location.state?.params || {
-					GruposPorHorario: 5,
-					MinPessoasPorGrupo: 5,
-					MaxPessoasPorGrupo: 8,
-					AvaliadoresPorGrupo: 5,
-					SoftCriteria: [],
-				};
+				let params = location.state?.params;
+				if (!params) {
+					const workflow = await GetWorkflowDefinition();
+					params = workflow.defaultAllocationParams;
+				}
 
 				setStatus("Montando configuração normalizada da alocação...");
 				const config = await BuildAllocationConfigurationFromDatabase(params);

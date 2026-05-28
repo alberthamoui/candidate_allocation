@@ -52,6 +52,33 @@ func TestWailsModelsContainSoftCriterionFields(t *testing.T) {
 	})
 }
 
+func TestWailsModelsContainWorkflowDefinitionFields(t *testing.T) {
+	assertWailsModelContainsJSONFields(t, "WorkflowStep", []string{
+		"key",
+		"label",
+		"required",
+	})
+	assertWailsModelContainsJSONFields(t, "SoftCriterionOption", []string{
+		"type",
+		"label",
+		"description",
+		"requiresThreshold",
+	})
+
+	modelsPath := filepath.Join("frontend", "wailsjs", "go", "models.ts")
+	// #nosec G304 - test reads a generated local file.
+	content, err := os.ReadFile(modelsPath)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", modelsPath, err)
+	}
+
+	assertWailsModelContainsAssignments(t, string(content), "WorkflowDefinition", []string{
+		`this.steps = this.convertValues(source["steps"], WorkflowStep)`,
+		`this.defaultAllocationParams = this.convertValues(source["defaultAllocationParams"], AllocationParams)`,
+		`this.softCriterionOptions = this.convertValues(source["softCriterionOptions"], SoftCriterionOption)`,
+	})
+}
+
 func TestWailsModelsContainCandidateCriterionColumnFields(t *testing.T) {
 	assertWailsModelContainsJSONFields(t, "CandidateCriterionColumn", []string{
 		"key",
@@ -197,6 +224,8 @@ func TestWailsAppBindingsContainNewAllocationHelpers(t *testing.T) {
 		"export function DetectUniquePreferenceValues",
 		"export function ListCandidateCriterionColumns",
 		"export function DetectUniqueCandidateColumnValues",
+		"export function GetSoftCriterionOptions",
+		"export function GetWorkflowDefinition",
 		"export function NormalizePreferenceScheduleMappings",
 		"export function NormalizeSoftCriteria",
 		"export function ValidateSoftCriteria",

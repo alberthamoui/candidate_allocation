@@ -864,6 +864,24 @@ export namespace types {
 	}
 	
 	
+	export class SoftCriterionOption {
+	    type: string;
+	    label: string;
+	    description: string;
+	    requiresThreshold: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SoftCriterionOption(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.label = source["label"];
+	        this.description = source["description"];
+	        this.requiresThreshold = source["requiresThreshold"];
+	    }
+	}
 	export class SoftScoreComponent {
 	    code: string;
 	    penalty: number;
@@ -936,6 +954,57 @@ export namespace types {
 	    }
 	}
 	
+	
+	export class WorkflowStep {
+	    key: string;
+	    label: string;
+	    required: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new WorkflowStep(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.label = source["label"];
+	        this.required = source["required"];
+	    }
+	}
+	export class WorkflowDefinition {
+	    steps: WorkflowStep[];
+	    defaultAllocationParams: AllocationParams;
+	    softCriterionOptions: SoftCriterionOption[];
+	
+	    static createFrom(source: any = {}) {
+	        return new WorkflowDefinition(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.steps = this.convertValues(source["steps"], WorkflowStep);
+	        this.defaultAllocationParams = this.convertValues(source["defaultAllocationParams"], AllocationParams);
+	        this.softCriterionOptions = this.convertValues(source["softCriterionOptions"], SoftCriterionOption);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 

@@ -1,6 +1,6 @@
 # Recomendações e regras para o código
 
-Toda vez que você alterar o workflow do códiog no import_cli.go que esta dentro do back.workflow você deve alterar o workflow no aplicativo mesmo então nas chamadas do front-end com o back-end. (necessario)
+O workflow oficial deve ter uma única fonte de verdade no backend. Para alterar etapas, defaults ou critérios soft, atualize primeiro `back/logic/workflow_definition.go` e faça CLI, Wails e frontend consumirem esse contrato, sem duplicar regras no frontend ou em `back/workflow/import_cli.go`. (necessário)
 
 Sempre rode os testes depois para validar que você não quebrou nada. (necessário)
 Sempre rode o linter depois para validar se não existe algum erro (necessário)

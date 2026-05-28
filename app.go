@@ -144,6 +144,14 @@ func (a *App) DefaultAllocationParams() types.AllocationParams {
 	return logic.DefaultAllocationParams()
 }
 
+func (a *App) GetWorkflowDefinition() types.WorkflowDefinition {
+	return logic.WorkflowDefinition()
+}
+
+func (a *App) GetSoftCriterionOptions() []types.SoftCriterionOption {
+	return logic.SoftCriterionOptions()
+}
+
 func (a *App) NormalizePreferenceScheduleMappings(mappings []types.PreferenceScheduleMapping) []types.PreferenceScheduleMapping {
 	return logic.NormalizePreferenceScheduleMappings(mappings)
 }

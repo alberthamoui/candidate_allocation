@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"candidate_alocator/back/logic"
 	types "candidate_alocator/back/type"
 )
 
@@ -94,6 +95,28 @@ func TestAppCriterionHelpersDelegate(t *testing.T) {
 		MaxPessoasPorGrupo: 2,
 	}, 4, 2); total != 12 {
 		t.Fatalf("expected 12 possible allocations across schedules, got %d", total)
+	}
+}
+
+func TestAppWorkflowDefinitionMatchesBackend(t *testing.T) {
+	app := NewApp()
+
+	got := app.GetWorkflowDefinition()
+	want := logic.WorkflowDefinition()
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("app workflow definition diverged from backend contract:\ngot:  %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestAppSoftCriterionOptionsMatchBackend(t *testing.T) {
+	app := NewApp()
+
+	got := app.GetSoftCriterionOptions()
+	want := logic.SoftCriterionOptions()
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("app soft criterion options diverged from backend contract:\ngot:  %#v\nwant: %#v", got, want)
 	}
 }
 

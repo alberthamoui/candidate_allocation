@@ -58,6 +58,14 @@ export function GetRestricaoMappingFieldInfos() {
   return window['go']['main']['App']['GetRestricaoMappingFieldInfos']();
 }
 
+export function GetSoftCriterionOptions() {
+  return window['go']['main']['App']['GetSoftCriterionOptions']();
+}
+
+export function GetWorkflowDefinition() {
+  return window['go']['main']['App']['GetWorkflowDefinition']();
+}
+
 export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }

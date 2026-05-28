@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { HelpIcon } from "./components/Tooltip";
 import { useNavigate } from "react-router-dom";
 import { TrashIcon, PlusIcon } from "@heroicons/react/24/outline";
-import { GetCriteriaOptions } from "../wailsjs/go/main/App";
+import { GetCriteriaOptions, GetWorkflowDefinition } from "../wailsjs/go/main/App";
 import {
 	EmptyState,
 	FieldLabel,
@@ -23,64 +23,69 @@ interface SoftCriterionDraft {
 	threshold: number;
 }
 
-const CRITERION_OPTIONS = [
-	{ value: "max_value", label: "Valor Máximo Permitido" },
-	{ value: "min_value", label: "Valor Mínimo Necessário" },
-	{ value: "at_least_one_each", label: "Pelo Menos Um de Cada" },
-	{ value: "balanced_distribution", label: "Distribuição Balanceada" },
-	{ value: "group_together", label: "Agrupar Valores Iguais" },
-];
-
-const CRITERION_HELP: Record<string, string> = {
-	max_value:
-		"Tenta limitar quantas pessoas de um valor específico podem aparecer juntas em um grupo.",
-	min_value:
-		"Tenta manter um mínimo do valor selecionado quando ele aparecer dentro de um grupo.",
-	at_least_one_each:
-		"Prioriza a presença de pelo menos um representante de cada valor selecionado.",
-	balanced_distribution:
-		"Busca espalhar os valores selecionados de forma mais homogênea entre os grupos.",
-	group_together:
-		"Prefere aproximar pessoas com o mesmo valor selecionado na mesma composição.",
-};
-
-function criterionNeedsThreshold(type: string) {
-	return type === "max_value" || type === "min_value";
+interface SoftCriterionOption {
+	type: string;
+	label: string;
+	description: string;
+	requiresThreshold: boolean;
 }
 
 export default function AllocationConfigPage() {
 	const navigate = useNavigate();
 
-	const [gruposPorHorario, setGrupos] = useState(2);
-	const [minPessoas, setMin] = useState(4);
-	const [maxPessoas, setMax] = useState(8);
-	const [avaliadoresPorGrupo, setAvaliadores] = useState(3);
+	const [gruposPorHorario, setGrupos] = useState(0);
+	const [minPessoas, setMin] = useState(0);
+	const [maxPessoas, setMax] = useState(0);
+	const [avaliadoresPorGrupo, setAvaliadores] = useState(0);
 	const [criteria, setCriteria] = useState<SoftCriterionDraft[]>([]);
 	const [criteriaOptions, setCriteriaOptions] = useState<Record<string, string[]>>({});
+	const [softCriterionOptions, setSoftCriterionOptions] = useState<SoftCriterionOption[]>([]);
 
 	useEffect(() => {
 		waitForWailsBindings()
-			.then(() => GetCriteriaOptions())
-			.then((opts) => {
+			.then(() => Promise.all([GetWorkflowDefinition(), GetCriteriaOptions()]))
+			.then(([workflow, opts]) => {
+				const defaults = workflow.defaultAllocationParams;
+				setGrupos(defaults.gruposPorHorario);
+				setMin(defaults.minPessoasPorGrupo);
+				setMax(defaults.maxPessoasPorGrupo);
+				setAvaliadores(defaults.avaliadoresPorGrupo);
+				setCriteria(
+					(defaults.softCriteria || []).map((criterion) => ({
+						type: criterion.type,
+						columnKey: criterion.columnKey,
+						selectedValues: criterion.selectedValues || [],
+						threshold: criterion.threshold,
+					}))
+				);
+				setSoftCriterionOptions(workflow.softCriterionOptions || []);
 				setCriteriaOptions(opts || {});
 			})
 			.catch((err) => {
-				console.error("Erro ao carregar opções de critério:", err);
+				console.error("Erro ao carregar contrato do workflow:", err);
 			});
 	}, []);
 
 	const columns = useMemo(() => Object.keys(criteriaOptions).sort(), [criteriaOptions]);
+	const criterionOptionByType = useMemo(() => {
+		return Object.fromEntries(softCriterionOptions.map((option) => [option.type, option]));
+	}, [softCriterionOptions]);
+
+	const criterionNeedsThreshold = (type: string) => {
+		return criterionOptionByType[type]?.requiresThreshold || false;
+	};
 
 	const addCriterion = () => {
 		const defaultColumn = columns[0] || "curso";
 		const defaultValues = criteriaOptions[defaultColumn] || [];
+		const defaultType = softCriterionOptions[0]?.type || "max_value";
 		setCriteria((current) => [
 			...current,
 			{
-				type: "max_value",
+				type: defaultType,
 				columnKey: defaultColumn,
 				selectedValues: defaultValues[0] ? [defaultValues[0]] : [],
-				threshold: 1,
+				threshold: criterionNeedsThreshold(defaultType) ? 1 : 0,
 			},
 		]);
 	};
@@ -141,18 +146,18 @@ export default function AllocationConfigPage() {
 
 	const handleStart = () => {
 		const formattedCriteria = criteria.map((criterion) => ({
-			Type: criterion.type,
-			ColumnKey: criterion.columnKey,
-			SelectedValues: criterion.selectedValues,
-			Threshold: parseInt(String(criterion.threshold), 10) || 0,
+			type: criterion.type,
+			columnKey: criterion.columnKey,
+			selectedValues: criterion.selectedValues,
+			threshold: parseInt(String(criterion.threshold), 10) || 0,
 		}));
 
 		const params = {
-			GruposPorHorario: gruposPorHorario,
-			MinPessoasPorGrupo: minPessoas,
-			MaxPessoasPorGrupo: maxPessoas,
-			AvaliadoresPorGrupo: avaliadoresPorGrupo,
-			SoftCriteria: formattedCriteria,
+			gruposPorHorario,
+			minPessoasPorGrupo: minPessoas,
+			maxPessoasPorGrupo: maxPessoas,
+			avaliadoresPorGrupo,
+			softCriteria: formattedCriteria,
 		};
 
 		navigate("/allocation-loading", { state: { params } });
@@ -263,6 +268,8 @@ export default function AllocationConfigPage() {
 							<div className="space-y-5">
 								{criteria.map((criterion, idx) => {
 									const availableValues = criteriaOptions[criterion.columnKey] || [];
+									const criterionOption = criterionOptionByType[criterion.type];
+									const criterionDescription = criterionOption?.description || "Regra desejável aplicada à distribuição.";
 									return (
 										<div
 											key={`${criterion.columnKey}-${idx}`}
@@ -272,10 +279,10 @@ export default function AllocationConfigPage() {
 												<div>
 													<div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
 														Regra {idx + 1}
-														<HelpIcon text={CRITERION_HELP[criterion.type] || "Regra desejável aplicada à distribuição."} />
+														<HelpIcon text={criterionDescription} />
 													</div>
 													<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-														{CRITERION_HELP[criterion.type] || "Regra desejável aplicada à distribuição."}
+														{criterionDescription}
 													</p>
 												</div>
 												<button
@@ -297,8 +304,8 @@ export default function AllocationConfigPage() {
 														value={criterion.type}
 														onChange={(e) => updateCriterion(idx, "type", e.target.value)}
 													>
-														{CRITERION_OPTIONS.map((option) => (
-															<option key={option.value} value={option.value}>
+														{softCriterionOptions.map((option) => (
+															<option key={option.type} value={option.type}>
 																{option.label}
 															</option>
 														))}

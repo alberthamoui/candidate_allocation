@@ -32,6 +32,10 @@ export function GetCriteriaOptions():Promise<Record<string, Array<string>>>;
 
 export function GetRestricaoMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
 
+export function GetSoftCriterionOptions():Promise<Array<types.SoftCriterionOption>>;
+
+export function GetWorkflowDefinition():Promise<types.WorkflowDefinition>;
+
 export function Greet(arg1:string):Promise<string>;
 
 export function ListCandidateCriterionColumns(arg1:Array<types.Candidato>):Promise<Array<types.CandidateCriterionColumn>>;
