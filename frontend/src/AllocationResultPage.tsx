@@ -108,8 +108,48 @@ export default function AllocationResultPage() {
 					<MetricPill label="Mesas criadas" value={result.mesas?.length || 0} tone="accent" />
 					<MetricPill label="Horários" value={Object.keys(groupedByHorario).length} />
 					<MetricPill label="Não alocados" value={result.naoAlocados?.length || 0} tone={(result.naoAlocados?.length || 0) > 0 ? "danger" : "success"} />
-					<MetricPill label="Filtros ativos" value={searchTerm || selectedCurso || selectedSemestre ? "Sim" : "Não"} />
+					<MetricPill label="Score" value={result.score?.totalPenalty ?? 0} tone="success" />
 				</div>
+			</SectionCard>
+
+			<SectionCard
+				title="Diagnóstico do solver"
+				description="Leitura técnica da execução real usada para chegar na distribuição exibida."
+				aside={<StatusBadge tone={result.solverStatus === "optimal" ? "success" : "danger"}>{result.solverStatus || "finalizado"}</StatusBadge>}
+			>
+				<div className="grid gap-4 md:grid-cols-4">
+					<MetricPill label="Estados completos" value={result.metrics?.completeStates ?? 0} />
+					<MetricPill label="Nós visitados" value={result.metrics?.nodesVisited ?? 0} />
+					<MetricPill label="Podas hard" value={result.metrics?.nodesPrunedByHard ?? 0} />
+					<MetricPill label="Podas por score" value={result.metrics?.nodesPrunedByBound ?? 0} />
+				</div>
+
+				{result.hardViolations?.length ? (
+					<div className="mt-6 rounded-[24px] border border-[rgba(156,66,63,0.18)] bg-[rgba(156,66,63,0.1)] p-5">
+						<div className="text-xs uppercase tracking-[0.18em] text-[var(--danger)]">
+							Violações obrigatórias
+						</div>
+						<ul className="mt-3 space-y-2 text-sm leading-6 text-[var(--danger)]">
+							{result.hardViolations.map((violation: any, index: number) => (
+								<li key={`${violation.code}-${index}`}>{violation.message || violation.code}</li>
+							))}
+						</ul>
+					</div>
+				) : null}
+
+				{result.score?.components?.length ? (
+					<div className="mt-6 grid gap-3 lg:grid-cols-2">
+						{result.score.components.slice(0, 6).map((component: any, index: number) => (
+							<div key={`${component.code}-${index}`} className="rounded-[20px] border border-[var(--line)] bg-white/70 px-4 py-3">
+								<div className="flex items-center justify-between gap-3">
+									<span className="text-sm font-semibold text-[var(--text)]">{component.code}</span>
+									<span className="text-sm font-bold text-[var(--accent-strong)]">{component.penalty}</span>
+								</div>
+								<p className="mt-2 text-xs leading-5 text-[var(--muted)]">{component.message}</p>
+							</div>
+						))}
+					</div>
+				) : null}
 			</SectionCard>
 
 			<SectionCard

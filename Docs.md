@@ -485,6 +485,86 @@ Detalhe importante para testes:
 - Se mudar métodos exportados do `App`, mantenha `frontend/wailsjs` consistente.
 - Se alterar o workflow do CLI em [`back/workflow/import_cli.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/workflow/import_cli.go), alinhe o fluxo correspondente da aplicação.
 
+## Prioridades do Projeto
+
+### P0 - Fechar o contrato real de alocação
+
+Hoje existem duas camadas importantes que ainda precisam ficar totalmente alinhadas:
+
+- `AllocationConfiguration`, usado para coleta, validação, diagnóstico e resumo da configuração
+- `AllocationProblem`, usado pelo solver determinístico em `back/allocation`
+
+A prioridade principal é fazer o caminho de produção consumir a configuração normalizada de ponta a ponta. O fluxo ideal deve ser:
+
+1. usuário configura preferências, parâmetros e critérios soft
+2. backend monta e valida `AllocationConfiguration`
+3. camada adaptadora transforma isso em `AllocationProblem`
+4. solver executa
+5. UI mostra `SolverResult` com score, métricas, violações e não alocados
+
+Evite criar novas regras paralelas em `app.go` ou no frontend enquanto esse contrato não estiver fechado.
+
+Status atual da implementação:
+
+- o serviço [`back/allocation/configured_service.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/allocation/configured_service.go) centraliza a execução configurada em `RunConfiguredAllocation`
+- `RunConfiguredAllocation` valida `AllocationConfiguration`, carrega os dados persistidos, chama `BuildAllocationProblem` e executa `SolveAllocation`
+- o CLI em [`back/workflow/import_cli.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/workflow/import_cli.go) agora executa a alocação real após montar a configuração
+- o Wails expõe `BuildAllocationConfigurationFromDatabase` para montar a configuração a partir dos dados salvos e `RunAllocation` agora recebe `AllocationConfiguration`
+- [`app.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/app.go) deixou de montar `AllocationProblem` manualmente e passou a ser apenas a ponte para o serviço e para o formato visual da UI
+
+Limite conhecido:
+
+- a UI ainda não tem uma etapa dedicada para editar o mapeamento `valor de preferência -> dia + hora`; por enquanto o Wails cria esse mapeamento automaticamente a partir dos horários importados no banco
+
+### P1 - Manter CLI e Wails sincronizados
+
+O CLI em `back/workflow/import_cli.go` e o aplicativo Wails devem representar o mesmo workflow funcional. Quando uma etapa muda em um lado, o outro lado precisa receber a mesma regra, especialmente em:
+
+- ordem das etapas
+- configuração de alocação
+- validação de parâmetros
+- critérios soft
+- execução ou não execução do solver
+
+Essa prioridade reduz divergência entre testes de backend e comportamento real usado pela interface.
+
+### P1 - Consolidar testes de UI como verificação confiável
+
+A suíte em `tools/ui-testing` depende do app rodando em `wails dev` na porta configurada. Antes de tratar falha de Playwright como bug funcional, confirme se o servidor está ativo.
+
+Prioridade prática:
+
+- manter seletores por `data-testid` nos fluxos críticos
+- cobrir qualquer alteração visual ou de workflow no diretório `tools/ui-testing`
+- preservar `report.json` como primeira fonte de diagnóstico quando a UI falhar
+
+### P2 - Melhorar explicabilidade e observabilidade da alocação
+
+O solver já retorna métricas, score e debug notes. A próxima melhoria de produto é expor isso de forma útil na UI:
+
+- score total e breakdown por regra
+- motivo de candidato não alocado
+- violações hard quando o problema for impossível
+- impacto de cada critério soft aplicado
+
+Isso ajuda o usuário a confiar no resultado e facilita depuração de casos reais.
+
+### P2 - Endurecer persistência e estado transiente
+
+O app limpa o banco default no startup e o CLI também limpa antes de importar. Isso é simples para desenvolvimento, mas deve ser tratado com cuidado antes de uso real:
+
+- confirmar se o comportamento destrutivo no startup é desejado
+- separar estado de sessão, banco de trabalho e eventual histórico
+- evitar que reabrir o app apague um processo que o usuário esperava retomar
+
+### P3 - Limpeza de documentação e empacotamento
+
+O README ainda mistura instruções atuais com conteúdo herdado do template Wails e notas pessoais. Quando as prioridades funcionais acima estiverem estáveis, vale limpar:
+
+- instruções duplicadas ou antigas
+- referências de template que não explicam o produto atual
+- documentação de build e teste em formato mais direto
+
 ## Ferramentas de Qualidade (Linter)
 
 O repositório agora possui uma configuração explícita e visível dos linters utilizados, garantindo um padrão de código consistente.

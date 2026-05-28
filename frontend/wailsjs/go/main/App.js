@@ -6,6 +6,10 @@ export function BuildAllocationConfiguration(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['BuildAllocationConfiguration'](arg1, arg2, arg3, arg4);
 }
 
+export function BuildAllocationConfigurationFromDatabase(arg1) {
+  return window['go']['main']['App']['BuildAllocationConfigurationFromDatabase'](arg1);
+}
+
 export function BuildAvaliadoresWithMapping(arg1) {
   return window['go']['main']['App']['BuildAvaliadoresWithMapping'](arg1);
 }

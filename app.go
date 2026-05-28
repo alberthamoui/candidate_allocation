@@ -5,12 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
-	"time"
+	"strings"
 
 	"candidate_alocator/back/allocation"
 	dbpkg "candidate_alocator/back/db"
@@ -204,9 +203,15 @@ type UIMesa struct {
 }
 
 type UIAllocationResult struct {
-	Status      string        `json:"status"`
-	Mesas       []UIMesa      `json:"mesas"`
-	NaoAlocados []UICandidate `json:"naoAlocados"`
+	Status          string                          `json:"status"`
+	SolverStatus    string                          `json:"solverStatus"`
+	Mesas           []UIMesa                        `json:"mesas"`
+	NaoAlocados     []UICandidate                   `json:"naoAlocados"`
+	Score           types.SoftScoreBreakdown        `json:"score"`
+	HardViolations  []types.HardConstraintViolation `json:"hardViolations"`
+	RejectionReason string                          `json:"rejectionReason"`
+	Metrics         types.SolverMetrics             `json:"metrics"`
+	DebugNotes      []string                        `json:"debugNotes"`
 }
 
 func (a *App) GetCriteriaOptions() (map[string][]string, error) {
@@ -265,203 +270,52 @@ func (a *App) GetCriteriaOptions() (map[string][]string, error) {
 	return result, nil
 }
 
-func (a *App) RunAllocation(params types.AllocationParams) (UIAllocationResult, error) {
+func (a *App) BuildAllocationConfigurationFromDatabase(params types.AllocationParams) (types.AllocationConfiguration, error) {
+	db, err := dbpkg.OpenDefault()
+	if err != nil {
+		return types.AllocationConfiguration{}, err
+	}
+	defer func() { _ = db.Close() }()
+
+	return allocation.BuildConfigurationFromPersistedData(db, params)
+}
+
+func (a *App) RunAllocation(config types.AllocationConfiguration) (UIAllocationResult, error) {
 	db, err := dbpkg.OpenDefault()
 	if err != nil {
 		return UIAllocationResult{}, err
 	}
 	defer func() { _ = db.Close() }()
 
-	// 1. Fetch Horarios
-	horarios, err := allocation.CarregarHorarios(db)
+	run, err := allocation.RunConfiguredAllocation(db, config)
 	if err != nil {
 		return UIAllocationResult{}, err
 	}
 
-	// 2. Fetch Avaliadores
-	avals, err := allocation.CarregarAvaliadores(db)
-	if err != nil {
-		return UIAllocationResult{}, err
-	}
-
-	// 3. Fetch Restricoes (Nposso and PrefiroN)
-	restrNposso, err := allocation.CarregarRestricoes(db)
-	if err != nil {
-		return UIAllocationResult{}, err
-	}
-
-	restrPrefiroN := make(map[int]map[int]bool)
-	rows, err := db.Query(`SELECT avaliador_id, candidato_id FROM restricoesPrefiroN`)
-	if err == nil {
-		for rows.Next() {
-			var aid, cid int
-			if rows.Scan(&aid, &cid) == nil {
-				if restrPrefiroN[aid] == nil {
-					restrPrefiroN[aid] = make(map[int]bool)
-				}
-				restrPrefiroN[aid][cid] = true
-			}
-		}
-		_ = rows.Close()
-	}
-
-	// 4. Create Groups (mesas) using params
-	var solverGroups []types.SolverGroup
-	uiMesasMap := make(map[int]UIMesa)
-
-	seed := time.Now().UnixNano()
-	// #nosec G404 - local randomized ordering only.
-	rng := rand.New(rand.NewSource(seed))
-
-	for _, h := range horarios {
-		for i := 0; i < params.GruposPorHorario; i++ {
-			groupID := h.ID*100 + i
-
-			n := params.AvaliadoresPorGrupo
-			if len(avals) < n {
-				n = len(avals)
-			}
-
-			shuffled := make([]*types.Avaliador, len(avals))
-			copy(shuffled, avals)
-			rng.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
-
-			var evalIDs []int
-			var uiEvals []UIAvaliador
-			for k := 0; k < n; k++ {
-				evalIDs = append(evalIDs, shuffled[k].ID)
-				uiEvals = append(uiEvals, UIAvaliador{
-					ID:    shuffled[k].ID,
-					Nome:  shuffled[k].Nome,
-					Sigla: shuffled[k].Sigla,
-				})
-			}
-
-			solverGroups = append(solverGroups, types.SolverGroup{
-				ID:            groupID,
-				Label:         fmt.Sprintf("%s - Mesa %d", h.Descricao, i+1),
-				EvaluatorIDs:  evalIDs,
-				MinCandidates: params.MinPessoasPorGrupo,
-				MaxCandidates: params.MaxPessoasPorGrupo,
-			})
-
-			uiMesasMap[groupID] = UIMesa{
-				ID:          groupID,
-				Horario:     h.Descricao,
-				Descricao:   fmt.Sprintf("Mesa %d", i+1),
-				Avaliadores: uiEvals,
-				Candidatos:  []UICandidate{},
-			}
-		}
-	}
-
-	// 5. Fetch Candidates (pessoa) and their preferences (disponibilidade)
-	prefs, err := allocation.CarregarDisponibilidades(db, horarios)
-	if err != nil {
-		return UIAllocationResult{}, err
-	}
-
-	candRows, err := db.Query("SELECT id, nome, semestre, curso FROM pessoa")
-	if err != nil {
-		return UIAllocationResult{}, err
-	}
-	defer func() { _ = candRows.Close() }()
-
-	var solverCandidates []types.SolverCandidate
-	candMap := make(map[int]UICandidate)
-
-	for candRows.Next() {
-		var id, semestre int
-		var nome, curso string
-		if err := candRows.Scan(&id, &nome, &semestre, &curso); err != nil {
-			continue
-		}
-
-		candMap[id] = UICandidate{
-			ID:       id,
-			Nome:     nome,
-			Semestre: semestre,
-			Curso:    curso,
-		}
-
-		var preferredGroupIDs []int
-		if hIDs, ok := prefs[id]; ok {
-			for _, hID := range hIDs {
-				for i := 0; i < params.GruposPorHorario; i++ {
-					preferredGroupIDs = append(preferredGroupIDs, hID*100+i)
-				}
-			}
-		}
-
-		var forbidden []int
-		var avoid []int
-		for aid, r := range restrNposso {
-			if r[id] {
-				forbidden = append(forbidden, aid)
-			}
-		}
-		for aid, r := range restrPrefiroN {
-			if r[id] {
-				avoid = append(avoid, aid)
-			}
-		}
-
-		solverCandidates = append(solverCandidates, types.SolverCandidate{
-			ID:                id,
-			Name:              nome,
-			PreferredGroupIDs: preferredGroupIDs,
-			Attributes: map[string]string{
-				"curso":    curso,
-				"semestre": strconv.Itoa(semestre),
-			},
-			EvaluatorRestrictions: types.SolverCandidateRestrictions{
-				ForbiddenEvaluatorIDs: forbidden,
-				AvoidEvaluatorIDs:     avoid,
-			},
-		})
-	}
-
-	problem := types.AllocationProblem{
-		Candidates: solverCandidates,
-		Groups:     solverGroups,
-		HardRestrictions: types.SolverHardRestrictions{
-			AllCandidatesMustBeAssigned:         false,
-			RespectCandidatePreferences:         true,
-			EnforceGroupCapacity:                true,
-			EnforceForbiddenEvaluators:          true,
-			EnforceMinCandidatesOnCompleteState: false,
-		},
-		SoftRules: types.SolverSoftRules{
-			PreferencePenaltyByRank: []int{0, 1, 3, 6, 10},
-			AvoidEvaluatorPenalty:   10,
-			Criteria:                params.SoftCriteria,
-		},
-	}
-
-	// 6. Run the new exact solver
-	solverOpts := allocation.NormalizeSolverOptions(allocation.SolverOptions{
-		WorkerCount:   4,
-		ParallelDepth: 2,
-	})
-	res := allocation.SolveAllocation(problem, solverOpts)
-
+	candMap := buildUICandidateMap(run.Candidatos)
+	evaluatorMap := buildUIEvaluatorMap(run.Avaliadores)
+	uiMesasMap := buildUIMesaMap(run.Problem.Groups, evaluatorMap)
 	var uiMesas []UIMesa
 	alocadosIDs := make(map[int]bool)
 
-	// Attach candidates to groups based on assignments
-	for candID, groupID := range res.Assignments {
+	for candID, groupID := range run.Result.Assignments {
 		m := uiMesasMap[groupID]
 		m.Candidatos = append(m.Candidatos, candMap[candID])
 		uiMesasMap[groupID] = m
 		alocadosIDs[candID] = true
 	}
 
-	// Only include groups that have at least one candidate
 	for _, m := range uiMesasMap {
 		if len(m.Candidatos) > 0 {
+			sort.SliceStable(m.Candidatos, func(i, j int) bool {
+				return m.Candidatos[i].Nome < m.Candidatos[j].Nome
+			})
 			uiMesas = append(uiMesas, m)
 		}
 	}
+	sort.SliceStable(uiMesas, func(i, j int) bool {
+		return uiMesas[i].ID < uiMesas[j].ID
+	})
 
 	var naoAlocados []UICandidate
 	for cid, c := range candMap {
@@ -469,20 +323,86 @@ func (a *App) RunAllocation(params types.AllocationParams) (UIAllocationResult, 
 			naoAlocados = append(naoAlocados, c)
 		}
 	}
+	sort.SliceStable(naoAlocados, func(i, j int) bool {
+		return naoAlocados[i].Nome < naoAlocados[j].Nome
+	})
 
 	status := "Sucesso!"
 	if len(naoAlocados) > 0 {
 		status = "Alocação Parcial"
 	}
-	if res.Status == "INFEASIBLE" {
+	if run.Result.Status == "infeasible" {
 		status = "Impossível (Infeasible)"
 	}
 
 	return UIAllocationResult{
-		Status:      status,
-		Mesas:       uiMesas,
-		NaoAlocados: naoAlocados,
+		Status:          status,
+		SolverStatus:    run.Result.Status,
+		Mesas:           uiMesas,
+		NaoAlocados:     naoAlocados,
+		Score:           run.Result.Score,
+		HardViolations:  run.Result.HardViolations,
+		RejectionReason: run.Result.RejectionReason,
+		Metrics:         run.Result.Metrics,
+		DebugNotes:      run.Result.DebugNotes,
 	}, nil
+}
+
+func buildUICandidateMap(candidatos []types.Candidato) map[int]UICandidate {
+	result := make(map[int]UICandidate, len(candidatos))
+	for idx, candidato := range candidatos {
+		semestre, _ := strconv.Atoi(strings.TrimSpace(candidato.Semestre))
+		result[idx+1] = UICandidate{
+			ID:       idx + 1,
+			Nome:     candidato.Nome,
+			Semestre: semestre,
+			Curso:    candidato.Curso,
+		}
+	}
+	return result
+}
+
+func buildUIEvaluatorMap(avaliadores []types.Avaliador) map[int]UIAvaliador {
+	result := make(map[int]UIAvaliador, len(avaliadores))
+	for _, avaliador := range avaliadores {
+		result[avaliador.ID] = UIAvaliador{
+			ID:    avaliador.ID,
+			Nome:  avaliador.Nome,
+			Sigla: avaliador.Sigla,
+		}
+	}
+	return result
+}
+
+func buildUIMesaMap(groups []types.SolverGroup, evaluators map[int]UIAvaliador) map[int]UIMesa {
+	result := make(map[int]UIMesa, len(groups))
+	for _, group := range groups {
+		uiEvaluators := make([]UIAvaliador, 0, len(group.EvaluatorIDs))
+		for _, evaluatorID := range group.EvaluatorIDs {
+			if evaluator, ok := evaluators[evaluatorID]; ok {
+				uiEvaluators = append(uiEvaluators, evaluator)
+			}
+		}
+
+		horario, descricao := splitSolverGroupLabel(group.Label)
+		result[group.ID] = UIMesa{
+			ID:          group.ID,
+			Horario:     horario,
+			Descricao:   descricao,
+			Avaliadores: uiEvaluators,
+			Candidatos:  []UICandidate{},
+		}
+	}
+	return result
+}
+
+func splitSolverGroupLabel(label string) (string, string) {
+	label = strings.TrimSpace(label)
+	parts := strings.Split(label, " grupo ")
+	if len(parts) != 2 {
+		return label, label
+	}
+	return strings.TrimSpace(parts[0]), "Mesa " + strings.TrimSpace(parts[1])
 }
 
 func writeWailsSmokeSentinel() {

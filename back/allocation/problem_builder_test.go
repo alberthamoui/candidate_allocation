@@ -65,6 +65,19 @@ func TestSelectEvaluatorIDs(t *testing.T) {
 	}
 }
 
+func TestSelectEvaluatorIDsCapsCountToAvailableEvaluators(t *testing.T) {
+	avaliadores := []types.Avaliador{
+		{ID: 10, Sigla: "A1"},
+		{ID: 20, Sigla: "A2"},
+	}
+
+	got := selectEvaluatorIDs(avaliadores, 0, 3)
+	want := []int{10, 20}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected selected evaluators: got %#v want %#v", got, want)
+	}
+}
+
 func TestParseRestrictionEvaluatorIDs(t *testing.T) {
 	got, err := parseRestrictionEvaluatorIDs("A1, A2 A1", map[string]int{
 		"A1": 10,

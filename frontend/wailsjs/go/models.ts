@@ -226,8 +226,14 @@ export namespace main {
 	}
 	export class UIAllocationResult {
 	    status: string;
+	    solverStatus: string;
 	    mesas: UIMesa[];
 	    naoAlocados: UICandidate[];
+	    score: types.SoftScoreBreakdown;
+	    hardViolations: types.HardConstraintViolation[];
+	    rejectionReason: string;
+	    metrics: types.SolverMetrics;
+	    debugNotes: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new UIAllocationResult(source);
@@ -236,8 +242,14 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.status = source["status"];
+	        this.solverStatus = source["solverStatus"];
 	        this.mesas = this.convertValues(source["mesas"], UIMesa);
 	        this.naoAlocados = this.convertValues(source["naoAlocados"], UICandidate);
+	        this.score = this.convertValues(source["score"], types.SoftScoreBreakdown);
+	        this.hardViolations = this.convertValues(source["hardViolations"], types.HardConstraintViolation);
+	        this.rejectionReason = source["rejectionReason"];
+	        this.metrics = this.convertValues(source["metrics"], types.SolverMetrics);
+	        this.debugNotes = source["debugNotes"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -772,6 +784,26 @@ export namespace types {
 	    }
 	}
 	
+	export class HardConstraintViolation {
+	    code: string;
+	    message: string;
+	    candidateId: number;
+	    groupId: number;
+	    evaluatorId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new HardConstraintViolation(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.message = source["message"];
+	        this.candidateId = source["candidateId"];
+	        this.groupId = source["groupId"];
+	        this.evaluatorId = source["evaluatorId"];
+	    }
+	}
 	
 	
 	export class MappingFieldInfo {
@@ -832,6 +864,77 @@ export namespace types {
 	}
 	
 	
+	export class SoftScoreComponent {
+	    code: string;
+	    penalty: number;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SoftScoreComponent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.penalty = source["penalty"];
+	        this.message = source["message"];
+	    }
+	}
+	export class SoftScoreBreakdown {
+	    totalPenalty: number;
+	    components: SoftScoreComponent[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SoftScoreBreakdown(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalPenalty = source["totalPenalty"];
+	        this.components = this.convertValues(source["components"], SoftScoreComponent);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class SolverMetrics {
+	    nodesVisited: number;
+	    completeStates: number;
+	    nodesPrunedByHard: number;
+	    nodesPrunedByBound: number;
+	    bestUpdates: number;
+	    parallelTasks: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SolverMetrics(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.nodesVisited = source["nodesVisited"];
+	        this.completeStates = source["completeStates"];
+	        this.nodesPrunedByHard = source["nodesPrunedByHard"];
+	        this.nodesPrunedByBound = source["nodesPrunedByBound"];
+	        this.bestUpdates = source["bestUpdates"];
+	        this.parallelTasks = source["parallelTasks"];
+	    }
+	}
 	
 
 }

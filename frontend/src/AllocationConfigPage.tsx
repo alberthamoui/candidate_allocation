@@ -72,12 +72,14 @@ export default function AllocationConfigPage() {
 	const columns = useMemo(() => Object.keys(criteriaOptions).sort(), [criteriaOptions]);
 
 	const addCriterion = () => {
+		const defaultColumn = columns[0] || "curso";
+		const defaultValues = criteriaOptions[defaultColumn] || [];
 		setCriteria((current) => [
 			...current,
 			{
 				type: "max_value",
-				columnKey: columns[0] || "curso",
-				selectedValues: [],
+				columnKey: defaultColumn,
+				selectedValues: defaultValues[0] ? [defaultValues[0]] : [],
 				threshold: 1,
 			},
 		]);
@@ -100,7 +102,8 @@ export default function AllocationConfigPage() {
 
 				const next = { ...criterion, [field]: value };
 				if (field === "columnKey") {
-					next.selectedValues = [];
+					const availableValues = criteriaOptions[String(value)] || [];
+					next.selectedValues = availableValues[0] ? [availableValues[0]] : [];
 				}
 				if (field === "type" && !criterionNeedsThreshold(String(value))) {
 					next.threshold = 0;

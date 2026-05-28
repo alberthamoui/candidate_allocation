@@ -62,7 +62,9 @@ test.describe('Allocation Flow UI', () => {
     await expect(page.locator('select').first()).toBeVisible();
     await page.getByTestId('start-allocation-button').click();
 
-    await expect(page.locator('text=Resultados da Alocação')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('text=Resultados da Alocação')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('heading', { name: 'Diagnóstico do solver' })).toBeVisible();
+    await expect(page.getByText('Score', { exact: true })).toBeVisible();
     await expect(page.locator('text=Destacar Candidatos')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Não Alocados' })).toBeVisible();
   });

@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { RunAllocation, CountPossibleAllocationQuantitiesAcrossSchedules } from "../wailsjs/go/main/App";
+import {
+	BuildAllocationConfigurationFromDatabase,
+	RunAllocation,
+	CountPossibleAllocationQuantitiesAcrossSchedules,
+} from "../wailsjs/go/main/App";
 import { MetricPill, SectionCard, StatusBadge } from "./workflowShell";
 import { waitForWailsBindings } from "./wailsReady";
 
@@ -23,17 +27,19 @@ export default function AllocationLoadingPage() {
 					SoftCriteria: [],
 				};
 
+				setStatus("Montando configuração normalizada da alocação...");
+				const config = await BuildAllocationConfigurationFromDatabase(params);
 				const totalPeople = 50;
-				const scheduleCount = 4;
+				const scheduleCount = config?.normalized?.preferenceMappings?.length || 1;
 				const combos = await CountPossibleAllocationQuantitiesAcrossSchedules(
-					params,
+					config.normalized.params,
 					totalPeople,
 					scheduleCount
 				);
 				setCombinations(combos);
 				setStatus(`Calculando entre ${combos.toLocaleString()} jeitos possíveis de alocação...`);
 
-				const result = await RunAllocation(params);
+				const result = await RunAllocation(config);
 				navigate("/allocation-result", { state: { result } });
 			} catch (err) {
 				setStatus("Erro na alocação: " + err);

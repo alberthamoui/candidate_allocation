@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"bufio"
+	"candidate_alocator/back/allocation"
 	dbpkg "candidate_alocator/back/db"
 	"candidate_alocator/back/logic"
 	types "candidate_alocator/back/type"
@@ -122,10 +123,15 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 	}
 	fmt.Println(string(configJSON))
 
-	// A alocacao final permanece desativada nesta etapa.
-	// if err := allocation.Run(db); err != nil {
-	// 	return fmt.Errorf("erro ao executar alocacao: %w", err)
-	// }
+	allocationResult, err := allocation.RunConfiguredAllocation(db, config)
+	if err != nil {
+		return fmt.Errorf("erro ao executar alocacao configurada: %w", err)
+	}
+	resultJSON, err := json.MarshalIndent(allocationResult.Result, "", "  ")
+	if err != nil {
+		return fmt.Errorf("erro ao serializar resultado da alocacao em JSON: %w", err)
+	}
+	fmt.Println(string(resultJSON))
 
 	return nil
 }

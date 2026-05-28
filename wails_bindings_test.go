@@ -155,6 +155,30 @@ func TestWailsModelsContainAllocationConfigurationFields(t *testing.T) {
 		`this.diagnostics = this.convertValues(source["diagnostics"], AllocationDiagnostics)`,
 		`this.result = this.convertValues(source["result"], AllocationExecutionResult)`,
 	})
+	assertWailsModelContainsJSONFields(t, "HardConstraintViolation", []string{
+		"code",
+		"message",
+		"candidateId",
+		"groupId",
+		"evaluatorId",
+	})
+	assertWailsModelContainsJSONFields(t, "SoftScoreComponent", []string{
+		"code",
+		"penalty",
+		"message",
+	})
+	assertWailsModelContainsAssignments(t, string(content), "SoftScoreBreakdown", []string{
+		`this.totalPenalty = source["totalPenalty"]`,
+		`this.components = this.convertValues(source["components"], SoftScoreComponent)`,
+	})
+	assertWailsModelContainsJSONFields(t, "SolverMetrics", []string{
+		"nodesVisited",
+		"completeStates",
+		"nodesPrunedByHard",
+		"nodesPrunedByBound",
+		"bestUpdates",
+		"parallelTasks",
+	})
 }
 
 func TestWailsAppBindingsContainNewAllocationHelpers(t *testing.T) {
@@ -168,6 +192,7 @@ func TestWailsAppBindingsContainNewAllocationHelpers(t *testing.T) {
 	source := string(content)
 	requiredSnippets := []string{
 		"export function BuildAllocationConfiguration",
+		"export function BuildAllocationConfigurationFromDatabase",
 		"export function CountPossibleAllocationQuantities",
 		"export function DetectUniquePreferenceValues",
 		"export function ListCandidateCriterionColumns",

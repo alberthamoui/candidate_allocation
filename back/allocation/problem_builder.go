@@ -113,6 +113,9 @@ func selectEvaluatorIDs(avaliadores []types.Avaliador, start, count int) []int {
 	if len(avaliadores) == 0 || count <= 0 {
 		return []int{}
 	}
+	if count > len(avaliadores) {
+		count = len(avaliadores)
+	}
 
 	selected := make([]int, 0, count)
 	for i := 0; i < count; i++ {
