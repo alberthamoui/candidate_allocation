@@ -188,6 +188,7 @@ export default function AllocationConfigPage() {
 								<input
 									type="number"
 									className="executive-input"
+									data-testid="groups-per-schedule-input"
 									value={gruposPorHorario}
 									onChange={(e) => setGrupos(parseInt(e.target.value, 10) || 0)}
 								/>
@@ -201,6 +202,7 @@ export default function AllocationConfigPage() {
 								<input
 									type="number"
 									className="executive-input"
+									data-testid="evaluators-per-group-input"
 									value={avaliadoresPorGrupo}
 									onChange={(e) => setAvaliadores(parseInt(e.target.value, 10) || 0)}
 								/>
@@ -214,6 +216,7 @@ export default function AllocationConfigPage() {
 								<input
 									type="number"
 									className="executive-input"
+									data-testid="min-people-per-group-input"
 									value={minPessoas}
 									onChange={(e) => setMin(parseInt(e.target.value, 10) || 0)}
 								/>
@@ -227,6 +230,7 @@ export default function AllocationConfigPage() {
 								<input
 									type="number"
 									className="executive-input"
+									data-testid="max-people-per-group-input"
 									value={maxPessoas}
 									onChange={(e) => setMax(parseInt(e.target.value, 10) || 0)}
 								/>
@@ -289,6 +293,7 @@ export default function AllocationConfigPage() {
 													<FieldLabel label="Tipo de Regra" description="Define o comportamento desejado da distribuição." />
 													<select
 														className="executive-input"
+														data-testid="criterion-type-select"
 														value={criterion.type}
 														onChange={(e) => updateCriterion(idx, "type", e.target.value)}
 													>
@@ -307,6 +312,7 @@ export default function AllocationConfigPage() {
 													/>
 													<select
 														className="executive-input"
+														data-testid="criterion-column-select"
 														value={criterion.columnKey}
 														onChange={(e) => updateCriterion(idx, "columnKey", e.target.value)}
 													>
@@ -327,6 +333,7 @@ export default function AllocationConfigPage() {
 													<input
 														type="number"
 														className="executive-input"
+														data-testid="criterion-threshold-input"
 														value={criterion.threshold}
 														disabled={!criterionNeedsThreshold(criterion.type)}
 														onChange={(e) =>

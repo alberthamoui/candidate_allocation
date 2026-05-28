@@ -1,27 +1,23 @@
 import { test, expect } from '@playwright/test';
-import path from 'path';
+import { confirmMapping, importSampleSpreadsheet, openPageHelp } from './support/ui';
 
 test.describe('Layout polish', () => {
   test('header and help affordances remain visible', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.locator('header')).toBeVisible();
-    await expect(page.locator('header').getByLabel('Ajuda da Página')).toBeVisible();
-    await expect(page.getByLabel('Ajuda da Página')).toHaveText('?');
+    await expect(page.getByRole('banner')).toBeVisible();
+    await expect(page.getByTestId('page-help-button')).toBeVisible();
+    await expect(page.getByTestId('page-help-button')).toHaveText('?');
   });
 
   test('navegacao reseta o scroll da tela', async ({ page }) => {
-    const sampleFilePath = path.resolve(__dirname, '../../../Execelteste/Base4Restricao.xlsx');
-
-    await page.goto('/');
-    await page.setInputFiles('#fileInput', sampleFilePath);
-    await page.click('button:has-text("Continuar")');
+    await importSampleSpreadsheet(page);
 
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const scrolledY = await page.evaluate(() => window.scrollY);
     expect(scrolledY).toBeGreaterThan(0);
 
-    await page.getByRole('main').getByRole('heading', { name: 'Mapeamento de Candidatos' }).waitFor({ state: 'visible' });
+    await confirmMapping(page, 'Verificação de Usuários');
     const topY = await page.evaluate(() => window.scrollY);
     expect(topY).toBe(0);
   });
@@ -33,8 +29,7 @@ test.describe('Layout polish', () => {
     const before = await page.evaluate(() => window.scrollY);
     expect(before).toBeGreaterThan(0);
 
-    await page.locator('header').getByLabel('Ajuda da Página').click();
-    await expect(page.getByText('Para que serve')).toBeVisible();
+    await openPageHelp(page);
 
     const after = await page.evaluate(() => window.scrollY);
     expect(after).toBe(before);

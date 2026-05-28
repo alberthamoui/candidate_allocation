@@ -100,6 +100,7 @@ function CompactHeader({ title, kicker, onHelpClick }: { title: string, kicker: 
 						onClick={onHelpClick}
 						className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] bg-white text-base font-semibold leading-none text-gray-600 shadow-sm transition-all hover:bg-gray-50 hover:scale-105"
 						aria-label="Ajuda da Página"
+						data-testid="page-help-button"
 					>
 						<span className="leading-none select-none">?</span>
 					</button>
@@ -147,7 +148,7 @@ export function WorkflowLayout() {
 		<div className="min-h-screen bg-[var(--bg-subtle)] pb-[160px] flex flex-col">
 			<CompactHeader title={meta.title} kicker={meta.kicker} onHelpClick={() => setIsHelpOpen(true)} />
 			
-			<main className="flex-1 w-full max-w-[1200px] mx-auto px-4 py-8 md:px-8">
+			<main data-testid="workflow-main" className="flex-1 w-full max-w-[1200px] mx-auto px-4 py-8 md:px-8">
 				<Outlet />
 			</main>
 			

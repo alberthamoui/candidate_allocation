@@ -40,6 +40,7 @@ export function EditableCell({
 							? "border-[rgba(156,66,63,0.3)] bg-[rgba(156,66,63,0.06)]"
 							: "border-[rgba(178,122,68,0.24)] bg-white"
 					}`}
+					data-testid="editable-cell-input"
 					value={temp}
 					onChange={(e) => setTemp(e.target.value)}
 					onBlur={commit}
@@ -61,6 +62,7 @@ export function EditableCell({
 
 	return (
 		<div
+			data-testid="editable-cell-display"
 			className={`group cursor-pointer rounded-[14px] border border-dashed p-2 transition-all ${
 				hasError
 					? "border-[rgba(156,66,63,0.28)] hover:bg-[rgba(156,66,63,0.08)]"

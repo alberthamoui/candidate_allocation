@@ -385,7 +385,7 @@ export default function EntityVerificationView({
 	return (
 		<div className="space-y-6">
 			{errorMsg && (
-				<div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+				<div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50" data-testid="verification-error-dialog">
 					<motion.div
 						initial={{ scale: 0.9, opacity: 0 }}
 						animate={{ scale: 1, opacity: 1 }}
@@ -398,7 +398,7 @@ export default function EntityVerificationView({
 							</h3>
 						</div>
 						<p className="mb-6 text-sm leading-6 text-[var(--muted)]">{errorMsg}</p>
-						<PrimaryButton className="w-full justify-center" onClick={() => setErrorMsg(null)}>
+						<PrimaryButton className="w-full justify-center" onClick={() => setErrorMsg(null)} data-testid="verification-error-close-button">
 							Entendido
 						</PrimaryButton>
 					</motion.div>
@@ -477,6 +477,7 @@ export default function EntityVerificationView({
 												<PrimaryButton
 													className="w-full justify-center bg-[linear-gradient(135deg,#256454_0%,#184c40_100%)]"
 													onClick={() => acceptOne(group, id)}
+													data-testid="accept-duplicate-record-button"
 												>
 													<CheckCircleIcon className="h-5 w-5" />
 													Aceitar Este

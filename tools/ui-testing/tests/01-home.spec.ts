@@ -1,29 +1,25 @@
 import { test, expect } from '@playwright/test';
+import { openPageHelp } from './support/ui';
 
 test.describe('Suite 1: Home Page & Initial Setup', () => {
   test('A página carrega corretamente e exibe o título principal', async ({ page }) => {
     await page.goto('/');
-    
-    // Verifica se o título "Candidate Allocator" aparece na home
-    const header = page.locator('h1').first();
-    await expect(header).toHaveText('Candidate Allocator');
+
+    await expect(page.getByTestId('workflow-main').getByRole('heading', { name: 'Importação de Dados' })).toBeVisible();
   });
 
   test('Deve exibir erro ao tentar prosseguir sem selecionar um arquivo Excel', async ({ page }) => {
     await page.goto('/');
-    
-    const fileButton = page.locator('button', { hasText: 'Continuar' });
-    await fileButton.click();
-    
-    const errorMsg = page.locator('text=Por favor, selecione um arquivo.');
-    await expect(errorMsg).toBeVisible();
+
+    await page.getByTestId('start-import-button').click();
+
+    await expect(page.getByTestId('import-error-message')).toContainText('Por favor, selecione um arquivo.');
   });
 
   test('Deve abrir a ajuda contextual da página inicial', async ({ page }) => {
     await page.goto('/');
 
-    await page.locator('header').getByLabel('Ajuda da Página').click();
-    await expect(page.locator('text=Para que serve')).toBeVisible();
-    // await expect(page.locator('text=Inicie uma nova')).toBeVisible();
+    await openPageHelp(page);
+    await expect(page.getByTestId('page-help-dialog').getByText('Para que serve')).toBeVisible();
   });
 });

@@ -17,7 +17,7 @@ export default function SuccessPage() {
 	const navigate = useNavigate();
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-6" data-testid="success-page">
 			<SectionCard
 				title="Base consolidada"
 				description="Candidatos, restrições e avaliadores foram salvos. O sistema está pronto para a definição operacional da alocação."
@@ -66,7 +66,7 @@ export default function SuccessPage() {
 									Abra a configuração para definir capacidade de grupos, avaliadores por mesa e critérios soft.
 								</p>
 								<div className="mt-4">
-									<PrimaryButton onClick={() => navigate("/allocation-config")} className="w-full justify-center">
+									<PrimaryButton onClick={() => navigate("/allocation-config")} className="w-full justify-center" data-testid="configure-allocation-button">
 										<Cog6ToothIcon className="h-5 w-5" />
 										Configurar Alocação
 									</PrimaryButton>
@@ -81,7 +81,7 @@ export default function SuccessPage() {
 									Use esta opção quando a planilha de origem precisar ser trocada ou o fluxo tiver que ser refeito do início.
 								</p>
 								<div className="mt-4">
-									<SecondaryButton onClick={() => navigate("/")} className="w-full justify-center">
+									<SecondaryButton onClick={() => navigate("/")} className="w-full justify-center" data-testid="restart-import-button">
 										<ArrowPathIcon className="h-5 w-5" />
 										Nova Importação
 									</SecondaryButton>

@@ -14,16 +14,30 @@ set -e
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DIR"
 
+BASE_URL="${UI_BASE_URL:-http://localhost:34115}"
+WAIT_TIMEOUT_SECONDS="${UI_WAIT_TIMEOUT_SECONDS:-60}"
+
 echo "Checking dependencies..."
 if [ ! -d "node_modules" ]; then
     echo "Installing Playwright dependencies..."
     npm install
 fi
 
+echo "Waiting for Wails dev at $BASE_URL..."
+deadline=$((SECONDS + WAIT_TIMEOUT_SECONDS))
+until curl -fsS "$BASE_URL" >/dev/null 2>&1; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+        echo "Wails dev did not become ready within ${WAIT_TIMEOUT_SECONDS}s."
+        echo "Start it from the project root with: wails dev"
+        exit 1
+    fi
+    sleep 1
+done
+
+echo "Wails dev is ready."
+
 # Determine if the user passed a specific spec file
 SPEC_FILE=$1
-echo "Waiting for app readiness..."
-sleep 5
 if [ -z "$SPEC_FILE" ]; then
     echo "Running all Playwright tests headlessly..."
     npx playwright test

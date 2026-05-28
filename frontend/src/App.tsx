@@ -135,6 +135,7 @@ function App({
 						<input
 							type="file"
 							id="fileInput"
+							data-testid="excel-file-input"
 							onChange={handleFileChange}
 							className="minimal-input mt-2 cursor-pointer bg-white"
 							accept=".xlsx,.xls,.csv"
@@ -152,7 +153,7 @@ function App({
 					</PrimaryButton>
 					
 					{fileResult && (
-						<div className="bg-red-50 text-red-600 border border-red-100 rounded-lg p-3 text-sm font-medium text-center">
+						<div data-testid="import-error-message" className="bg-red-50 text-red-600 border border-red-100 rounded-lg p-3 text-sm font-medium text-center">
 							{fileResult}
 						</div>
 					)}

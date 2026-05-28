@@ -84,6 +84,7 @@ export function UserCard({
 	return (
 		<motion.div
 			key={userId}
+			data-testid="entity-card"
 			initial={{ opacity: 0, y: 20 }}
 			animate={{ opacity: 1, y: 0 }}
 			className={`relative w-80 flex-shrink-0 rounded-[28px] border p-5 shadow-[0_20px_36px_rgba(24,35,45,0.12)] transition-all duration-200 ${
@@ -148,6 +149,7 @@ export function UserCard({
 					return (
 						<div
 							key={field}
+							data-testid={`user-card-field-${field}`}
 							className={`rounded-[18px] border p-3 transition-all duration-200 ${
 								hasFieldError
 									? "border-[rgba(156,66,63,0.2)] bg-[rgba(156,66,63,0.08)]"

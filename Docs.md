@@ -80,6 +80,10 @@ Sem essa espera, chamadas imediatas para `window.go.main.App.*` podem falhar ant
 Os testes de UI continuam em `tools/ui-testing`, mas agora com alguns ajustes importantes para convivência com o modo Wails dev:
 
 - a suíte usa `data-testid` nos pontos críticos de navegação para reduzir fragilidade visual
+- `runner.sh` não usa mais espera fixa; ele faz polling em `UI_BASE_URL` até o Wails dev responder ou falha com uma mensagem explícita para iniciar `wails dev`
+- `playwright.config.ts` roda com `workers: 1` e `fullyParallel: false`, porque o app Wails compartilha estado de aplicação e banco durante a execução
+- os helpers em [`tools/ui-testing/tests/support/ui.ts`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/tools/ui-testing/tests/support/ui.ts) concentram ações repetidas como importar planilha, avançar mapeamento, resolver duplicatas, salvar revisão e completar o wizard
+- seletores por texto continuam aceitáveis para assertions de conteúdo, mas ações críticas devem usar `data-testid`
 - `playwright.config.ts` grava artefatos temporários em `/tmp/candidate-allocation-playwright`
 - os diretórios `test-results/` e `tools/ui-testing/test-results/` possuem `go.mod` local para impedir que artefatos do Playwright contaminem o `go mod tidy` executado pelo `wails dev`
 
@@ -534,9 +538,30 @@ A suíte em `tools/ui-testing` depende do app rodando em `wails dev` na porta co
 
 Prioridade prática:
 
+- trocar a espera fixa de `runner.sh` por uma checagem real de prontidão do Wails em `http://localhost:34115`
 - manter seletores por `data-testid` nos fluxos críticos
+- reduzir seletores frágeis por texto, índice visual (`nth`) ou estrutura CSS em jornadas críticas
+- criar helpers de teste para ações repetidas, como importar planilha, avançar mapeamentos, resolver duplicatas e salvar revisão
 - cobrir qualquer alteração visual ou de workflow no diretório `tools/ui-testing`
 - preservar `report.json` como primeira fonte de diagnóstico quando a UI falhar
+
+Essa prioridade existe porque a suíte de UI deve responder uma pergunta objetiva: "o produto ainda funciona no Wails real?". Se o teste falha porque o app não terminou de subir, porque o texto mudou ou porque um botão mudou de posição, a suíte deixa de ser um sinal confiável e começa a atrasar a evolução da interface.
+
+### P1 - Configurar estratégia de alocação de avaliadores
+
+Hoje a escolha de avaliadores por grupo acontece no adaptador do solver em [`back/allocation/problem_builder.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/allocation/problem_builder.go), principalmente via `selectEvaluatorIDs`. A regra atual ordena os avaliadores e faz uma rotação simples a partir do índice do grupo. Isso evita ficar sempre literalmente no mesmo primeiro avaliador quando há vários grupos, mas ainda não é uma configuração explícita de produto.
+
+O próximo passo é transformar isso em configuração de alocação, junto de `AvaliadoresPorGrupo`:
+
+- adicionar um campo de estratégia em `AllocationParams`, por exemplo `EvaluatorAllocationStrategy`
+- manter `round_robin` como default determinístico
+- considerar estratégias como `manual`, `balanced_load` e `prefer_available`
+- permitir fixar avaliadores por horário/grupo quando o usuário precisar controle manual
+- validar conflito entre estratégia, quantidade de avaliadores e restrições importadas
+- expor a escolha na tela `AllocationConfigPage`
+- atualizar os testes Go de `BuildAllocationProblem` e os testes de UI em `tools/ui-testing`
+
+Essa prioridade deve ser tratada junto com o CLI: se o contrato de `AllocationParams` mudar, o fluxo em [`back/workflow/import_cli.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/workflow/import_cli.go), o Wails e os bindings do frontend precisam ficar sincronizados.
 
 ### P2 - Melhorar explicabilidade e observabilidade da alocação
 
@@ -548,6 +573,53 @@ O solver já retorna métricas, score e debug notes. A próxima melhoria de prod
 - impacto de cada critério soft aplicado
 
 Isso ajuda o usuário a confiar no resultado e facilita depuração de casos reais.
+
+### P2 - Sistema de demo
+
+Criar um modo demo ajuda a vender, testar e desenvolver o produto sem depender de planilhas reais a cada execução.
+
+Escopo recomendado:
+
+- disponibilizar planilhas exemplo versionadas em uma pasta de fixtures
+- criar uma ação "Carregar demo" na home
+- usar os mesmos caminhos reais de importação, mapeamento, revisão, configuração e solver
+- oferecer pelo menos um caso "tudo aloca" e um caso "tem conflito/não alocados"
+- cobrir o modo demo nos testes de UI
+
+### P2 - Remover bugs de UI e melhorar a experiência visual
+
+A melhoria visual deve vir depois de estabilizar os testes de UI, para cada ajuste de interface ter cobertura confiável.
+
+Direção recomendada:
+
+- definir tokens de cor mais claros em `frontend/src/index.css`, incluindo um `accent color` de ação/atenção
+- usar o acento apenas para decisões importantes, CTAs, status ativo e destaques de resultado
+- reduzir componentes visualmente parecidos que competem pela atenção
+- revisar responsividade e alinhamento das telas de mapeamento, revisão, configuração e resultado
+- transformar bugs recorrentes de layout em testes específicos em `tools/ui-testing/tests/06-layout.spec.ts`
+
+### P3 - Integração com pagamento
+
+Pagamento deve vir depois que importação, demo, configuração e resultado estiverem estáveis. Antes disso, o risco é acoplar cobrança a um produto que ainda muda bastante no fluxo principal.
+
+Preparação técnica:
+
+- separar claramente modo local/demo, modo pago e eventual licença
+- definir que recurso será bloqueado: importação real, exportação, número de candidatos, histórico ou execução do solver
+- criar uma camada de entitlement no backend, não só bloqueios visuais no frontend
+- evitar colocar lógica de pagamento dentro do solver ou do workflow de importação
+
+### P3 - Tornar a codebase mais intuitiva de manipular
+
+Melhorias de mantenibilidade que reduzem atrito para próximos agentes:
+
+- consolidar contratos de domínio em poucos arquivos fonte da verdade, evitando defaults duplicados em Go e TS
+- criar factories/fixtures compartilhadas para testes de importação, configuração e solver
+- extrair helpers Playwright para reduzir repetição entre `04-full-journey.spec.ts` e `05-allocation.spec.ts`
+- padronizar nomes: escolher uma língua por camada quando possível, especialmente entre `candidate`, `candidato`, `avaliador`, `reviewer`
+- documentar contratos Wails exportados em uma seção curta do `Docs.md`
+- criar scripts de qualidade de uso único, por exemplo `make test`, `make lint` e `make ui-test`, para reduzir comandos manuais
+- manter `frontend/wailsjs` sempre tratado como artefato gerado e atualizar quando métodos do `App` mudarem
 
 ### P2 - Endurecer persistência e estado transiente
 

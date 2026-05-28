@@ -322,7 +322,7 @@ export default function MappingEditorPage({
 	return (
 		<div className="space-y-6">
 			{errorMsg && (
-				<div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+				<div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50" data-testid="mapping-error-dialog">
 					<motion.div
 						initial={{ scale: 0.9, opacity: 0 }}
 						animate={{ scale: 1, opacity: 1 }}
@@ -335,7 +335,7 @@ export default function MappingEditorPage({
 							</h3>
 						</div>
 						<p className="mb-6 text-sm leading-6 text-[var(--muted)]">{errorMsg}</p>
-						<PrimaryButton className="w-full justify-center" onClick={() => setErrorMsg(null)}>
+						<PrimaryButton className="w-full justify-center" onClick={() => setErrorMsg(null)} data-testid="mapping-error-close-button">
 							Entendido
 						</PrimaryButton>
 					</motion.div>
@@ -464,6 +464,7 @@ export default function MappingEditorPage({
 											<input
 												type="text"
 												value={item.variavel}
+												data-testid="extra-field-name-input"
 												onChange={(event) =>
 													handleVariableChange(index, event.target.value)
 												}

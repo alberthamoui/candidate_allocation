@@ -14,7 +14,7 @@ export const PageHelp = ({ isOpen, onClose, title, description, impacts, videoId
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/20 backdrop-blur-sm p-4 md:p-12">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/20 backdrop-blur-sm p-4 md:p-12" data-testid="page-help-dialog">
           <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -28,6 +28,7 @@ export const PageHelp = ({ isOpen, onClose, title, description, impacts, videoId
                 onClick={onClose}
                 className="text-gray-400 hover:text-gray-600 p-2 rounded-md hover:bg-gray-100 transition-colors"
                 aria-label="Fechar"
+                data-testid="page-help-close-button"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 6L6 18M6 6l12 12" />

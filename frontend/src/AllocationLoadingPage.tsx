@@ -49,7 +49,7 @@ export default function AllocationLoadingPage() {
 	}, [navigate, location]);
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-6" data-testid="allocation-loading-page">
 			<SectionCard
 				title="Processamento em andamento"
 				description="O sistema está analisando a configuração escolhida e calculando a melhor distribuição possível dentro das regras atuais."

@@ -94,7 +94,7 @@ export default function AllocationResultPage() {
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-6" data-testid="allocation-result-page">
 			<SectionCard
 				title="Painel executivo da rodada"
 				description="Use os filtros para inspecionar a distribuição por perfil e identifique rapidamente exceções operacionais."
@@ -167,6 +167,7 @@ export default function AllocationResultPage() {
 							type="text"
 							placeholder="Pesquisa livre..."
 							className="executive-input"
+							data-testid="candidate-search-input"
 							value={searchTerm}
 							onChange={(e) => {
 								setSearchTerm(e.target.value);
