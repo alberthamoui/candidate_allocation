@@ -80,6 +80,8 @@ Sem essa espera, chamadas imediatas para `window.go.main.App.*` podem falhar ant
 Os testes de UI continuam em `tools/ui-testing`, mas agora com alguns ajustes importantes para convivência com o modo Wails dev:
 
 - a suíte usa `data-testid` nos pontos críticos de navegação para reduzir fragilidade visual
+- `runner.sh` valida se `@playwright/test` consegue ser carregado; quando `node_modules` está ausente ou incompleto, ele recria as dependências com `npm ci` a partir do lockfile
+- o runner também verifica o executável do Chromium e chama `playwright install chromium` somente quando o navegador ainda não está disponível
 - `runner.sh` não usa mais espera fixa; ele faz polling em `UI_BASE_URL` até o Wails dev responder ou falha com uma mensagem explícita para iniciar `wails dev`
 - `playwright.config.ts` roda com `workers: 1` e `fullyParallel: false`, porque o app Wails compartilha estado de aplicação e banco durante a execução
 - os helpers em [`tools/ui-testing/tests/support/ui.ts`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/tools/ui-testing/tests/support/ui.ts) concentram ações repetidas como importar planilha, avançar mapeamento, resolver duplicatas, salvar revisão e completar o wizard

@@ -18,9 +18,14 @@ BASE_URL="${UI_BASE_URL:-http://localhost:34115}"
 WAIT_TIMEOUT_SECONDS="${UI_WAIT_TIMEOUT_SECONDS:-60}"
 
 echo "Checking dependencies..."
-if [ ! -d "node_modules" ]; then
-    echo "Installing Playwright dependencies..."
-    npm install
+if [ ! -d "node_modules" ] || ! node -e "require('@playwright/test')" >/dev/null 2>&1; then
+    echo "Installing Playwright dependencies from package-lock.json..."
+    npm ci
+fi
+
+if ! node -e "const fs = require('fs'); const { chromium } = require('@playwright/test'); fs.accessSync(chromium.executablePath())" >/dev/null 2>&1; then
+    echo "Installing Playwright Chromium..."
+    npx playwright install chromium
 fi
 
 echo "Waiting for Wails dev at $BASE_URL..."
