@@ -2,6 +2,7 @@ package allocation
 
 import (
 	"fmt"
+	"math/big"
 	"sort"
 	"strings"
 	"sync"
@@ -9,12 +10,17 @@ import (
 	types "candidate_alocator/back/type"
 )
 
-const defaultMaxDebugEvents = 32
+const (
+	defaultMaxDebugEvents = 32
+	defaultFlowBoundDepth = 2
+)
 
 type SolverOptions struct {
 	WorkerCount    int
 	ParallelDepth  int
 	MaxDebugEvents int
+	FlowBoundDepth int
+	Progress       ProgressCallback
 }
 
 type solverProblemView struct {
@@ -22,23 +28,37 @@ type solverProblemView struct {
 	candidates             map[int]types.SolverCandidate
 	groups                 map[int]types.SolverGroup
 	sortedCandidateIDs     []int
+	sortedGroupIDs         []int
+	candidateIndexByID     map[int]int
+	groupIndexByID         map[int]int
 	candidateGroupOptions  map[int][]solverGroupOption
 	assignmentPenaltyByKey map[int]map[int]int
+	groupSymmetryClass     map[int]int
 }
 
 type solverGroupOption struct {
 	GroupID            int
+	GroupIndex         int
 	ImmediatePenalty   int
 	EvaluatorConflicts int
 }
 
 type solverState struct {
-	Assignments map[int]int
-	GroupCounts map[int]int
+	Assignments   []int
+	GroupCounts   []int
+	AssignedCount int
+	BasePenalty   int
 }
 
 type preparedTask struct {
-	State solverState
+	State  solverState
+	Weight *big.Int
+}
+
+type sharedIncumbent struct {
+	mu        sync.RWMutex
+	best      *types.SolverResult
+	taskIndex int
 }
 
 type buildFrontierContext struct {
@@ -48,49 +68,62 @@ type buildFrontierContext struct {
 	metrics     types.SolverMetrics
 	debugNotes  []string
 	hardWitness []types.HardConstraintViolation
+	progress    *solverProgressTracker
+	incumbent   *sharedIncumbent
 }
 
 type subtreeSolver struct {
 	view        solverProblemView
 	options     SolverOptions
-	best        *types.SolverResult
+	taskIndex   int
 	metrics     types.SolverMetrics
 	debugNotes  []string
 	hardWitness []types.HardConstraintViolation
+	progress    *solverProgressTracker
+	incumbent   *sharedIncumbent
 }
 
 type subtreeOutcome struct {
-	best        *types.SolverResult
 	metrics     types.SolverMetrics
 	debugNotes  []string
 	hardWitness []types.HardConstraintViolation
 }
 
-// SolveAllocation executa a busca exata deterministica com branch and bound.
-func SolveAllocation(problem types.AllocationProblem, options SolverOptions) types.SolverResult {
-	// problema tem canditados grupos e regras e o options tem os parametros de execução como o paralelimso
-	// arruma as opções
+func solveConnectedAllocation(problem types.AllocationProblem, options SolverOptions) types.SolverResult {
 	normalizedOptions := NormalizeSolverOptions(options)
-	// view basicamente tem dados ja processados, quais grupos esse candidato pode entrar e etc.
 	view := buildSolverProblemView(problem)
-	// estado inicial do solver com mapa vazio com espaço para os grupos
-	root := solverState{
-		Assignments: make(map[int]int),
-		GroupCounts: make(map[int]int, len(problem.Groups)),
-	}
+	progress, rootWeight := newSolverProgressTracker(view, normalizedOptions.Progress)
+	defer progress.finish()
 
+	root := newSolverState(view)
+	incumbent := &sharedIncumbent{taskIndex: int(^uint(0) >> 1)}
 	frontier := buildFrontierContext{
-		view:    view,
-		options: normalizedOptions,
+		view:      view,
+		options:   normalizedOptions,
+		progress:  progress,
+		incumbent: incumbent,
 	}
-	// vai podando ramos impossíveis cedo, antes de resolver tudo
-	frontier.expand(root, normalizedOptions.ParallelDepth)
 
-	// se tiver tarefas ele vai resolvendo cada uma
+	if assignment, feasible := initialMinCostAssignment(view, &root); feasible {
+		partial := types.PartialAllocationState{Assignments: assignment}
+		if viable, _ := IsStateViable(problem, partial); viable && IsCompleteState(problem, partial) {
+			result := types.SolverResult{Status: "optimal", Assignments: assignment, Score: ScoreAllocation(problem, partial)}
+			if incumbent.update(result, incumbent.taskIndex) {
+				frontier.metrics.BestUpdates++
+				frontier.note(fmt.Sprintf("initial min-cost incumbent: score=%d", result.Score.TotalPenalty))
+			}
+		}
+	}
+
+	frontier.expand(&root, normalizedOptions.ParallelDepth, rootWeight)
 	if len(frontier.tasks) == 0 {
+		if best := incumbent.snapshot(); best != nil {
+			best.Metrics = frontier.metrics
+			best.DebugNotes = append([]string(nil), frontier.debugNotes...)
+			return *best
+		}
 		result := buildInfeasibleResult(frontier.hardWitness)
 		result.Metrics = frontier.metrics
-		result.Metrics.ParallelTasks = 0
 		result.DebugNotes = append([]string(nil), frontier.debugNotes...)
 		return result
 	}
@@ -98,54 +131,54 @@ func SolveAllocation(problem types.AllocationProblem, options SolverOptions) typ
 	results := make([]subtreeOutcome, len(frontier.tasks))
 	parallelize := normalizedOptions.WorkerCount > 1 && len(frontier.tasks) > 1
 	if parallelize {
-		semaphore := make(chan struct{}, normalizedOptions.WorkerCount)
-		var wg sync.WaitGroup
-		for index, task := range frontier.tasks {
-			wg.Add(1)
-			go func(index int, task preparedTask) {
-				defer wg.Done()
-				semaphore <- struct{}{}
-				results[index] = solvePreparedTask(view, normalizedOptions, task)
-				<-semaphore
-			}(index, task)
+		jobs := make(chan int)
+		workerCount := normalizedOptions.WorkerCount
+		if workerCount > len(frontier.tasks) {
+			workerCount = len(frontier.tasks)
 		}
+		var wg sync.WaitGroup
+		for worker := 0; worker < workerCount; worker++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for index := range jobs {
+					results[index] = solvePreparedTask(view, normalizedOptions, frontier.tasks[index], index, progress, incumbent)
+				}
+			}()
+		}
+		for index := range frontier.tasks {
+			jobs <- index
+		}
+		close(jobs)
 		wg.Wait()
 	} else {
 		for index, task := range frontier.tasks {
-			results[index] = solvePreparedTask(view, normalizedOptions, task)
+			results[index] = solvePreparedTask(view, normalizedOptions, task, index, progress, incumbent)
 		}
 	}
 
 	finalMetrics := frontier.metrics
 	finalMetrics.ParallelTasks = len(frontier.tasks)
 	finalNotes := append([]string(nil), frontier.debugNotes...)
-	var finalBest *types.SolverResult
 	finalWitness := append([]types.HardConstraintViolation(nil), frontier.hardWitness...)
-
 	for _, outcome := range results {
 		finalMetrics = mergeSolverMetrics(finalMetrics, outcome.metrics)
 		finalNotes = appendLimitedNotes(finalNotes, outcome.debugNotes, normalizedOptions.MaxDebugEvents)
-		if finalBest == nil || (outcome.best != nil && isBetterSolverResult(*outcome.best, *finalBest)) {
-			if outcome.best != nil {
-				copied := cloneSolverResult(*outcome.best)
-				finalBest = &copied
-			}
-		}
 		if len(finalWitness) == 0 && len(outcome.hardWitness) > 0 {
 			finalWitness = append([]types.HardConstraintViolation(nil), outcome.hardWitness...)
 		}
 	}
 
-	if finalBest == nil {
+	best := incumbent.snapshot()
+	if best == nil {
 		result := buildInfeasibleResult(finalWitness)
 		result.Metrics = finalMetrics
 		result.DebugNotes = finalNotes
 		return result
 	}
-
-	finalBest.Metrics = finalMetrics
-	finalBest.DebugNotes = finalNotes
-	return *finalBest
+	best.Metrics = finalMetrics
+	best.DebugNotes = finalNotes
+	return *best
 }
 
 func NormalizeSolverOptions(options SolverOptions) SolverOptions {
@@ -162,12 +195,21 @@ func NormalizeSolverOptions(options SolverOptions) SolverOptions {
 	if normalized.MaxDebugEvents <= 0 {
 		normalized.MaxDebugEvents = defaultMaxDebugEvents
 	}
+	if normalized.FlowBoundDepth <= 0 {
+		normalized.FlowBoundDepth = defaultFlowBoundDepth
+	}
 	return normalized
 }
 
-func EstimateLowerBound(problem types.AllocationProblem, state types.PartialAllocationState) int {
+// EstimateLowerBound returns a safe optimistic score for a partial state.
+func EstimateLowerBound(problem types.AllocationProblem, partial types.PartialAllocationState) int {
 	view := buildSolverProblemView(problem)
-	return estimateLowerBound(view, state)
+	state := stateFromPartial(view, partial)
+	bound, feasible := simpleLowerBound(view, &state)
+	if !feasible {
+		return invalidStatePenalty
+	}
+	return bound
 }
 
 func buildSolverProblemView(problem types.AllocationProblem) solverProblemView {
@@ -175,32 +217,46 @@ func buildSolverProblemView(problem types.AllocationProblem) solverProblemView {
 		problem:                problem,
 		candidates:             candidateByID(problem),
 		groups:                 groupByID(problem),
-		sortedCandidateIDs:     make([]int, 0, len(problem.Candidates)),
+		candidateIndexByID:     make(map[int]int, len(problem.Candidates)),
+		groupIndexByID:         make(map[int]int, len(problem.Groups)),
 		candidateGroupOptions:  make(map[int][]solverGroupOption, len(problem.Candidates)),
 		assignmentPenaltyByKey: make(map[int]map[int]int, len(problem.Candidates)),
+		groupSymmetryClass:     make(map[int]int, len(problem.Groups)),
 	}
-
 	for _, candidate := range problem.Candidates {
 		view.sortedCandidateIDs = append(view.sortedCandidateIDs, candidate.ID)
+	}
+	for _, group := range problem.Groups {
+		view.sortedGroupIDs = append(view.sortedGroupIDs, group.ID)
+	}
+	sort.Ints(view.sortedCandidateIDs)
+	sort.Ints(view.sortedGroupIDs)
+	for index, candidateID := range view.sortedCandidateIDs {
+		view.candidateIndexByID[candidateID] = index
+	}
+	for index, groupID := range view.sortedGroupIDs {
+		view.groupIndexByID[groupID] = index
+	}
+
+	for _, candidateID := range view.sortedCandidateIDs {
+		candidate := view.candidates[candidateID]
 		options := make([]solverGroupOption, 0, len(problem.Groups))
 		penalties := make(map[int]int, len(problem.Groups))
-		for _, group := range problem.Groups {
+		for _, groupID := range view.sortedGroupIDs {
+			group := view.groups[groupID]
 			if problem.HardRestrictions.RespectCandidatePreferences && !containsInt(candidate.PreferredGroupIDs, group.ID) {
 				continue
 			}
 			if problem.HardRestrictions.EnforceForbiddenEvaluators && groupHasForbiddenEvaluator(candidate, group) {
 				continue
 			}
-
 			penalty := assignmentPenalty(problem, candidate, group)
 			options = append(options, solverGroupOption{
-				GroupID:            group.ID,
-				ImmediatePenalty:   penalty,
+				GroupID: group.ID, GroupIndex: view.groupIndexByID[group.ID], ImmediatePenalty: penalty,
 				EvaluatorConflicts: countAvoidEvaluatorConflicts(candidate, group),
 			})
 			penalties[group.ID] = penalty
 		}
-
 		sort.SliceStable(options, func(i, j int) bool {
 			if options[i].ImmediatePenalty != options[j].ImmediatePenalty {
 				return options[i].ImmediatePenalty < options[j].ImmediatePenalty
@@ -210,225 +266,212 @@ func buildSolverProblemView(problem types.AllocationProblem) solverProblemView {
 			}
 			return options[i].GroupID < options[j].GroupID
 		})
-
-		view.candidateGroupOptions[candidate.ID] = options
-		view.assignmentPenaltyByKey[candidate.ID] = penalties
+		view.candidateGroupOptions[candidateID] = options
+		view.assignmentPenaltyByKey[candidateID] = penalties
 	}
-
-	sort.Ints(view.sortedCandidateIDs)
+	view.groupSymmetryClass = buildGroupSymmetryClasses(view)
 	return view
 }
 
-func solvePreparedTask(view solverProblemView, options SolverOptions, task preparedTask) subtreeOutcome {
-	solver := subtreeSolver{
-		view:    view,
-		options: options,
-	}
-	solver.resume(task.State)
-	return subtreeOutcome{
-		best:        solver.best,
-		metrics:     solver.metrics,
-		debugNotes:  append([]string(nil), solver.debugNotes...),
-		hardWitness: append([]types.HardConstraintViolation(nil), solver.hardWitness...),
-	}
+func newSolverState(view solverProblemView) solverState {
+	return solverState{Assignments: make([]int, len(view.sortedCandidateIDs)), GroupCounts: make([]int, len(view.sortedGroupIDs))}
 }
 
-func (builder *buildFrontierContext) expand(state solverState, depth int) {
+func stateFromPartial(view solverProblemView, partial types.PartialAllocationState) solverState {
+	state := newSolverState(view)
+	for candidateID, groupID := range partial.Assignments {
+		candidateIndex, candidateOK := view.candidateIndexByID[candidateID]
+		groupIndex, groupOK := view.groupIndexByID[groupID]
+		if !candidateOK || !groupOK {
+			continue
+		}
+		state.Assignments[candidateIndex] = groupID
+		state.GroupCounts[groupIndex]++
+		state.AssignedCount++
+		state.BasePenalty += view.assignmentPenaltyByKey[candidateID][groupID]
+	}
+	return state
+}
+
+func solvePreparedTask(view solverProblemView, options SolverOptions, task preparedTask, taskIndex int, progress *solverProgressTracker, incumbent *sharedIncumbent) subtreeOutcome {
+	solver := subtreeSolver{view: view, options: options, taskIndex: taskIndex, progress: progress, incumbent: incumbent}
+	solver.resume(&task.State, task.Weight)
+	return subtreeOutcome{metrics: solver.metrics, debugNotes: append([]string(nil), solver.debugNotes...), hardWitness: append([]types.HardConstraintViolation(nil), solver.hardWitness...)}
+}
+
+func (builder *buildFrontierContext) expand(state *solverState, depth int, weight *big.Int) {
 	builder.metrics.NodesVisited++
-	partial := buildPartialAllocationState(state)
-	// verifica se estado atual ja viola regra hard
-	if violations := pruneViolations(builder.view, state, partial); len(violations) > 0 {
+	builder.progress.visitNode()
+	if violation := futureHardViolation(builder.view, state); violation != nil {
 		builder.metrics.NodesPrunedByHard++
-		builder.captureWitness(violations)
-		builder.note(fmt.Sprintf("hard prune before frontier expansion: %s", violations[0].Code))
+		builder.captureWitness([]types.HardConstraintViolation{*violation})
+		builder.note("hard prune before frontier expansion: " + violation.Code)
+		builder.progress.resolve(weight, true)
+		return
+	}
+	if depth == 0 || state.AssignedCount == len(builder.view.sortedCandidateIDs) {
+		builder.tasks = append(builder.tasks, preparedTask{State: cloneSolverState(*state), Weight: new(big.Int).Set(weight)})
 		return
 	}
 
-	if depth == 0 || IsCompleteState(builder.view.problem, partial) {
-		builder.tasks = append(builder.tasks, preparedTask{State: cloneSolverState(state)})
-		return
-	}
-
-	candidateID, groupIDs := chooseNextCandidate(builder.view, state)
-	if candidateID == 0 {
-		builder.tasks = append(builder.tasks, preparedTask{State: cloneSolverState(state)})
-		return
-	}
-	if len(groupIDs) == 0 {
-		violations := []types.HardConstraintViolation{candidateWithoutGroupViolation(candidateID)}
+	candidateID, options, symmetrySkipped := chooseNextCandidate(builder.view, state)
+	builder.metrics.BranchesSkippedBySymmetry += symmetrySkipped
+	if candidateID == 0 || len(options) == 0 {
+		violation := candidateWithoutGroupViolation(candidateID)
 		builder.metrics.NodesPrunedByHard++
-		builder.captureWitness(violations)
-		builder.note(fmt.Sprintf("hard prune before frontier expansion: %s", violations[0].Code))
+		builder.captureWitness([]types.HardConstraintViolation{violation})
+		builder.progress.resolve(weight, true)
 		return
 	}
-
-	for _, groupID := range groupIDs {
-		builder.expand(assignCandidateToGroup(state, candidateID, groupID), depth-1)
-	}
-}
-
-func (builder *buildFrontierContext) captureWitness(violations []types.HardConstraintViolation) {
-	if len(builder.hardWitness) == 0 && len(violations) > 0 {
-		builder.hardWitness = append([]types.HardConstraintViolation(nil), violations...)
-	}
-}
-
-func (builder *buildFrontierContext) note(message string) {
-	builder.debugNotes = appendSingleNote(builder.debugNotes, builder.options.MaxDebugEvents, message)
-}
-
-func (solver *subtreeSolver) search(state solverState) {
-	solver.metrics.NodesVisited++
-	partial := buildPartialAllocationState(state)
-	if violations := pruneViolations(solver.view, state, partial); len(violations) > 0 {
-		solver.metrics.NodesPrunedByHard++
-		solver.captureWitness(violations)
-		solver.note(fmt.Sprintf("hard prune: %s", violations[0].Code))
-		return
-	}
-	solver.resume(state)
-}
-
-func (solver *subtreeSolver) resume(state solverState) {
-	partial := buildPartialAllocationState(state)
-	if IsCompleteState(solver.view.problem, partial) {
-		solver.metrics.CompleteStates++
-		score := ScoreAllocation(solver.view.problem, partial)
-		result := types.SolverResult{
-			Status:      "optimal",
-			Assignments: cloneAssignments(state.Assignments),
-			Score:       score,
-		}
-		if solver.best == nil || isBetterSolverResult(result, *solver.best) {
-			solver.metrics.BestUpdates++
-			copied := cloneSolverResult(result)
-			solver.best = &copied
-			solver.note(fmt.Sprintf("best update: score=%d assignments=%s", score.TotalPenalty, formatAssignments(result.Assignments)))
-		}
-		return
-	}
-
-	lowerBound := estimateLowerBound(solver.view, partial)
-	if solver.best != nil && lowerBound >= solver.best.Score.TotalPenalty {
-		solver.metrics.NodesPrunedByBound++
-		solver.note(fmt.Sprintf("bound prune: lower_bound=%d incumbent=%d", lowerBound, solver.best.Score.TotalPenalty))
-		return
-	}
-
-	candidateID, groupIDs := chooseNextCandidate(solver.view, state)
-	if candidateID == 0 {
-		solver.metrics.CompleteStates++
-		return
-	}
-	if len(groupIDs) == 0 {
-		violations := []types.HardConstraintViolation{candidateWithoutGroupViolation(candidateID)}
-		solver.metrics.NodesPrunedByHard++
-		solver.captureWitness(violations)
-		solver.note(fmt.Sprintf("hard prune: %s", violations[0].Code))
-		return
-	}
-
-	for _, groupID := range groupIDs {
-		solver.search(assignCandidateToGroup(state, candidateID, groupID))
-	}
-}
-
-func (solver *subtreeSolver) captureWitness(violations []types.HardConstraintViolation) {
-	if len(solver.hardWitness) == 0 && len(violations) > 0 {
-		solver.hardWitness = append([]types.HardConstraintViolation(nil), violations...)
-	}
-}
-
-func (solver *subtreeSolver) note(message string) {
-	solver.debugNotes = appendSingleNote(solver.debugNotes, solver.options.MaxDebugEvents, message)
-}
-
-func pruneViolations(view solverProblemView, state solverState, partial types.PartialAllocationState) []types.HardConstraintViolation {
-	if viable, violations := IsStateViable(view.problem, partial); !viable {
-		return violations
-	}
-	return futureHardViolations(view, state)
-}
-
-func futureHardViolations(view solverProblemView, state solverState) []types.HardConstraintViolation {
-	remainingCandidates := len(view.problem.Candidates) - len(state.Assignments)
-	if view.problem.HardRestrictions.AllCandidatesMustBeAssigned && remainingCandidates > remainingCapacity(view, state) {
-		return []types.HardConstraintViolation{insufficientCapacityViolation(remainingCandidates, remainingCapacity(view, state))}
-	}
-
-	for _, candidateID := range view.sortedCandidateIDs {
-		if _, assigned := state.Assignments[candidateID]; assigned {
-			continue
-		}
-		if len(currentFeasibleGroupIDs(view, state, candidateID)) == 0 {
-			return []types.HardConstraintViolation{candidateWithoutGroupViolation(candidateID)}
-		}
-	}
-
-	for _, group := range view.problem.Groups {
-		current := state.GroupCounts[group.ID]
-		if current == 0 || current >= group.MinCandidates {
-			continue
-		}
-		possible := current + countPotentialCandidatesForGroup(view, state, group.ID)
-		if possible < group.MinCandidates {
-			return []types.HardConstraintViolation{groupCannotReachMinimumViolation(group.ID, group.MinCandidates, possible)}
-		}
-	}
-
-	return nil
-}
-
-func chooseNextCandidate(view solverProblemView, state solverState) (int, []int) {
-	bestCandidateID := 0
-	var bestGroups []int
-	for _, candidateID := range view.sortedCandidateIDs {
-		if _, assigned := state.Assignments[candidateID]; assigned {
-			continue
-		}
-
-		groupIDs := currentFeasibleGroupIDs(view, state, candidateID)
-		if bestCandidateID == 0 || len(groupIDs) < len(bestGroups) || (len(groupIDs) == len(bestGroups) && candidateID < bestCandidateID) {
-			bestCandidateID = candidateID
-			bestGroups = groupIDs
-		}
-		if len(groupIDs) == 0 {
-			break
-		}
-	}
-	return bestCandidateID, bestGroups
-}
-
-func currentFeasibleGroupIDs(view solverProblemView, state solverState, candidateID int) []int {
-	options := view.candidateGroupOptions[candidateID]
-	groupIDs := make([]int, 0, len(options))
+	childWeight := builder.resolveSkippedBranches(candidateID, len(options), weight)
 	for _, option := range options {
-		if view.problem.HardRestrictions.EnforceGroupCapacity {
-			group := view.groups[option.GroupID]
-			if state.GroupCounts[option.GroupID] >= group.MaxCandidates {
-				continue
+		applyAssignment(builder.view, state, candidateID, option)
+		builder.expand(state, depth-1, childWeight)
+		undoAssignment(builder.view, state, candidateID, option)
+	}
+}
+
+func (builder *buildFrontierContext) resolveSkippedBranches(candidateID, feasibleCount int, weight *big.Int) *big.Int {
+	staticCount := len(builder.view.candidateGroupOptions[candidateID])
+	childWeight := childBranchWeight(weight, staticCount)
+	if skipped := staticCount - feasibleCount; skipped > 0 {
+		builder.progress.resolve(new(big.Int).Mul(new(big.Int).Set(childWeight), big.NewInt(int64(skipped))), true)
+	}
+	return childWeight
+}
+
+func (solver *subtreeSolver) search(state *solverState, weight *big.Int) {
+	solver.metrics.NodesVisited++
+	solver.progress.visitNode()
+	if violation := futureHardViolation(solver.view, state); violation != nil {
+		solver.metrics.NodesPrunedByHard++
+		solver.captureWitness([]types.HardConstraintViolation{*violation})
+		solver.note("hard prune: " + violation.Code)
+		solver.progress.resolve(weight, true)
+		return
+	}
+	solver.resume(state, weight)
+}
+
+func (solver *subtreeSolver) resume(state *solverState, weight *big.Int) {
+	if state.AssignedCount == len(solver.view.sortedCandidateIDs) {
+		solver.evaluateCompleteState(state, weight)
+		return
+	}
+
+	lowerBound, feasible := simpleLowerBound(solver.view, state)
+	if !feasible {
+		solver.metrics.NodesPrunedByHard++
+		solver.progress.resolve(weight, true)
+		return
+	}
+	if solver.incumbent.shouldPrune(lowerBound, solver.taskIndex) {
+		solver.metrics.NodesPrunedByBound++
+		solver.note(fmt.Sprintf("bound prune: lower_bound=%d", lowerBound))
+		solver.progress.resolve(weight, true)
+		return
+	}
+	flowUsed := state.AssignedCount <= solver.options.FlowBoundDepth || len(solver.view.sortedCandidateIDs)-state.AssignedCount <= 8
+	if incumbentScore, exists := solver.incumbent.score(); exists && lowerBound <= incumbentScore {
+		flowUsed = true
+	}
+	if flowUsed {
+		flowCost, _, flowFeasible := minCostCompletion(solver.view, state)
+		if !flowFeasible {
+			solver.metrics.NodesPrunedByFlow++
+			solver.progress.resolve(weight, true)
+			return
+		}
+		criterionBound := criterionLowerBound(solver.view, state)
+		if flowBound := state.BasePenalty + flowCost + criterionBound; flowBound > lowerBound {
+			lowerBound = flowBound
+		}
+	}
+	if solver.incumbent.shouldPrune(lowerBound, solver.taskIndex) {
+		if flowUsed {
+			solver.metrics.NodesPrunedByFlow++
+		} else {
+			solver.metrics.NodesPrunedByBound++
+		}
+		solver.note(fmt.Sprintf("bound prune: lower_bound=%d", lowerBound))
+		solver.progress.resolve(weight, true)
+		return
+	}
+
+	candidateID, options, symmetrySkipped := chooseNextCandidate(solver.view, state)
+	solver.metrics.BranchesSkippedBySymmetry += symmetrySkipped
+	if candidateID == 0 || len(options) == 0 {
+		violation := candidateWithoutGroupViolation(candidateID)
+		solver.metrics.NodesPrunedByHard++
+		solver.captureWitness([]types.HardConstraintViolation{violation})
+		solver.progress.resolve(weight, true)
+		return
+	}
+	staticCount := len(solver.view.candidateGroupOptions[candidateID])
+	childWeight := childBranchWeight(weight, staticCount)
+	if skipped := staticCount - len(options); skipped > 0 {
+		solver.progress.resolve(new(big.Int).Mul(new(big.Int).Set(childWeight), big.NewInt(int64(skipped))), true)
+	}
+	for _, option := range options {
+		applyAssignment(solver.view, state, candidateID, option)
+		solver.search(state, childWeight)
+		undoAssignment(solver.view, state, candidateID, option)
+	}
+}
+
+func (solver *subtreeSolver) evaluateCompleteState(state *solverState, weight *big.Int) {
+	solver.metrics.CompleteStates++
+	assignments := assignmentsMap(solver.view, state)
+	partial := types.PartialAllocationState{Assignments: assignments}
+	if viable, violations := IsStateViable(solver.view.problem, partial); !viable {
+		solver.metrics.NodesPrunedByHard++
+		solver.captureWitness(violations)
+		solver.progress.resolve(weight, true)
+		return
+	}
+	result := types.SolverResult{Status: "optimal", Assignments: assignments, Score: ScoreAllocation(solver.view.problem, partial)}
+	if solver.incumbent.update(result, solver.taskIndex) {
+		solver.metrics.BestUpdates++
+		solver.note(fmt.Sprintf("best update: score=%d assignments=%s", result.Score.TotalPenalty, formatAssignments(assignments)))
+	}
+	solver.progress.resolve(weight, false)
+}
+
+func simpleLowerBound(view solverProblemView, state *solverState) (int, bool) {
+	total := state.BasePenalty
+	for candidateIndex, candidateID := range view.sortedCandidateIDs {
+		if state.Assignments[candidateIndex] != 0 {
+			continue
+		}
+		options, _ := currentFeasibleOptions(view, state, candidateID, false)
+		if len(options) == 0 {
+			return 0, false
+		}
+		minimum := options[0].ImmediatePenalty
+		for _, option := range options[1:] {
+			if option.ImmediatePenalty < minimum {
+				minimum = option.ImmediatePenalty
 			}
 		}
-		groupIDs = append(groupIDs, option.GroupID)
+		total += minimum
 	}
-	return groupIDs
+	return total + criterionLowerBound(view, state), true
 }
 
-func estimateLowerBound(view solverProblemView, state types.PartialAllocationState) int {
-	total := 0
-	for candidateID, groupID := range state.Assignments {
-		total += view.assignmentPenaltyByKey[candidateID][groupID]
+func criterionLowerBound(view solverProblemView, state *solverState) int {
+	if len(view.problem.SoftRules.Criteria) == 0 {
+		return 0
 	}
-
+	partial := types.PartialAllocationState{Assignments: assignmentsMap(view, state)}
+	total := 0
 	for _, criterion := range view.problem.SoftRules.Criteria {
 		switch criterion.Type {
 		case types.SoftCriterionMaxValue:
-			total += lowerBoundMaxValueCriterion(view, state, criterion)
+			total += lowerBoundMaxValueCriterion(view, partial, criterion)
 		case types.SoftCriterionGroupTogether:
-			total += lowerBoundGroupTogetherCriterion(view, state, criterion)
+			total += lowerBoundGroupTogetherCriterion(view, partial, criterion)
 		}
 	}
-
 	return total
 }
 
@@ -440,8 +483,7 @@ func lowerBoundMaxValueCriterion(view solverProblemView, state types.PartialAllo
 	counts := countSelectedValuesByGroup(view.problem, state, criterion.ColumnKey, criterion.SelectedValues)
 	penalty := 0
 	for _, group := range view.problem.Groups {
-		count := counts[group.ID][selectedValue]
-		if count > criterion.Threshold {
+		if count := counts[group.ID][selectedValue]; count > criterion.Threshold {
 			penalty += count - criterion.Threshold
 		}
 	}
@@ -453,56 +495,145 @@ func lowerBoundGroupTogetherCriterion(view solverProblemView, state types.Partia
 	for _, selectedValue := range criterion.SelectedValues {
 		selectedValues[selectedValue] = struct{}{}
 	}
-
-	groupMembers := buildStateGroupMembers(state)
 	groupsWithValues := make(map[int]struct{})
-	for groupID, members := range groupMembers {
+	for groupID, members := range buildStateGroupMembers(state) {
 		for _, candidateID := range members {
-			value := view.candidates[candidateID].Attributes[criterion.ColumnKey]
-			if _, ok := selectedValues[value]; ok {
+			if _, ok := selectedValues[view.candidates[candidateID].Attributes[criterion.ColumnKey]]; ok {
 				groupsWithValues[groupID] = struct{}{}
 				break
 			}
 		}
 	}
-
 	if len(groupsWithValues) <= 1 {
 		return 0
 	}
 	return len(groupsWithValues) - 1
 }
 
-func assignCandidateToGroup(state solverState, candidateID, groupID int) solverState {
-	child := cloneSolverState(state)
-	child.Assignments[candidateID] = groupID
-	child.GroupCounts[groupID]++
-	return child
+func futureHardViolation(view solverProblemView, state *solverState) *types.HardConstraintViolation {
+	remaining := len(view.sortedCandidateIDs) - state.AssignedCount
+	if view.problem.HardRestrictions.AllCandidatesMustBeAssigned && remaining > remainingCapacity(view, state) {
+		violation := insufficientCapacityViolation(remaining, remainingCapacity(view, state))
+		return &violation
+	}
+	for candidateIndex, candidateID := range view.sortedCandidateIDs {
+		if state.Assignments[candidateIndex] != 0 {
+			continue
+		}
+		if options, _ := currentFeasibleOptions(view, state, candidateID, false); len(options) == 0 {
+			violation := candidateWithoutGroupViolation(candidateID)
+			return &violation
+		}
+	}
+	for groupIndex, groupID := range view.sortedGroupIDs {
+		group := view.groups[groupID]
+		current := state.GroupCounts[groupIndex]
+		if current == 0 || current >= group.MinCandidates {
+			continue
+		}
+		possible := current + countPotentialCandidatesForGroup(view, state, groupID)
+		if possible < group.MinCandidates {
+			violation := groupCannotReachMinimumViolation(groupID, group.MinCandidates, possible)
+			return &violation
+		}
+	}
+	return nil
+}
+
+func chooseNextCandidate(view solverProblemView, state *solverState) (int, []solverGroupOption, int) {
+	bestCandidateID := 0
+	var bestOptions []solverGroupOption
+	bestSymmetrySkipped := 0
+	for candidateIndex, candidateID := range view.sortedCandidateIDs {
+		if state.Assignments[candidateIndex] != 0 {
+			continue
+		}
+		options, symmetrySkipped := currentFeasibleOptions(view, state, candidateID, true)
+		if bestCandidateID == 0 || len(options) < len(bestOptions) || (len(options) == len(bestOptions) && candidateID < bestCandidateID) {
+			bestCandidateID, bestOptions, bestSymmetrySkipped = candidateID, options, symmetrySkipped
+		}
+		if len(options) == 0 {
+			break
+		}
+	}
+	return bestCandidateID, bestOptions, bestSymmetrySkipped
+}
+
+func currentFeasibleOptions(view solverProblemView, state *solverState, candidateID int, breakSymmetry bool) ([]solverGroupOption, int) {
+	options := view.candidateGroupOptions[candidateID]
+	result := make([]solverGroupOption, 0, len(options))
+	seenSymmetryState := make(map[[2]int]struct{})
+	skipped := 0
+	for _, option := range options {
+		if view.problem.HardRestrictions.EnforceGroupCapacity && state.GroupCounts[option.GroupIndex] >= view.groups[option.GroupID].MaxCandidates {
+			continue
+		}
+		if breakSymmetry {
+			key := [2]int{view.groupSymmetryClass[option.GroupID], state.GroupCounts[option.GroupIndex]}
+			if _, exists := seenSymmetryState[key]; exists {
+				skipped++
+				continue
+			}
+			seenSymmetryState[key] = struct{}{}
+		}
+		result = append(result, option)
+	}
+	return result, skipped
+}
+
+func buildGroupSymmetryClasses(view solverProblemView) map[int]int {
+	classes := make(map[int]int, len(view.sortedGroupIDs))
+	signatureClass := make(map[string]int)
+	for _, groupID := range view.sortedGroupIDs {
+		group := view.groups[groupID]
+		parts := []string{group.ScheduleKey, fmt.Sprint(group.MinCandidates), fmt.Sprint(group.MaxCandidates), fmt.Sprint(group.EvaluatorIDs)}
+		for _, candidateID := range view.sortedCandidateIDs {
+			penalty, allowed := view.assignmentPenaltyByKey[candidateID][groupID]
+			parts = append(parts, fmt.Sprintf("%t:%d", allowed, penalty))
+		}
+		signature := strings.Join(parts, "|")
+		class, ok := signatureClass[signature]
+		if !ok {
+			class = len(signatureClass) + 1
+			signatureClass[signature] = class
+		}
+		classes[groupID] = class
+	}
+	return classes
+}
+
+func applyAssignment(view solverProblemView, state *solverState, candidateID int, option solverGroupOption) {
+	state.Assignments[view.candidateIndexByID[candidateID]] = option.GroupID
+	state.GroupCounts[option.GroupIndex]++
+	state.AssignedCount++
+	state.BasePenalty += option.ImmediatePenalty
+}
+
+func undoAssignment(view solverProblemView, state *solverState, candidateID int, option solverGroupOption) {
+	state.BasePenalty -= option.ImmediatePenalty
+	state.AssignedCount--
+	state.GroupCounts[option.GroupIndex]--
+	state.Assignments[view.candidateIndexByID[candidateID]] = 0
 }
 
 func cloneSolverState(state solverState) solverState {
-	return solverState{
-		Assignments: cloneAssignments(state.Assignments),
-		GroupCounts: cloneAssignments(state.GroupCounts),
-	}
+	return solverState{Assignments: append([]int(nil), state.Assignments...), GroupCounts: append([]int(nil), state.GroupCounts...), AssignedCount: state.AssignedCount, BasePenalty: state.BasePenalty}
 }
 
-func cloneAssignments(assignments map[int]int) map[int]int {
-	cloned := make(map[int]int, len(assignments))
-	for candidateID, groupID := range assignments {
-		cloned[candidateID] = groupID
+func assignmentsMap(view solverProblemView, state *solverState) map[int]int {
+	assignments := make(map[int]int, state.AssignedCount)
+	for candidateIndex, groupID := range state.Assignments {
+		if groupID != 0 {
+			assignments[view.sortedCandidateIDs[candidateIndex]] = groupID
+		}
 	}
-	return cloned
-}
-
-func buildPartialAllocationState(state solverState) types.PartialAllocationState {
-	return types.PartialAllocationState{Assignments: state.Assignments}
+	return assignments
 }
 
 func assignmentPenalty(problem types.AllocationProblem, candidate types.SolverCandidate, group types.SolverGroup) int {
-	preferenceRank := indexOfInt(candidate.PreferredGroupIDs, group.ID)
-	penalty := preferencePenaltyForRank(problem.SoftRules.PreferencePenaltyByRank, preferenceRank)
-	penalty += countAvoidEvaluatorConflicts(candidate, group) * problem.SoftRules.AvoidEvaluatorPenalty
-	return penalty
+	rank := candidatePreferenceRank(candidate, group.ID)
+	penalty := preferencePenaltyForRank(problem.SoftRules.PreferencePenaltyByRank, rank)
+	return penalty + countAvoidEvaluatorConflicts(candidate, group)*problem.SoftRules.AvoidEvaluatorPenalty
 }
 
 func countAvoidEvaluatorConflicts(candidate types.SolverCandidate, group types.SolverGroup) int {
@@ -524,69 +655,96 @@ func groupHasForbiddenEvaluator(candidate types.SolverCandidate, group types.Sol
 	return false
 }
 
-func remainingCapacity(view solverProblemView, state solverState) int {
+func remainingCapacity(view solverProblemView, state *solverState) int {
+	if !view.problem.HardRestrictions.EnforceGroupCapacity {
+		return len(view.sortedCandidateIDs)
+	}
 	remaining := 0
-	for _, group := range view.problem.Groups {
-		if !view.problem.HardRestrictions.EnforceGroupCapacity {
-			return len(view.problem.Candidates)
-		}
-		remaining += group.MaxCandidates - state.GroupCounts[group.ID]
+	for groupIndex, groupID := range view.sortedGroupIDs {
+		remaining += view.groups[groupID].MaxCandidates - state.GroupCounts[groupIndex]
 	}
 	return remaining
 }
 
-func countPotentialCandidatesForGroup(view solverProblemView, state solverState, groupID int) int {
+func countPotentialCandidatesForGroup(view solverProblemView, state *solverState, groupID int) int {
 	count := 0
-	for _, candidateID := range view.sortedCandidateIDs {
-		if _, assigned := state.Assignments[candidateID]; assigned {
-			continue
-		}
-		if containsInt(currentFeasibleGroupIDs(view, state, candidateID), groupID) {
-			count++
+	groupIndex := view.groupIndexByID[groupID]
+	if state.GroupCounts[groupIndex] >= view.groups[groupID].MaxCandidates {
+		return 0
+	}
+	for candidateIndex, candidateID := range view.sortedCandidateIDs {
+		if state.Assignments[candidateIndex] == 0 {
+			if _, allowed := view.assignmentPenaltyByKey[candidateID][groupID]; allowed {
+				count++
+			}
 		}
 	}
 	return count
 }
 
-func mergeSolverMetrics(left, right types.SolverMetrics) types.SolverMetrics {
-	return types.SolverMetrics{
-		NodesVisited:       left.NodesVisited + right.NodesVisited,
-		CompleteStates:     left.CompleteStates + right.CompleteStates,
-		NodesPrunedByHard:  left.NodesPrunedByHard + right.NodesPrunedByHard,
-		NodesPrunedByBound: left.NodesPrunedByBound + right.NodesPrunedByBound,
-		BestUpdates:        left.BestUpdates + right.BestUpdates,
-		ParallelTasks:      left.ParallelTasks + right.ParallelTasks,
+func (incumbent *sharedIncumbent) update(result types.SolverResult, taskIndex int) bool {
+	incumbent.mu.Lock()
+	defer incumbent.mu.Unlock()
+	if incumbent.best != nil {
+		if result.Score.TotalPenalty > incumbent.best.Score.TotalPenalty {
+			return false
+		}
+		if result.Score.TotalPenalty == incumbent.best.Score.TotalPenalty && taskIndex >= incumbent.taskIndex {
+			return false
+		}
 	}
+	copied := cloneSolverResult(result)
+	incumbent.best = &copied
+	incumbent.taskIndex = taskIndex
+	return true
 }
 
-func isBetterSolverResult(candidate, current types.SolverResult) bool {
-	if candidate.Status != "optimal" {
+func (incumbent *sharedIncumbent) shouldPrune(lowerBound, taskIndex int) bool {
+	incumbent.mu.RLock()
+	defer incumbent.mu.RUnlock()
+	if incumbent.best == nil {
 		return false
 	}
-	if current.Status != "optimal" {
+	if lowerBound > incumbent.best.Score.TotalPenalty {
 		return true
 	}
-	if candidate.Score.TotalPenalty != current.Score.TotalPenalty {
-		return candidate.Score.TotalPenalty < current.Score.TotalPenalty
-	}
-	return compareAssignments(candidate.Assignments, current.Assignments) < 0
+	return lowerBound == incumbent.best.Score.TotalPenalty && incumbent.taskIndex <= taskIndex
 }
 
-func compareAssignments(left, right map[int]int) int {
-	keys := make([]int, 0, len(left))
-	for candidateID := range left {
-		keys = append(keys, candidateID)
+func (incumbent *sharedIncumbent) snapshot() *types.SolverResult {
+	incumbent.mu.RLock()
+	defer incumbent.mu.RUnlock()
+	if incumbent.best == nil {
+		return nil
 	}
-	sort.Ints(keys)
-	for _, candidateID := range keys {
-		if left[candidateID] < right[candidateID] {
-			return -1
-		}
-		if left[candidateID] > right[candidateID] {
-			return 1
-		}
+	copied := cloneSolverResult(*incumbent.best)
+	return &copied
+}
+
+func (incumbent *sharedIncumbent) score() (int, bool) {
+	incumbent.mu.RLock()
+	defer incumbent.mu.RUnlock()
+	if incumbent.best == nil {
+		return 0, false
 	}
-	return 0
+	return incumbent.best.Score.TotalPenalty, true
+}
+
+func mergeSolverMetrics(left, right types.SolverMetrics) types.SolverMetrics {
+	return types.SolverMetrics{
+		NodesVisited: left.NodesVisited + right.NodesVisited, CompleteStates: left.CompleteStates + right.CompleteStates,
+		NodesPrunedByHard: left.NodesPrunedByHard + right.NodesPrunedByHard, NodesPrunedByBound: left.NodesPrunedByBound + right.NodesPrunedByBound,
+		NodesPrunedByFlow: left.NodesPrunedByFlow + right.NodesPrunedByFlow, BranchesSkippedBySymmetry: left.BranchesSkippedBySymmetry + right.BranchesSkippedBySymmetry,
+		BestUpdates: left.BestUpdates + right.BestUpdates, ParallelTasks: left.ParallelTasks + right.ParallelTasks,
+	}
+}
+
+func cloneAssignments(assignments map[int]int) map[int]int {
+	cloned := make(map[int]int, len(assignments))
+	for candidateID, groupID := range assignments {
+		cloned[candidateID] = groupID
+	}
+	return cloned
 }
 
 func cloneSolverResult(result types.SolverResult) types.SolverResult {
@@ -598,18 +756,12 @@ func cloneSolverResult(result types.SolverResult) types.SolverResult {
 }
 
 func buildInfeasibleResult(violations []types.HardConstraintViolation) types.SolverResult {
-	result := types.SolverResult{
-		Status:         "infeasible",
-		Assignments:    map[int]int{},
-		Score:          types.SoftScoreBreakdown{},
-		HardViolations: append([]types.HardConstraintViolation(nil), violations...),
-		DebugNotes:     []string{},
-	}
+	result := types.SolverResult{Status: "infeasible", Assignments: map[int]int{}, HardViolations: append([]types.HardConstraintViolation(nil), violations...), DebugNotes: []string{}}
 	if len(violations) == 0 {
 		result.RejectionReason = "nenhuma solucao hard valida foi encontrada"
-		return result
+	} else {
+		result.RejectionReason = violations[0].Message
 	}
-	result.RejectionReason = violations[0].Message
 	return result
 }
 
@@ -631,9 +783,6 @@ func appendLimitedNotes(base, extra []string, limit int) []string {
 }
 
 func formatAssignments(assignments map[int]int) string {
-	if len(assignments) == 0 {
-		return "{}"
-	}
 	keys := make([]int, 0, len(assignments))
 	for candidateID := range assignments {
 		keys = append(keys, candidateID)
@@ -646,25 +795,34 @@ func formatAssignments(assignments map[int]int) string {
 	return "{" + strings.Join(parts, ",") + "}"
 }
 
-func candidateWithoutGroupViolation(candidateID int) types.HardConstraintViolation {
-	return types.HardConstraintViolation{
-		Code:        "candidate_without_feasible_group",
-		Message:     fmt.Sprintf("candidato %d nao possui grupo viavel restante", candidateID),
-		CandidateID: candidateID,
+func (builder *buildFrontierContext) captureWitness(violations []types.HardConstraintViolation) {
+	if len(builder.hardWitness) == 0 && len(violations) > 0 {
+		builder.hardWitness = append([]types.HardConstraintViolation(nil), violations...)
 	}
+}
+
+func (builder *buildFrontierContext) note(message string) {
+	builder.debugNotes = appendSingleNote(builder.debugNotes, builder.options.MaxDebugEvents, message)
+}
+
+func (solver *subtreeSolver) captureWitness(violations []types.HardConstraintViolation) {
+	if len(solver.hardWitness) == 0 && len(violations) > 0 {
+		solver.hardWitness = append([]types.HardConstraintViolation(nil), violations...)
+	}
+}
+
+func (solver *subtreeSolver) note(message string) {
+	solver.debugNotes = appendSingleNote(solver.debugNotes, solver.options.MaxDebugEvents, message)
+}
+
+func candidateWithoutGroupViolation(candidateID int) types.HardConstraintViolation {
+	return types.HardConstraintViolation{Code: "candidate_without_feasible_group", Message: fmt.Sprintf("candidato %d nao possui grupo viavel restante", candidateID), CandidateID: candidateID}
 }
 
 func insufficientCapacityViolation(required, available int) types.HardConstraintViolation {
-	return types.HardConstraintViolation{
-		Code:    "insufficient_remaining_capacity",
-		Message: fmt.Sprintf("capacidade restante insuficiente: faltam %d candidatos para %d vagas", required, available),
-	}
+	return types.HardConstraintViolation{Code: "insufficient_remaining_capacity", Message: fmt.Sprintf("capacidade restante insuficiente: faltam %d candidatos para %d vagas", required, available)}
 }
 
 func groupCannotReachMinimumViolation(groupID, minimum, possible int) types.HardConstraintViolation {
-	return types.HardConstraintViolation{
-		Code:    "group_cannot_reach_min_candidates",
-		Message: fmt.Sprintf("grupo %d nao consegue atingir o minimo %d; maximo possivel %d", groupID, minimum, possible),
-		GroupID: groupID,
-	}
+	return types.HardConstraintViolation{Code: "group_cannot_reach_min_candidates", Message: fmt.Sprintf("grupo %d nao consegue atingir o minimo %d; maximo possivel %d", groupID, minimum, possible), GroupID: groupID}
 }

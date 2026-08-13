@@ -151,3 +151,44 @@ func TestAppLifecycleHooksClearTransientStateAndRemoveSmokeFile(t *testing.T) {
 		t.Fatalf("expected smoke sentinel to be removed, got err=%v", err)
 	}
 }
+
+func TestBuildUIPeopleIncludesPreferencesRestrictionsAndExtras(t *testing.T) {
+	extraValue := types.NullableString("monitoria")
+	avaliadores := []types.Avaliador{{ID: 10, Nome: "Profa. Eva", Sigla: "EV", Email: "eva@insper.edu.br", Extras: map[string]*types.NullableString{"papel": &extraValue}}}
+	solverCandidates := []types.SolverCandidate{{
+		ID:   1,
+		Name: "Ana",
+		EvaluatorRestrictions: types.SolverCandidateRestrictions{
+			ForbiddenEvaluatorIDs: []int{10},
+			AvoidEvaluatorIDs:     []int{10},
+		},
+	}}
+
+	evaluatorMap := buildUIEvaluatorMap(avaliadores, solverCandidates)
+	if got := evaluatorMap[10]; got.Email != "eva@insper.edu.br" || len(got.NaoPosso) != 1 || got.PrefiroNao[0] != "Ana" || got.Extras["papel"] != "monitoria" {
+		t.Fatalf("unexpected evaluator UI data: %#v", got)
+	}
+
+	candidates := []types.Candidato{{
+		Nome:            "Ana",
+		Semestre:        "2",
+		Curso:           "ADM",
+		EmailSecundario: "ana@insper.edu.br",
+		Opcoes:          []string{"Segunda 10h", "Terça 14h"},
+		Extras:          map[string]*types.NullableString{"papel": &extraValue, "vazio": nil},
+	}}
+	candidateMap := buildUICandidateMap(candidates, solverCandidates, evaluatorMap)
+	got := candidateMap[1]
+	if got.Semestre != 2 || len(got.Opcoes) != 2 || got.NaoPosso[0] != "Profa. Eva (EV)" || got.PrefiroNao[0] != "Profa. Eva (EV)" || got.Extras["papel"] != "monitoria" {
+		t.Fatalf("unexpected candidate UI data: %#v", got)
+	}
+	if _, ok := got.Extras["vazio"]; ok {
+		t.Fatalf("nil extra should not be exposed: %#v", got.Extras)
+	}
+}
+
+func TestNullableExtrasToStringsHandlesEmptyMap(t *testing.T) {
+	if got := nullableExtrasToStrings(nil); len(got) != 0 {
+		t.Fatalf("expected empty extras map, got %#v", got)
+	}
+}

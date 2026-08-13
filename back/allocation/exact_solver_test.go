@@ -1,6 +1,7 @@
 package allocation
 
 import (
+	"math/big"
 	"reflect"
 	"testing"
 
@@ -35,8 +36,8 @@ func TestEstimateLowerBoundIsOptimistic(t *testing.T) {
 	if lowerBound > fullScore.TotalPenalty {
 		t.Fatalf("expected optimistic lower bound, got lower=%d full=%d", lowerBound, fullScore.TotalPenalty)
 	}
-	if lowerBound != 10 {
-		t.Fatalf("expected lower bound 10, got %d", lowerBound)
+	if lowerBound != fullScore.TotalPenalty {
+		t.Fatalf("expected capacitated lower bound to reach the forced completion score %d, got %d", fullScore.TotalPenalty, lowerBound)
 	}
 }
 
@@ -76,7 +77,7 @@ func TestSolveAllocationReturnsExplicitInfeasibleResult(t *testing.T) {
 	if result.RejectionReason == "" {
 		t.Fatalf("expected rejection reason, got %#v", result)
 	}
-	assertHasViolationCode(t, result.HardViolations, "group_below_min_candidates")
+	assertHasViolationCode(t, result.HardViolations, "group_cannot_reach_min_candidates")
 	if result.Metrics.NodesPrunedByHard == 0 {
 		t.Fatalf("expected hard-pruned nodes, got %#v", result.Metrics)
 	}
@@ -98,6 +99,41 @@ func TestSolveAllocationPrunesByBound(t *testing.T) {
 	}
 	if result.Metrics.CompleteStates != 1 {
 		t.Fatalf("expected only one complete state after bound pruning, got %#v", result.Metrics)
+	}
+}
+
+func TestSolveAllocationReportsResolvedAndPrunedBranches(t *testing.T) {
+	problem := makeBoundPruneProblem()
+	var snapshots []SolverProgress
+
+	result := SolveAllocation(problem, SolverOptions{
+		WorkerCount:   1,
+		ParallelDepth: 0,
+		Progress: func(progress SolverProgress) {
+			snapshots = append(snapshots, progress)
+		},
+	})
+
+	if result.Status != "optimal" {
+		t.Fatalf("expected optimal result, got %#v", result)
+	}
+	if len(snapshots) < 2 {
+		t.Fatalf("expected initial and final progress snapshots, got %#v", snapshots)
+	}
+	first := snapshots[0]
+	last := snapshots[len(snapshots)-1]
+	if first.Percent != 0 {
+		t.Fatalf("expected progress to start at zero, got %#v", first)
+	}
+	if last.Percent != 100 || last.BranchesResolved != last.TotalBranches {
+		t.Fatalf("expected progress to finish with every branch resolved, got %#v", last)
+	}
+	pruned, ok := new(big.Int).SetString(last.BranchesPruned, 10)
+	if !ok || pruned.Sign() <= 0 || last.PrunedSubtrees <= 0 {
+		t.Fatalf("expected pruned branches to be reflected in the final snapshot, got %#v", last)
+	}
+	if last.NodesVisited != result.Metrics.NodesVisited {
+		t.Fatalf("expected live node count to match final metrics: progress=%#v metrics=%#v", last, result.Metrics)
 	}
 }
 

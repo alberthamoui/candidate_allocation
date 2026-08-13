@@ -267,7 +267,7 @@ export const PAGE_META: Record<string, PageMeta> = {
 				body: "Quantidade de grupos, tamanho mínimo e máximo e avaliadores por grupo delimitam a capacidade operacional da rodada.",
 			},
 			{
-				title: "Critérios soft",
+				title: "Critérios adicionais",
 				body: "Essas regras não invalidam uma solução, mas orientam o algoritmo para composições mais desejáveis dentro do contexto do RH.",
 			},
 			{

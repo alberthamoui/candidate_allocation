@@ -107,6 +107,25 @@ func TestBuildCandidateAttributes(t *testing.T) {
 	}
 }
 
+func TestBuildAllocationProblemUsesSchedulePreferenceRankForEveryGroup(t *testing.T) {
+	config, candidatos, avaliadores, restricoes := makeSolverFixture()
+	config.Normalized.Params.GruposPorHorario = 2
+	config.Normalized.Params.MaxPessoasPorGrupo = 3
+
+	problem, err := BuildAllocationProblem(config, candidatos, avaliadores, restricoes)
+	if err != nil {
+		t.Fatalf("BuildAllocationProblem returned error: %v", err)
+	}
+
+	first := problem.Candidates[0]
+	if first.PreferenceRankByGroupID[1] != 0 || first.PreferenceRankByGroupID[2] != 0 {
+		t.Fatalf("expected every first-schedule group to have rank zero, got %#v", first.PreferenceRankByGroupID)
+	}
+	if first.PreferenceRankByGroupID[3] != 1 || first.PreferenceRankByGroupID[4] != 1 {
+		t.Fatalf("expected every second-schedule group to have rank one, got %#v", first.PreferenceRankByGroupID)
+	}
+}
+
 func makeSolverFixture() (types.AllocationConfiguration, []types.Candidato, []types.Avaliador, []types.Restricao) {
 	config := types.AllocationConfiguration{
 		Normalized: types.NormalizedAllocationInput{

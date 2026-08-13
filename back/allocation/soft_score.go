@@ -59,7 +59,7 @@ func scorePreferencePenalties(problem types.AllocationProblem, state types.Parti
 	components := make([]types.SoftScoreComponent, 0, len(candidateIDs))
 	for _, candidateID := range candidateIDs {
 		groupID := state.Assignments[candidateID]
-		rank := indexOfInt(candidates[candidateID].PreferredGroupIDs, groupID)
+		rank := candidatePreferenceRank(candidates[candidateID], groupID)
 		penalty := preferencePenaltyForRank(problem.SoftRules.PreferencePenaltyByRank, rank)
 		components = append(components, types.SoftScoreComponent{
 			Code:    "preference_rank",
@@ -69,6 +69,13 @@ func scorePreferencePenalties(problem types.AllocationProblem, state types.Parti
 	}
 
 	return components
+}
+
+func candidatePreferenceRank(candidate types.SolverCandidate, groupID int) int {
+	if rank, ok := candidate.PreferenceRankByGroupID[groupID]; ok {
+		return rank
+	}
+	return indexOfInt(candidate.PreferredGroupIDs, groupID)
 }
 
 func scoreAvoidEvaluatorPenalties(problem types.AllocationProblem, state types.PartialAllocationState) []types.SoftScoreComponent {

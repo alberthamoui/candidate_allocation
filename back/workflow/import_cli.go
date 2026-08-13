@@ -123,7 +123,7 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 	}
 	fmt.Println(string(configJSON))
 
-	allocationResult, err := allocation.RunConfiguredAllocation(db, config)
+	allocationResult, err := allocation.RunConfiguredAllocation(db, config, nil)
 	if err != nil {
 		return fmt.Errorf("erro ao executar alocacao configurada: %w", err)
 	}

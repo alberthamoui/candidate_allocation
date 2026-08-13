@@ -60,7 +60,7 @@ As telas foram reorganizadas sem alterar contratos com o backend:
 - mapeamento: três áreas visuais estáveis, com campos principais, extras e colunas disponíveis
 - revisão: painel operacional com métricas, duplicados priorizados e barra fixa de salvamento
 - sucesso: checkpoint institucional antes da configuração
-- configuração: seções separadas para parâmetros base, critérios soft e leitura de impacto
+- configuração: seções separadas para parâmetros base, critérios adicionais e leitura de impacto
 - loading: tela de processamento coerente com o shell global
 - resultado: dashboard executivo com filtros, grupos por horário e painel lateral de não alocados
 
@@ -422,24 +422,27 @@ Contrato fechado desta etapa:
 Fluxo completo da busca:
 
 1. recebe `AllocationProblem` ja normalizado
-2. precomputa visoes deterministicas de candidatos, grupos e penalidades fixas por candidato/grupo
-3. gera a fronteira inicial ate `ParallelDepth` usando apenas poda hard
-4. paraleliza apenas essas subarvores externas quando `WorkerCount > 1`
-5. cada subarvore segue com busca recursiva sequencial e deterministica
+2. separa componentes candidato-grupo independentes somente quando nao existem criterios adicionais que os conectem e as preferencias de grupo sao uma restricao hard; sem essa restricao, todos os candidatos permanecem em um problema unificado
+3. precomputa indices, grupos permitidos, ranks por horario, custos candidato/grupo e classes de simetria
+4. cria um incumbent inicial com min-cost flow e repara grupos usados abaixo do minimo
+5. gera a fronteira inicial ate `ParallelDepth` e distribui tarefas para um pool fixo de workers
+6. todos os workers compartilham o mesmo incumbent global e usam imediatamente cada melhora para podar
+7. cada subarvore usa estado incremental com arrays e operacoes `apply/undo`, sem clonar mapas a cada branch
 
 Em cada passo recursivo:
 
 - escolhe a proxima pessoa ainda nao alocada com menor numero de grupos viaveis
 - tenta os grupos em ordem deterministica, priorizando menor penalidade imediata
-- aplica a alocacao parcial
-- roda a poda hard com `IsStateViable` e com checagens de inviabilidade futura hard
-- se o estado continuar viavel, calcula um lower bound otimista do soft score
-- se esse bound ja for pior ou igual ao melhor score daquela subarvore, corta o ramo
-- se o estado estiver completo, calcula o score real com `ScoreAllocation` e tenta atualizar o incumbent da subarvore
+- aplica e desfaz a alocacao no estado incremental
+- roda checagens hard futuras de capacidade, grupo viavel e minimo atingivel
+- calcula um lower bound simples com a penalidade acumulada e o menor custo individual dos candidatos restantes
+- quando o bound esta proximo do incumbent, executa min-cost flow para respeitar simultaneamente as vagas restantes dos grupos
+- elimina alternativas simetricas somente quando horario, capacidades, avaliadores, permissao e custo por candidato sao equivalentes
+- se o estado estiver completo, valida o contrato hard completo, calcula `ScoreAllocation` e tenta atualizar o incumbent global
 
 No final:
 
-- consolida o melhor resultado de todas as subarvores em ordem deterministica
+- combina os otimos comprovados dos componentes independentes
 - retorna a melhor solucao valida com score e metricas
 - ou retorna `status = infeasible` com `HardViolations` e `RejectionReason`
 
@@ -455,14 +458,17 @@ Uso esperado:
 
 ### Como a poda funciona
 
-O solver usa branch and bound com duas podas seguras:
+O solver usa branch and bound com podas seguras em camadas:
 
 - `hard prune`: elimina estados que ja violam regra obrigatoria ou que nao conseguem mais completar as regras hard futuras
 - `bound prune`: elimina estados cujo menor score ainda possivel ja e pior ou igual ao incumbent da subarvore
+- `flow prune`: usa uma rede candidato -> grupo com capacidade restante e custo de preferencia/`PrefiroNao`; se o fluxo nao encaixa todos, a branch e inviavel, e se o custo minimo nao melhora o incumbent, a branch e dominada
+- `symmetry prune`: evita repetir trocas entre grupos comprovadamente equivalentes
 
 Por que a poda por bound e segura:
 
-- o lower bound soma apenas penalidades irreversiveis do estado parcial
+- o lower bound soma penalidades irreversiveis e o menor custo inevitavel dos candidatos restantes
+- o min-cost flow considera a disputa real pelas vagas, então nao assume que varios candidatos podem ocupar simultaneamente a mesma ultima vaga barata
 - preferencia e `avoid_evaluator` ja ficam fixas assim que o candidato e alocado
 - para criterios soft, so entram no bound componentes que nao podem melhorar depois, como excesso de `max_value` e espalhamento ja consumado de `group_together`
 - criterios que ainda podem melhorar ficam com contribuicao `0` no bound, preservando admissibilidade
@@ -474,13 +480,41 @@ Isso garante que o solver nunca corta um ramo que ainda poderia produzir uma sol
 `SolverResult` agora expoe:
 
 - `Status`, `Assignments`, `Score`, `HardViolations` e `RejectionReason`
-- `Metrics` com `NodesVisited`, `CompleteStates`, `NodesPrunedByHard`, `NodesPrunedByBound`, `BestUpdates` e `ParallelTasks`
+- `Metrics` com `NodesVisited`, `CompleteStates`, `NodesPrunedByHard`, `NodesPrunedByBound`, `NodesPrunedByFlow`, `BranchesSkippedBySymmetry`, `BestUpdates` e `ParallelTasks`
 - `DebugNotes` com eventos resumidos de poda e atualizacao da melhor solucao
+
+### Progresso em tempo real da busca
+
+O progresso do solver fica centralizado em [`back/allocation/progress.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/allocation/progress.go) e é opcional por meio de `SolverOptions.Progress`. O serviço configurado apenas encaminha esse callback, e o `App.RunAllocation` publica cada snapshot no evento Wails `allocation:progress`.
+
+O denominador da barra é a árvore conceitual de atribuições: para cada candidato, o solver considera os grupos permitidos pelas preferências e restrições hard estáticas. Como esse produto pode ser muito maior que 64 bits, a contagem interna usa `big.Int` e chega ao frontend como texto decimal.
+
+O avanço tem duas origens:
+
+- uma solução completa analisada resolve uma branch folha;
+- uma poda hard, uma poda por bound ou uma opção inviável por capacidade resolve de uma vez todas as folhas descendentes daquele ramo.
+
+Por isso a barra pode avançar gradualmente durante a exploração e dar saltos grandes quando uma subárvore inteira é descartada. `NodesVisited` continua representando os nós realmente inspecionados, enquanto `BranchesResolved` representa a fração do espaço total já decidida e `BranchesPruned` mostra quanto desse espaço foi eliminado por poda. O tracker serializa os updates dos workers paralelos e limita emissões intermediárias a uma a cada 100 ms.
+
+A tela [`frontend/src/AllocationLoadingPage.tsx`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/frontend/src/AllocationLoadingPage.tsx) registra o listener antes de iniciar `RunAllocation`, mostra porcentagem, branches resolvidas, nós checados, branches eliminadas e subárvores podadas, e remove o listener ao sair da rota. A antiga estimativa baseada em um total fixo de 50 pessoas não faz mais parte do carregamento.
 
 Detalhe importante para testes:
 
 - o resultado final da alocacao e deterministico entre execucao sequencial e paralela para o mesmo input fixo
-- as metricas podem variar entre modos porque as subarvores paralelas nao compartilham poda por incumbent em tempo real
+- as metricas podem variar entre modos porque a ordem temporal de descoberta do incumbent muda, mas todos os workers compartilham o mesmo melhor score em tempo real
+
+### Objetivo base sempre ativo
+
+Mesmo com `SoftCriteria = []`, o solver continua procurando e comprovando a melhor solucao. O contrato oficial fica em `WorkflowDefinition.BaseOptimization`, definido primeiro em [`back/logic/workflow_definition.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/logic/workflow_definition.go):
+
+- penalidade por rank do horario escolhido
+- penalidade para avaliadores marcados como `PrefiroNao`
+
+Os criterios exibidos na configuracao sao adicionais a esse objetivo base. O rank pertence ao horario: todos os grupos materializados para a primeira opcao recebem rank `0`, todos os grupos da segunda recebem rank `1` e assim por diante. O builder persiste esse mapeamento em `SolverCandidate.PreferenceRankByGroupID` para impedir que mesas diferentes do mesmo horario recebam custos artificiais diferentes.
+
+### Validacao de optimalidade e desempenho
+
+[`back/allocation/exact_solver_oracle_test.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/allocation/exact_solver_oracle_test.go) contem um oraculo exaustivo para problemas pequenos e compara o score do solver exato em problemas pseudoaleatorios deterministas. O mesmo arquivo contem benchmark do caminho otimizado. No fixture de 18 candidatos e 3 grupos, o fortalecimento adaptativo pelo fluxo reduziu uma medicao intermediaria de aproximadamente `88 ms` para `0,97 ms`, mantendo o mesmo otimo comprovado; numeros absolutos variam por maquina e devem ser acompanhados pelo benchmark, nao tratados como SLA.
 
 ## Pontos de Atenção
 
@@ -527,6 +561,7 @@ O workflow oficial agora fica centralizado em [`back/logic/workflow_definition.g
 - ordem das etapas
 - defaults de configuração de alocação
 - opções de critérios soft
+- política base de otimização (`BaseOptimization`)
 - flags como `requiresThreshold`
 
 O CLI em [`back/workflow/import_cli.go`](/Users/joaobresser/Documents/Pessoal/PS/candidate_allocation/back/workflow/import_cli.go) deve manter apenas a interação de terminal e consumir `logic.WorkflowDefinition()`, `logic.DefaultAllocationParams()` e `logic.SoftCriterionOptions()` para regras. O Wails expõe o mesmo contrato por `GetWorkflowDefinition` e `GetSoftCriterionOptions`, e o frontend deve renderizar a partir desses métodos, sem listas próprias de critérios ou defaults hardcoded.
@@ -659,9 +694,23 @@ Foi criado um analyzer específico localizado em `tools/unexported/main.go`. A r
 
 ## Alocação UI
 
-Foi adicionada uma interface de carregamento `AllocationLoadingPage.tsx` e uma tela de resultados `AllocationResultPage.tsx`. O backend foi atualizado com uma função `RunAllocation` em `app.go` para fazer a ponte com o Wails. A interface mostra de forma cronológica os horários e separa claramente os grupos, colocando os avaliadores no final das listas com destaque visual. Também contém áreas para filtros de critérios (Soft/Hard) e lista de candidatos não alocados.
+Foi adicionada uma interface de carregamento `AllocationLoadingPage.tsx` com progresso real da busca e uma tela de resultados `AllocationResultPage.tsx`. O backend foi atualizado com uma função `RunAllocation` em `app.go` para fazer a ponte com o Wails. A interface mostra de forma cronológica os horários e separa claramente os grupos, colocando os avaliadores no final das listas com destaque visual. Também contém áreas para filtros de critérios (Soft/Hard) e lista de candidatos não alocados.
 
 - Adicionado `AllocationConfigPage.tsx` para definir grupos, mínimo/máximo de pessoas e critérios soft. Integrei com o `exact_solver.go` substituindo o antigo simulador.
+
+### Painel de qualidade e inspeção do resultado
+
+O resultado de qualidade é calculado no backend por `back/allocation/quality.go`, a partir do mesmo `AllocationProblem` e do mesmo `SolverResult` usados pelo solver. O contrato `AllocationQualityReport` contém características clicáveis com contagem, penalidade e IDs dos candidatos, avaliadores e grupos relacionados. Assim, o frontend não reimplementa regras de score ou critérios.
+
+O relatório sempre inclui:
+
+- candidatos alocados em cada preferência de horário prevista pela política base (por padrão, da 1ª à 5ª)
+- alocações que encontraram um avaliador marcado como `PrefiroNao`
+- uma característica para cada critério adicional configurado, usando o nome oficial de `WorkflowDefinition.SoftCriterionOptions`
+
+`App.RunAllocation` também enriquece candidatos com opções de horário, e-mails, extras e restrições, e avaliadores com e-mail, extras e candidatos associados a `NaoPosso`/`PrefiroNao`. `AllocationResultPage.tsx` usa esses dados em popovers abertos por clique. Os cards de qualidade destacam os candidatos associados e rolam até a primeira ocorrência; o score mostra, em hover, os componentes que formaram a penalidade.
+
+As mesas agora ocupam toda a largura do conteúdo. Candidatos não alocados aparecem em uma seção horizontal depois de todos os horários. Busca, semestre e curso são modos de destaque; curso usa comparação normalizada (trim e caixa), evitando regressões causadas por espaços ou variações de maiúsculas/minúsculas.
 
 - Expandido `AllocationConfigPage.tsx` para conter um construtor de Soft Criteria (Criar, Editar, Deletar), passando tipos nativos suportados pelo Go (ex: min_value, balanced_distribution, etc) e a coluna de filtragem com threshold para o exact solver.
 

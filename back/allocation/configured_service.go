@@ -22,8 +22,9 @@ type ConfiguredAllocationResult struct {
 	Avaliadores []types.Avaliador             `json:"avaliadores"`
 }
 
-// RunConfiguredAllocation executes the official configured allocation path.
-func RunConfiguredAllocation(db *sql.DB, config types.AllocationConfiguration) (ConfiguredAllocationResult, error) {
+// RunConfiguredAllocation executes the official configured allocation path and
+// optionally streams progress snapshots from the exact solver.
+func RunConfiguredAllocation(db *sql.DB, config types.AllocationConfiguration, progress ProgressCallback) (ConfiguredAllocationResult, error) {
 	if db == nil {
 		return ConfiguredAllocationResult{}, errors.New("conexao do banco nao pode ser nil")
 	}
@@ -44,6 +45,7 @@ func RunConfiguredAllocation(db *sql.DB, config types.AllocationConfiguration) (
 	result := SolveAllocation(problem, NormalizeSolverOptions(SolverOptions{
 		WorkerCount:   4,
 		ParallelDepth: 2,
+		Progress:      progress,
 	}))
 
 	config.Result = types.AllocationExecutionResult{

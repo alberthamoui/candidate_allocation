@@ -139,7 +139,7 @@ export default function AllocationConfigPage() {
 	const minCapacityPerHorario = gruposPorHorario * minPessoas;
 	const impactSummary =
 		criteria.length === 0
-			? "Sem critérios soft, o algoritmo terá uma busca mais direta e orientada apenas pelos parâmetros base."
+			? "Sem critérios adicionais, o algoritmo ainda otimiza a ordem das preferências e evita avaliadores marcados como PrefiroNao."
 			: `${criteria.length} critério${
 					criteria.length > 1 ? "s" : ""
 			  } soft ativo${criteria.length > 1 ? "s" : ""} aumentam o refinamento da distribuição e podem reduzir o conjunto de soluções preferíveis.`;
@@ -173,7 +173,7 @@ export default function AllocationConfigPage() {
 				<div className="grid gap-4 md:grid-cols-3">
 					<MetricPill label="Capacidade máxima por horário" value={`${capacityPerHorario} candidatos`} tone="accent" />
 					<MetricPill label="Capacidade mínima por horário" value={`${minCapacityPerHorario} candidatos`} />
-					<MetricPill label="Critérios soft" value={criteria.length} tone={criteria.length > 0 ? "success" : "neutral"} />
+					<MetricPill label="Critérios adicionais" value={criteria.length} tone={criteria.length > 0 ? "success" : "neutral"} />
 				</div>
 			</SectionCard>
 
@@ -256,7 +256,7 @@ export default function AllocationConfigPage() {
 						{criteria.length === 0 ? (
 							<EmptyState
 								title="Nenhum critério soft configurado"
-								description="Sem critérios soft, o algoritmo seguirá apenas as capacidades e regras obrigatórias. Adicione uma regra quando quiser refinar diversidade, agrupamento ou limites desejáveis."
+								description="Preferências de horário e PrefiroNao são sempre otimizados. Adicione critérios quando quiser também refinar diversidade, agrupamento ou limites desejáveis."
 								action={
 									<SecondaryButton onClick={addCriterion}>
 										<PlusIcon className="h-4 w-4" />
@@ -315,7 +315,7 @@ export default function AllocationConfigPage() {
 													<FieldLabel
 														label="Coluna de referência"
 														description="Campo usado como base para a regra."
-														help="As opções vêm das colunas detectadas pelo backend para critérios soft."
+														help="As opções vêm das colunas detectadas pelo backend para critérios adicionais."
 													/>
 													<select
 														className="executive-input"
@@ -422,11 +422,11 @@ export default function AllocationConfigPage() {
 							<div className="rounded-[24px] border border-[var(--line)] bg-white/70 p-5">
 								<div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
 									Boas práticas
-									<HelpIcon text="Comece com parâmetros realistas e poucos critérios soft. Depois refine com base na leitura do resultado." />
+									<HelpIcon text="Comece com parâmetros realistas e poucos critérios adicionais. Depois refine com base na leitura do resultado." />
 								</div>
 								<ul className="mt-3 space-y-3 text-sm leading-6 text-[var(--muted)]">
 									<li>Mantenha o mínimo e máximo coerentes com a capacidade real de entrevistas.</li>
-									<li>Use critérios soft apenas quando houver um objetivo claro de composição.</li>
+									<li>Use critérios adicionais apenas quando houver um objetivo claro de composição.</li>
 									<li>Revise os não alocados no resultado para recalibrar a configuração da próxima rodada.</li>
 								</ul>
 							</div>

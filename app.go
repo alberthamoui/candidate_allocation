@@ -15,7 +15,10 @@ import (
 	dbpkg "candidate_alocator/back/db"
 	"candidate_alocator/back/logic"
 	types "candidate_alocator/back/type"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+const allocationProgressEvent = "allocation:progress"
 
 type UsuariosResponse = logic.UsuariosResponse
 
@@ -190,16 +193,26 @@ func (a *App) CountPossibleAllocationQuantitiesAcrossSchedules(params types.Allo
 }
 
 type UICandidate struct {
-	ID       int    `json:"id"`
-	Nome     string `json:"nome"`
-	Semestre int    `json:"semestre"`
-	Curso    string `json:"curso"`
+	ID              int               `json:"id"`
+	Nome            string            `json:"nome"`
+	Semestre        int               `json:"semestre"`
+	Curso           string            `json:"curso"`
+	EmailPessoal    string            `json:"emailPessoal"`
+	EmailSecundario string            `json:"emailSecundario"`
+	Opcoes          []string          `json:"opcoes"`
+	NaoPosso        []string          `json:"naoPosso"`
+	PrefiroNao      []string          `json:"prefiroNao"`
+	Extras          map[string]string `json:"extras"`
 }
 
 type UIAvaliador struct {
-	ID    int    `json:"id"`
-	Nome  string `json:"nome"`
-	Sigla string `json:"sigla"`
+	ID         int               `json:"id"`
+	Nome       string            `json:"nome"`
+	Sigla      string            `json:"sigla"`
+	Email      string            `json:"email"`
+	NaoPosso   []string          `json:"naoPosso"`
+	PrefiroNao []string          `json:"prefiroNao"`
+	Extras     map[string]string `json:"extras"`
 }
 
 type UIMesa struct {
@@ -216,6 +229,7 @@ type UIAllocationResult struct {
 	Mesas           []UIMesa                        `json:"mesas"`
 	NaoAlocados     []UICandidate                   `json:"naoAlocados"`
 	Score           types.SoftScoreBreakdown        `json:"score"`
+	Quality         types.AllocationQualityReport   `json:"quality"`
 	HardViolations  []types.HardConstraintViolation `json:"hardViolations"`
 	RejectionReason string                          `json:"rejectionReason"`
 	Metrics         types.SolverMetrics             `json:"metrics"`
@@ -295,13 +309,19 @@ func (a *App) RunAllocation(config types.AllocationConfiguration) (UIAllocationR
 	}
 	defer func() { _ = db.Close() }()
 
-	run, err := allocation.RunConfiguredAllocation(db, config)
+	var progress allocation.ProgressCallback
+	if a.ctx != nil {
+		progress = func(snapshot allocation.SolverProgress) {
+			runtime.EventsEmit(a.ctx, allocationProgressEvent, snapshot)
+		}
+	}
+	run, err := allocation.RunConfiguredAllocation(db, config, progress)
 	if err != nil {
 		return UIAllocationResult{}, err
 	}
 
-	candMap := buildUICandidateMap(run.Candidatos)
-	evaluatorMap := buildUIEvaluatorMap(run.Avaliadores)
+	evaluatorMap := buildUIEvaluatorMap(run.Avaliadores, run.Problem.Candidates)
+	candMap := buildUICandidateMap(run.Candidatos, run.Problem.Candidates, evaluatorMap)
 	uiMesasMap := buildUIMesaMap(run.Problem.Groups, evaluatorMap)
 	var uiMesas []UIMesa
 	alocadosIDs := make(map[int]bool)
@@ -349,6 +369,7 @@ func (a *App) RunAllocation(config types.AllocationConfiguration) (UIAllocationR
 		Mesas:           uiMesas,
 		NaoAlocados:     naoAlocados,
 		Score:           run.Result.Score,
+		Quality:         allocation.BuildAllocationQualityReport(run.Problem, run.Result),
 		HardViolations:  run.Result.HardViolations,
 		RejectionReason: run.Result.RejectionReason,
 		Metrics:         run.Result.Metrics,
@@ -356,28 +377,78 @@ func (a *App) RunAllocation(config types.AllocationConfiguration) (UIAllocationR
 	}, nil
 }
 
-func buildUICandidateMap(candidatos []types.Candidato) map[int]UICandidate {
+func buildUICandidateMap(candidatos []types.Candidato, solverCandidates []types.SolverCandidate, evaluators map[int]UIAvaliador) map[int]UICandidate {
+	solverByID := make(map[int]types.SolverCandidate, len(solverCandidates))
+	for _, candidate := range solverCandidates {
+		solverByID[candidate.ID] = candidate
+	}
+
 	result := make(map[int]UICandidate, len(candidatos))
 	for idx, candidato := range candidatos {
+		id := idx + 1
 		semestre, _ := strconv.Atoi(strings.TrimSpace(candidato.Semestre))
-		result[idx+1] = UICandidate{
-			ID:       idx + 1,
-			Nome:     candidato.Nome,
-			Semestre: semestre,
-			Curso:    candidato.Curso,
+		solverCandidate := solverByID[id]
+		naoPosso := make([]string, 0, len(solverCandidate.EvaluatorRestrictions.ForbiddenEvaluatorIDs))
+		for _, evaluatorID := range solverCandidate.EvaluatorRestrictions.ForbiddenEvaluatorIDs {
+			if evaluator, ok := evaluators[evaluatorID]; ok {
+				naoPosso = append(naoPosso, evaluator.Nome+" ("+evaluator.Sigla+")")
+			}
+		}
+		prefiroNao := make([]string, 0, len(solverCandidate.EvaluatorRestrictions.AvoidEvaluatorIDs))
+		for _, evaluatorID := range solverCandidate.EvaluatorRestrictions.AvoidEvaluatorIDs {
+			if evaluator, ok := evaluators[evaluatorID]; ok {
+				prefiroNao = append(prefiroNao, evaluator.Nome+" ("+evaluator.Sigla+")")
+			}
+		}
+		result[id] = UICandidate{
+			ID:              id,
+			Nome:            candidato.Nome,
+			Semestre:        semestre,
+			Curso:           candidato.Curso,
+			EmailPessoal:    candidato.EmailPessoal,
+			EmailSecundario: candidato.EmailSecundario,
+			Opcoes:          append([]string(nil), candidato.Opcoes...),
+			NaoPosso:        naoPosso,
+			PrefiroNao:      prefiroNao,
+			Extras:          nullableExtrasToStrings(candidato.Extras),
 		}
 	}
 	return result
 }
 
-func buildUIEvaluatorMap(avaliadores []types.Avaliador) map[int]UIAvaliador {
+func buildUIEvaluatorMap(avaliadores []types.Avaliador, solverCandidates []types.SolverCandidate) map[int]UIAvaliador {
 	result := make(map[int]UIAvaliador, len(avaliadores))
 	for _, avaliador := range avaliadores {
 		result[avaliador.ID] = UIAvaliador{
-			ID:    avaliador.ID,
-			Nome:  avaliador.Nome,
-			Sigla: avaliador.Sigla,
+			ID:     avaliador.ID,
+			Nome:   avaliador.Nome,
+			Sigla:  avaliador.Sigla,
+			Email:  avaliador.Email,
+			Extras: nullableExtrasToStrings(avaliador.Extras),
 		}
+	}
+	for _, candidate := range solverCandidates {
+		for _, evaluatorID := range candidate.EvaluatorRestrictions.ForbiddenEvaluatorIDs {
+			evaluator := result[evaluatorID]
+			evaluator.NaoPosso = append(evaluator.NaoPosso, candidate.Name)
+			result[evaluatorID] = evaluator
+		}
+		for _, evaluatorID := range candidate.EvaluatorRestrictions.AvoidEvaluatorIDs {
+			evaluator := result[evaluatorID]
+			evaluator.PrefiroNao = append(evaluator.PrefiroNao, candidate.Name)
+			result[evaluatorID] = evaluator
+		}
+	}
+	return result
+}
+
+func nullableExtrasToStrings(extras map[string]*types.NullableString) map[string]string {
+	result := make(map[string]string, len(extras))
+	for key, value := range extras {
+		if value == nil {
+			continue
+		}
+		result[key] = string(*value)
 	}
 	return result
 }

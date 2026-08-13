@@ -16,6 +16,15 @@ func WorkflowDefinition() types.WorkflowDefinition {
 		},
 		DefaultAllocationParams: DefaultAllocationParams(),
 		SoftCriterionOptions:    SoftCriterionOptions(),
+		BaseOptimization:        BaseOptimizationPolicy(),
+	}
+}
+
+// BaseOptimizationPolicy returns the official always-on objective defaults.
+func BaseOptimizationPolicy() types.BaseOptimizationPolicy {
+	return types.BaseOptimizationPolicy{
+		PreferencePenaltyByRank: []int{0, 1, 2, 3, 4},
+		AvoidEvaluatorPenalty:   3,
 	}
 }
 
@@ -24,7 +33,7 @@ func SoftCriterionOptions() []types.SoftCriterionOption {
 	return []types.SoftCriterionOption{
 		{
 			Type:              types.SoftCriterionMinValue,
-			Label:             "Minimo por valor unico",
+			Label:             "Mínimo por valor único",
 			Description:       "Se existe o valor selecionado no grupo, garanta pelo menos N",
 			RequiresThreshold: true,
 		},
@@ -36,7 +45,7 @@ func SoftCriterionOptions() []types.SoftCriterionOption {
 		},
 		{
 			Type:              types.SoftCriterionBalancedDistribution,
-			Label:             "Distribuicao equilibrada",
+			Label:             "Distribuição equilibrada",
 			Description:       "Espalhe os valores selecionados entre os grupos",
 			RequiresThreshold: false,
 		},
@@ -48,7 +57,7 @@ func SoftCriterionOptions() []types.SoftCriterionOption {
 		},
 		{
 			Type:              types.SoftCriterionMaxValue,
-			Label:             "Maximo por valor unico",
+			Label:             "Máximo por valor único",
 			Description:       "Limite o numero de pessoas do valor selecionado por grupo",
 			RequiresThreshold: true,
 		},

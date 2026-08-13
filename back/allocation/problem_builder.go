@@ -11,10 +11,6 @@ import (
 	types "candidate_alocator/back/type"
 )
 
-var defaultPreferencePenaltyByRank = []int{0, 1, 2, 3, 4}
-
-const defaultAvoidEvaluatorPenalty = 3
-
 // BuildAllocationProblem transforma a configuração normalizada e os dados de
 // domínio no contrato único e explícito consumido pelo solver.
 func BuildAllocationProblem(
@@ -42,15 +38,18 @@ func BuildAllocationProblem(
 	problemCandidates := make([]types.SolverCandidate, 0, len(candidatos))
 	for idx, candidato := range candidatos {
 		candidateID := idx + 1
+		preferredGroupIDs, preferenceRanks := buildCandidatePreferenceData(candidato, preferenceToGroupIDs)
 		problemCandidates = append(problemCandidates, types.SolverCandidate{
-			ID:                    candidateID,
-			Name:                  strings.TrimSpace(candidato.Nome),
-			PreferredGroupIDs:     buildCandidatePreferredGroupIDs(candidato, preferenceToGroupIDs),
-			Attributes:            buildCandidateAttributes(candidato, criteriaColumns),
-			EvaluatorRestrictions: restrictionsByCandidate[candidateID],
+			ID:                      candidateID,
+			Name:                    strings.TrimSpace(candidato.Nome),
+			PreferredGroupIDs:       preferredGroupIDs,
+			PreferenceRankByGroupID: preferenceRanks,
+			Attributes:              buildCandidateAttributes(candidato, criteriaColumns),
+			EvaluatorRestrictions:   restrictionsByCandidate[candidateID],
 		})
 	}
 
+	baseOptimization := logic.WorkflowDefinition().BaseOptimization
 	return types.AllocationProblem{
 		Candidates: problemCandidates,
 		Groups:     groups,
@@ -62,8 +61,8 @@ func BuildAllocationProblem(
 			EnforceMinCandidatesOnCompleteState: true,
 		},
 		SoftRules: types.SolverSoftRules{
-			PreferencePenaltyByRank: append([]int(nil), defaultPreferencePenaltyByRank...),
-			AvoidEvaluatorPenalty:   defaultAvoidEvaluatorPenalty,
+			PreferencePenaltyByRank: append([]int(nil), baseOptimization.PreferencePenaltyByRank...),
+			AvoidEvaluatorPenalty:   baseOptimization.AvoidEvaluatorPenalty,
 			Criteria:                append([]types.SoftCriterion(nil), config.Normalized.Params.SoftCriteria...),
 		},
 	}, nil
@@ -93,6 +92,7 @@ func buildSolverGroups(
 			group := types.SolverGroup{
 				ID:            groupIndex,
 				Label:         buildSolverGroupLabel(mapping, slot+1),
+				ScheduleKey:   key,
 				EvaluatorIDs:  selectEvaluatorIDs(sortedEvaluators, groupIndex-1, params.AvaliadoresPorGrupo),
 				MinCandidates: params.MinPessoasPorGrupo,
 				MaxCandidates: params.MaxPessoasPorGrupo,
@@ -239,11 +239,12 @@ func collectSoftCriterionColumns(criteria []types.SoftCriterion) []string {
 	return columns
 }
 
-func buildCandidatePreferredGroupIDs(candidato types.Candidato, preferenceToGroupIDs map[string][]int) []int {
+func buildCandidatePreferenceData(candidato types.Candidato, preferenceToGroupIDs map[string][]int) ([]int, map[int]int) {
 	result := make([]int, 0)
 	seen := make(map[int]struct{})
+	ranks := make(map[int]int)
 
-	for _, option := range candidato.Opcoes {
+	for preferenceRank, option := range candidato.Opcoes {
 		groupIDs := preferenceToGroupIDs[normalizeSolverText(option)]
 		for _, groupID := range groupIDs {
 			if _, ok := seen[groupID]; ok {
@@ -251,10 +252,11 @@ func buildCandidatePreferredGroupIDs(candidato types.Candidato, preferenceToGrou
 			}
 			seen[groupID] = struct{}{}
 			result = append(result, groupID)
+			ranks[groupID] = preferenceRank
 		}
 	}
 
-	return result
+	return result, ranks
 }
 
 func buildCandidateAttributes(candidato types.Candidato, columns []string) map[string]string {

@@ -18,6 +18,9 @@ func TestWorkflowDefinitionContainsOfficialDefaultsAndOptions(t *testing.T) {
 	if len(definition.SoftCriterionOptions) != len(SoftCriterionOptions()) {
 		t.Fatalf("workflow soft options diverged from SoftCriterionOptions: %#v", definition.SoftCriterionOptions)
 	}
+	if len(definition.BaseOptimization.PreferencePenaltyByRank) == 0 || definition.BaseOptimization.AvoidEvaluatorPenalty <= 0 {
+		t.Fatalf("expected workflow definition to expose the always-on optimization policy: %#v", definition.BaseOptimization)
+	}
 }
 
 func TestWorkflowDefinitionSoftCriteriaAreSupportedByValidation(t *testing.T) {

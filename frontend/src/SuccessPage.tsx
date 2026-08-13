@@ -63,7 +63,7 @@ export default function SuccessPage() {
 									Seguir com a rodada
 								</div>
 								<p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-									Abra a configuração para definir capacidade de grupos, avaliadores por mesa e critérios soft.
+									Abra a configuração para definir capacidade de grupos, avaliadores por mesa e critérios adicionais.
 								</p>
 								<div className="mt-4">
 									<PrimaryButton onClick={() => navigate("/allocation-config")} className="w-full justify-center" data-testid="configure-allocation-button">

@@ -156,6 +156,10 @@ export namespace main {
 	    id: number;
 	    nome: string;
 	    sigla: string;
+	    email: string;
+	    naoPosso: string[];
+	    prefiroNao: string[];
+	    extras: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new UIAvaliador(source);
@@ -166,6 +170,10 @@ export namespace main {
 	        this.id = source["id"];
 	        this.nome = source["nome"];
 	        this.sigla = source["sigla"];
+	        this.email = source["email"];
+	        this.naoPosso = source["naoPosso"];
+	        this.prefiroNao = source["prefiroNao"];
+	        this.extras = source["extras"];
 	    }
 	}
 	export class UICandidate {
@@ -173,6 +181,12 @@ export namespace main {
 	    nome: string;
 	    semestre: number;
 	    curso: string;
+	    emailPessoal: string;
+	    emailSecundario: string;
+	    opcoes: string[];
+	    naoPosso: string[];
+	    prefiroNao: string[];
+	    extras: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new UICandidate(source);
@@ -184,6 +198,12 @@ export namespace main {
 	        this.nome = source["nome"];
 	        this.semestre = source["semestre"];
 	        this.curso = source["curso"];
+	        this.emailPessoal = source["emailPessoal"];
+	        this.emailSecundario = source["emailSecundario"];
+	        this.opcoes = source["opcoes"];
+	        this.naoPosso = source["naoPosso"];
+	        this.prefiroNao = source["prefiroNao"];
+	        this.extras = source["extras"];
 	    }
 	}
 	export class UIMesa {
@@ -230,6 +250,7 @@ export namespace main {
 	    mesas: UIMesa[];
 	    naoAlocados: UICandidate[];
 	    score: types.SoftScoreBreakdown;
+	    quality: types.AllocationQualityReport;
 	    hardViolations: types.HardConstraintViolation[];
 	    rejectionReason: string;
 	    metrics: types.SolverMetrics;
@@ -246,6 +267,7 @@ export namespace main {
 	        this.mesas = this.convertValues(source["mesas"], UIMesa);
 	        this.naoAlocados = this.convertValues(source["naoAlocados"], UICandidate);
 	        this.score = this.convertValues(source["score"], types.SoftScoreBreakdown);
+	        this.quality = this.convertValues(source["quality"], types.AllocationQualityReport);
 	        this.hardViolations = this.convertValues(source["hardViolations"], types.HardConstraintViolation);
 	        this.rejectionReason = source["rejectionReason"];
 	        this.metrics = this.convertValues(source["metrics"], types.SolverMetrics);
@@ -766,7 +788,81 @@ export namespace types {
 	
 	
 	
+	export class AllocationQualityCharacteristic {
+	    code: string;
+	    label: string;
+	    description: string;
+	    value: number;
+	    valueLabel: string;
+	    penalty: number;
+	    tone: string;
+	    candidateIds: number[];
+	    evaluatorIds: number[];
+	    groupIds: number[];
 	
+	    static createFrom(source: any = {}) {
+	        return new AllocationQualityCharacteristic(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.label = source["label"];
+	        this.description = source["description"];
+	        this.value = source["value"];
+	        this.valueLabel = source["valueLabel"];
+	        this.penalty = source["penalty"];
+	        this.tone = source["tone"];
+	        this.candidateIds = source["candidateIds"];
+	        this.evaluatorIds = source["evaluatorIds"];
+	        this.groupIds = source["groupIds"];
+	    }
+	}
+	export class AllocationQualityReport {
+	    characteristics: AllocationQualityCharacteristic[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AllocationQualityReport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.characteristics = this.convertValues(source["characteristics"], AllocationQualityCharacteristic);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class BaseOptimizationPolicy {
+	    preferencePenaltyByRank: number[];
+	    avoidEvaluatorPenalty: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BaseOptimizationPolicy(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.preferencePenaltyByRank = source["preferencePenaltyByRank"];
+	        this.avoidEvaluatorPenalty = source["avoidEvaluatorPenalty"];
+	    }
+	}
 	export class CandidateCriterionColumn {
 	    key: string;
 	    label: string;
@@ -936,6 +1032,8 @@ export namespace types {
 	    completeStates: number;
 	    nodesPrunedByHard: number;
 	    nodesPrunedByBound: number;
+	    nodesPrunedByFlow: number;
+	    branchesSkippedBySymmetry: number;
 	    bestUpdates: number;
 	    parallelTasks: number;
 	
@@ -949,6 +1047,8 @@ export namespace types {
 	        this.completeStates = source["completeStates"];
 	        this.nodesPrunedByHard = source["nodesPrunedByHard"];
 	        this.nodesPrunedByBound = source["nodesPrunedByBound"];
+	        this.nodesPrunedByFlow = source["nodesPrunedByFlow"];
+	        this.branchesSkippedBySymmetry = source["branchesSkippedBySymmetry"];
 	        this.bestUpdates = source["bestUpdates"];
 	        this.parallelTasks = source["parallelTasks"];
 	    }
@@ -975,6 +1075,7 @@ export namespace types {
 	    steps: WorkflowStep[];
 	    defaultAllocationParams: AllocationParams;
 	    softCriterionOptions: SoftCriterionOption[];
+	    baseOptimization: BaseOptimizationPolicy;
 	
 	    static createFrom(source: any = {}) {
 	        return new WorkflowDefinition(source);
@@ -985,6 +1086,7 @@ export namespace types {
 	        this.steps = this.convertValues(source["steps"], WorkflowStep);
 	        this.defaultAllocationParams = this.convertValues(source["defaultAllocationParams"], AllocationParams);
 	        this.softCriterionOptions = this.convertValues(source["softCriterionOptions"], SoftCriterionOption);
+	        this.baseOptimization = this.convertValues(source["baseOptimization"], BaseOptimizationPolicy);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

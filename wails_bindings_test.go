@@ -76,6 +76,7 @@ func TestWailsModelsContainWorkflowDefinitionFields(t *testing.T) {
 		`this.steps = this.convertValues(source["steps"], WorkflowStep)`,
 		`this.defaultAllocationParams = this.convertValues(source["defaultAllocationParams"], AllocationParams)`,
 		`this.softCriterionOptions = this.convertValues(source["softCriterionOptions"], SoftCriterionOption)`,
+		`this.baseOptimization = this.convertValues(source["baseOptimization"], BaseOptimizationPolicy)`,
 	})
 }
 
@@ -198,11 +199,28 @@ func TestWailsModelsContainAllocationConfigurationFields(t *testing.T) {
 		`this.totalPenalty = source["totalPenalty"]`,
 		`this.components = this.convertValues(source["components"], SoftScoreComponent)`,
 	})
+	assertWailsModelContainsJSONFields(t, "AllocationQualityCharacteristic", []string{
+		"code",
+		"label",
+		"description",
+		"value",
+		"valueLabel",
+		"penalty",
+		"tone",
+		"candidateIds",
+		"evaluatorIds",
+		"groupIds",
+	})
+	assertWailsModelContainsAssignments(t, string(content), "AllocationQualityReport", []string{
+		`this.characteristics = this.convertValues(source["characteristics"], AllocationQualityCharacteristic)`,
+	})
 	assertWailsModelContainsJSONFields(t, "SolverMetrics", []string{
 		"nodesVisited",
 		"completeStates",
 		"nodesPrunedByHard",
 		"nodesPrunedByBound",
+		"nodesPrunedByFlow",
+		"branchesSkippedBySymmetry",
 		"bestUpdates",
 		"parallelTasks",
 	})

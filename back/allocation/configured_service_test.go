@@ -30,7 +30,10 @@ func TestRunConfiguredAllocationUsesConfigurationProblemAndSolver(t *testing.T) 
 		t.Fatalf("BuildConfigurationFromPersistedData returned error: %v", err)
 	}
 
-	got, err := RunConfiguredAllocation(db, config)
+	var progressEvents []SolverProgress
+	got, err := RunConfiguredAllocation(db, config, func(progress SolverProgress) {
+		progressEvents = append(progressEvents, progress)
+	})
 	if err != nil {
 		t.Fatalf("RunConfiguredAllocation returned error: %v", err)
 	}
@@ -47,6 +50,9 @@ func TestRunConfiguredAllocationUsesConfigurationProblemAndSolver(t *testing.T) 
 	if got.Config.Result.Status != "optimal" {
 		t.Fatalf("expected config result to be updated, got %#v", got.Config.Result)
 	}
+	if len(progressEvents) < 2 || progressEvents[0].Percent != 0 || progressEvents[len(progressEvents)-1].Percent != 100 {
+		t.Fatalf("expected configured service to stream progress from 0 to 100, got %#v", progressEvents)
+	}
 }
 
 func TestRunConfiguredAllocationRejectsInvalidConfiguration(t *testing.T) {
@@ -57,7 +63,7 @@ func TestRunConfiguredAllocationRejectsInvalidConfiguration(t *testing.T) {
 		Diagnostics: types.AllocationDiagnostics{HasErrors: true},
 	}
 
-	if _, err := RunConfiguredAllocation(db, config); err == nil {
+	if _, err := RunConfiguredAllocation(db, config, nil); err == nil {
 		t.Fatal("expected invalid configuration to fail")
 	}
 }
