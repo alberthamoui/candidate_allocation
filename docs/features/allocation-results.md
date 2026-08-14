@@ -33,7 +33,7 @@ O backend produz características clicáveis com IDs de candidatos, avaliadores 
 - conflitos `PrefiroNao`;
 - um item para cada critério soft configurado.
 
-Cada característica possui código, label, descrição, valor, penalidade e tom. O frontend apenas apresenta e destaca os IDs; não recalcula score.
+Cada característica possui código, label, descrição, valor, penalidade e tom. O frontend apenas apresenta e destaca os IDs; não recalcula score. Ao ativar um critério, somente os candidatos abrangidos por ele são coloridos: vermelho quando a mesa contribuiu para a penalidade e verde quando a mesa atendeu ao critério.
 
 ## Painel
 
@@ -48,6 +48,8 @@ O resultado apresenta:
 - popover de detalhes de candidato ou avaliador;
 - seção de não alocados;
 - diagnóstico técnico recolhível com métricas do solver.
+
+Quando não existe solução completa, a tela apresenta a melhor alocação parcial encontrada e mantém fora das mesas os candidatos que não podem ser posicionados sem violar regras obrigatórias. Durante uma busca longa, esse fallback aparece antes da enumeração exata terminar e pode ser substituído por uma solução com mais pessoas alocadas.
 
 Busca, filtros e destaque de qualidade são mutuamente exclusivos para deixar claro qual regra visual está ativa.
 

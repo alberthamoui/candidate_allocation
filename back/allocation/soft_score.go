@@ -28,7 +28,13 @@ func ScoreAllocation(problem types.AllocationProblem, state types.PartialAllocat
 			},
 		}
 	}
+	return scoreAssignedAllocation(problem, state)
+}
 
+// scoreAssignedAllocation evaluates the soft objective for the candidates
+// currently assigned. It is used for a hard-safe partial fallback, whose
+// missing candidates are reported separately instead of becoming soft points.
+func scoreAssignedAllocation(problem types.AllocationProblem, state types.PartialAllocationState) types.SoftScoreBreakdown {
 	components := make([]types.SoftScoreComponent, 0)
 	components = append(components, scorePreferencePenalties(problem, state)...)
 	components = append(components, scoreAvoidEvaluatorPenalties(problem, state)...)
@@ -202,32 +208,26 @@ func scoreBalancedDistributionCriterion(problem types.AllocationProblem, state t
 	components := make([]types.SoftScoreComponent, 0)
 
 	for _, selectedValue := range criterion.SelectedValues {
-		minCount := 0
-		maxCount := 0
-		initialized := false
+		groupCounts := make([]int, 0, len(groupIDs))
 		for _, groupID := range groupIDs {
-			count := counts[groupID][selectedValue]
-			if !initialized {
-				minCount = count
-				maxCount = count
-				initialized = true
-				continue
-			}
-			if count < minCount {
-				minCount = count
-			}
-			if count > maxCount {
-				maxCount = count
+			groupCounts = append(groupCounts, counts[groupID][selectedValue])
+		}
+		median := medianInt(groupCounts)
+		penalty := 0
+		for _, count := range groupCounts {
+			if count >= median {
+				penalty += count - median
+			} else {
+				penalty += median - count
 			}
 		}
-		penalty := maxCount - minCount
 		if penalty == 0 {
 			continue
 		}
 		components = append(components, types.SoftScoreComponent{
 			Code:    "soft_balanced_distribution",
 			Penalty: penalty,
-			Message: fmt.Sprintf("distribuicao de %q em %s ficou desequilibrada", selectedValue, criterion.ColumnKey),
+			Message: fmt.Sprintf("distribuicao de %q em %s desviou da mediana %d", selectedValue, criterion.ColumnKey, median),
 		})
 	}
 
@@ -242,29 +242,34 @@ func scoreGroupTogetherCriterion(problem types.AllocationProblem, state types.Pa
 
 	groupMembers := buildStateGroupMembers(state)
 	candidates := candidateByID(problem)
-	groupsWithSelectedValues := make(map[int]struct{})
+	components := make([]types.SoftScoreComponent, 0)
 	for groupID, members := range groupMembers {
+		selectedCount := 0
 		for _, candidateID := range members {
 			value := candidates[candidateID].Attributes[criterion.ColumnKey]
 			if _, ok := selectedValues[value]; ok {
-				groupsWithSelectedValues[groupID] = struct{}{}
-				break
+				selectedCount++
 			}
 		}
-	}
-
-	if len(groupsWithSelectedValues) <= 1 {
-		return nil
-	}
-
-	penalty := len(groupsWithSelectedValues) - 1
-	return []types.SoftScoreComponent{
-		{
+		if selectedCount == 0 || len(members) == selectedCount {
+			continue
+		}
+		components = append(components, types.SoftScoreComponent{
 			Code:    "soft_group_together",
-			Penalty: penalty,
-			Message: fmt.Sprintf("valores selecionados em %s ficaram espalhados por %d grupos", criterion.ColumnKey, len(groupsWithSelectedValues)),
-		},
+			Penalty: selectedCount,
+			Message: fmt.Sprintf("grupo %d deixou %d pessoa(s) selecionada(s) em uma mesa misturada por %s", groupID, selectedCount, criterion.ColumnKey),
+		})
 	}
+	return components
+}
+
+func medianInt(values []int) int {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := append([]int(nil), values...)
+	sort.Ints(sorted)
+	return sorted[len(sorted)/2]
 }
 
 func countSelectedValuesByGroup(problem types.AllocationProblem, state types.PartialAllocationState, columnKey string, selectedValues []string) map[int]map[string]int {

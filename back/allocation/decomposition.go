@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"sort"
 	"sync"
+	"time"
 
 	types "candidate_alocator/back/type"
 )
@@ -14,13 +15,20 @@ type solverComponent struct {
 }
 
 type aggregateProgress struct {
-	mu       sync.Mutex
-	callback ProgressCallback
-	totals   []*big.Int
-	resolved []*big.Int
-	pruned   []*big.Int
-	nodes    []int
-	subtrees []int
+	mu             sync.Mutex
+	callback       ProgressCallback
+	startedAt      time.Time
+	totals         []*big.Int
+	resolved       []*big.Int
+	pruned         []*big.Int
+	nodes          []int
+	subtrees       []int
+	firstResolved  *big.Int
+	firstNodes     int
+	firstComplete  bool
+	secondResolved *big.Int
+	secondNodes    int
+	secondComplete bool
 }
 
 // SolveAllocation solves every independent component exactly and combines
@@ -151,6 +159,7 @@ func newAggregateProgress(problem types.AllocationProblem, components []solverCo
 	aggregate := &aggregateProgress{
 		callback: callback, totals: make([]*big.Int, len(components)), resolved: make([]*big.Int, len(components)),
 		pruned: make([]*big.Int, len(components)), nodes: make([]int, len(components)), subtrees: make([]int, len(components)),
+		startedAt: time.Now(), firstResolved: new(big.Int), secondResolved: new(big.Int),
 	}
 	for index, component := range components {
 		view := buildSolverProblemView(buildComponentProblem(problem, component))
@@ -201,10 +210,24 @@ func (aggregate *aggregateProgress) emitLocked() {
 		nodes += aggregate.nodes[index]
 		subtrees += aggregate.subtrees[index]
 	}
+	elapsed := time.Since(aggregate.startedAt)
+	if !aggregate.firstComplete && elapsed >= throughputWindow {
+		aggregate.firstResolved.Set(resolved)
+		aggregate.firstNodes = nodes
+		aggregate.firstComplete = true
+	}
+	if !aggregate.secondComplete && elapsed >= 2*throughputWindow {
+		aggregate.secondResolved.Sub(resolved, aggregate.firstResolved)
+		aggregate.secondNodes = nodes - aggregate.firstNodes
+		aggregate.secondComplete = true
+	}
 	percentage, _ := new(big.Float).Quo(new(big.Float).SetInt(resolved), new(big.Float).SetInt(total)).Float64()
 	aggregate.callback(SolverProgress{
 		Percent: percentage * 100, BranchesResolved: resolved.String(), TotalBranches: total.String(),
 		BranchesPruned: pruned.String(), NodesVisited: nodes, PrunedSubtrees: subtrees,
+		FirstMinuteComplete: aggregate.firstComplete, FirstMinuteBranchesResolved: aggregate.firstResolved.String(),
+		FirstMinuteNodesVisited: aggregate.firstNodes, SecondMinuteComplete: aggregate.secondComplete,
+		SecondMinuteBranchesResolved: aggregate.secondResolved.String(), SecondMinuteNodesVisited: aggregate.secondNodes,
 	})
 }
 

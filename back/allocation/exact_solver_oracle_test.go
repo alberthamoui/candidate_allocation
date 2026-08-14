@@ -16,8 +16,8 @@ func TestExactSolverMatchesExhaustiveOracleOnSmallProblems(t *testing.T) {
 		want, feasible := exhaustiveOptimalScore(problem)
 
 		if !feasible {
-			if got.Status != "infeasible" {
-				t.Fatalf("iteration %d: expected infeasible, got %#v", iteration, got)
+			if got.Status != "partial" || len(got.Assignments) >= len(problem.Candidates) || len(got.HardViolations) == 0 {
+				t.Fatalf("iteration %d: expected an explicit partial fallback, got %#v", iteration, got)
 			}
 			continue
 		}
@@ -51,8 +51,8 @@ func TestExactSolverWithAllNewBoundsMatchesExhaustiveOracle(t *testing.T) {
 		got := SolveAllocation(problem, SolverOptions{WorkerCount: 3, ParallelDepth: 1})
 		want, feasible := exhaustiveOptimalScore(problem)
 		if !feasible {
-			if got.Status != "infeasible" {
-				t.Fatalf("iteration %d: expected infeasible, got %#v", iteration, got)
+			if got.Status != "partial" || len(got.Assignments) >= len(problem.Candidates) || len(got.HardViolations) == 0 {
+				t.Fatalf("iteration %d: expected an explicit partial fallback, got %#v", iteration, got)
 			}
 			continue
 		}

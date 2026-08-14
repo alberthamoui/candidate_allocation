@@ -464,9 +464,25 @@ func (a *App) updateAllocationSolution(runID uint64, result UIAllocationResult) 
 	if a.allocationRunID != runID || !a.allocationRunning {
 		return false
 	}
+	if a.allocationHasResult && !betterUIAllocationResult(result, a.allocationResult) {
+		return false
+	}
 	a.allocationResult = result
 	a.allocationHasResult = true
 	return true
+}
+
+// betterUIAllocationResult compares provisional results lexicographically:
+// first allocate more people, then reduce hard errors, then reduce soft score.
+// Equal results are deliberately not republished to the frontend.
+func betterUIAllocationResult(candidate, current UIAllocationResult) bool {
+	if len(candidate.NaoAlocados) != len(current.NaoAlocados) {
+		return len(candidate.NaoAlocados) < len(current.NaoAlocados)
+	}
+	if len(candidate.HardViolations) != len(current.HardViolations) {
+		return len(candidate.HardViolations) < len(current.HardViolations)
+	}
+	return candidate.Score.TotalPenalty < current.Score.TotalPenalty
 }
 
 func (a *App) completeAllocationRun(runID uint64, result UIAllocationResult) bool {
@@ -539,6 +555,8 @@ func buildUIAllocationResult(run allocation.ConfiguredAllocationResult) UIAlloca
 	switch run.Result.Status {
 	case "infeasible":
 		status = "Impossível (Infeasible)"
+	case "partial":
+		status = "Alocação parcial"
 	case "feasible":
 		status = "Solução provisória"
 	case "cancelled":

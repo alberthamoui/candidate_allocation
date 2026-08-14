@@ -90,6 +90,38 @@ func TestScoreBalancedDistributionCriterion(t *testing.T) {
 	assertHasScoreComponent(t, score, "soft_balanced_distribution")
 }
 
+func TestScoreBalancedDistributionUsesMedianAbsoluteDeviation(t *testing.T) {
+	candidates := make([]types.SolverCandidate, 7)
+	assignments := make(map[int]int, 7)
+	groupAssignments := []int{2, 3, 3, 4, 4, 4, 5}
+	for index, groupID := range groupAssignments {
+		candidateID := index + 1
+		candidates[index] = types.SolverCandidate{ID: candidateID, Attributes: map[string]string{"semestre": "1"}}
+		assignments[candidateID] = groupID
+	}
+	problem := types.AllocationProblem{
+		Candidates: candidates,
+		Groups:     []types.SolverGroup{{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}, {ID: 5}},
+		SoftRules: types.SolverSoftRules{Criteria: []types.SoftCriterion{
+			{Type: types.SoftCriterionBalancedDistribution, ColumnKey: "semestre", SelectedValues: []string{"1"}},
+		}},
+	}
+
+	score := ScoreAllocation(problem, types.PartialAllocationState{Assignments: assignments})
+	if got := scorePenaltyForCode(score, "soft_balanced_distribution"); got != 4 {
+		t.Fatalf("expected median deviation |0-1|+|1-1|+|2-1|+|3-1|+|1-1|=4, got %d", got)
+	}
+}
+
+func TestMedianInt(t *testing.T) {
+	if got := medianInt([]int{0, 1, 2, 3, 1}); got != 1 {
+		t.Fatalf("unexpected odd median: %d", got)
+	}
+	if got := medianInt([]int{0, 1, 2, 3}); got != 2 {
+		t.Fatalf("expected deterministic upper median for even input, got %d", got)
+	}
+}
+
 func TestScoreGroupTogetherCriterion(t *testing.T) {
 	problem := mustBuildFixtureProblem(t)
 	problem.SoftRules.Criteria = []types.SoftCriterion{
@@ -101,6 +133,37 @@ func TestScoreGroupTogetherCriterion(t *testing.T) {
 
 	score := ScoreAllocation(problem, state)
 	assertHasScoreComponent(t, score, "soft_group_together")
+	if got := scorePenaltyForCode(score, "soft_group_together"); got != 1 {
+		t.Fatalf("expected one selected person in a mixed group, got penalty %d", got)
+	}
+}
+
+func TestScoreGroupTogetherCountsSelectedPeopleInMixedGroups(t *testing.T) {
+	problem := types.AllocationProblem{
+		Candidates: []types.SolverCandidate{
+			{ID: 1, Attributes: map[string]string{"curso": "adm"}},
+			{ID: 2, Attributes: map[string]string{"curso": "eco"}},
+			{ID: 3, Attributes: map[string]string{"curso": "direito"}},
+			{ID: 4, Attributes: map[string]string{"curso": "adm"}},
+			{ID: 5, Attributes: map[string]string{"curso": "adm"}},
+		},
+		Groups: []types.SolverGroup{{ID: 1}, {ID: 2}},
+		SoftRules: types.SolverSoftRules{Criteria: []types.SoftCriterion{
+			{Type: types.SoftCriterionGroupTogether, ColumnKey: "curso", SelectedValues: []string{"adm"}},
+		}},
+	}
+	state := types.PartialAllocationState{Assignments: map[int]int{1: 1, 2: 1, 3: 1, 4: 2, 5: 2}}
+
+	score := ScoreAllocation(problem, state)
+	if got := scorePenaltyForCode(score, "soft_group_together"); got != 1 {
+		t.Fatalf("expected only the selected person in the mixed group to be penalized, got %d in %#v", got, score)
+	}
+
+	pureState := types.PartialAllocationState{Assignments: map[int]int{1: 1, 2: 2, 3: 2, 4: 1, 5: 1}}
+	pureScore := ScoreAllocation(problem, pureState)
+	if got := scorePenaltyForCode(pureScore, "soft_group_together"); got != 0 {
+		t.Fatalf("expected no penalty when selected candidates share only with selected candidates, got %d", got)
+	}
 }
 
 func TestScoreAllocationInvalidState(t *testing.T) {
@@ -126,4 +189,14 @@ func assertHasScoreComponent(t *testing.T, score types.SoftScoreBreakdown, code 
 	}
 
 	t.Fatalf("expected score component %q, got %#v", code, score.Components)
+}
+
+func scorePenaltyForCode(score types.SoftScoreBreakdown, code string) int {
+	penalty := 0
+	for _, component := range score.Components {
+		if component.Code == code {
+			penalty += component.Penalty
+		}
+	}
+	return penalty
 }

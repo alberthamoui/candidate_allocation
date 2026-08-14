@@ -99,6 +99,29 @@ func repairMinimumGroupSizes(view solverProblemView, assignment map[int]int) boo
 }
 
 func minCostCompletion(view solverProblemView, state *solverState) (int, map[int]int, bool) {
+	cost, assignment, complete := minCostAssignment(view, state)
+	if !complete {
+		return 0, nil, false
+	}
+	return cost, assignment, true
+}
+
+// maximumCardinalityMinCostAssignment assigns as many candidates as possible
+// while preserving every per-assignment hard rule and group capacity. It is a
+// deterministic fallback for problems where a complete hard-valid allocation
+// does not exist.
+func maximumCardinalityMinCostAssignment(view solverProblemView, state *solverState) map[int]int {
+	_, assignment, _ := minCostAssignment(view, state)
+	for candidateIndex, groupID := range state.Assignments {
+		if groupID != 0 {
+			assignment[view.sortedCandidateIDs[candidateIndex]] = groupID
+		}
+	}
+	repairOrDropUnderfilledGroups(view, assignment)
+	return assignment
+}
+
+func minCostAssignment(view solverProblemView, state *solverState) (int, map[int]int, bool) {
 	remainingCandidates := make([]int, 0, len(view.sortedCandidateIDs)-state.AssignedCount)
 	for candidateIndex, candidateID := range view.sortedCandidateIDs {
 		if state.Assignments[candidateIndex] == 0 {
@@ -136,9 +159,6 @@ func minCostCompletion(view solverProblemView, state *solverState) (int, map[int
 	}
 
 	flow, cost := runMinCostFlow(graph, source, sink, len(remainingCandidates))
-	if flow != len(remainingCandidates) {
-		return 0, nil, false
-	}
 	assignment := make(map[int]int, len(remainingCandidates))
 	for candidatePosition, candidateID := range remainingCandidates {
 		candidateNode := candidateOffset + candidatePosition
@@ -150,7 +170,59 @@ func minCostCompletion(view solverProblemView, state *solverState) (int, map[int
 			break
 		}
 	}
-	return cost, assignment, len(assignment) == len(remainingCandidates)
+	return cost, assignment, flow == len(remainingCandidates) && len(assignment) == len(remainingCandidates)
+}
+
+// repairOrDropUnderfilledGroups keeps every visible fallback table valid. It
+// first tries to fill an under-minimum table with legal moves; if that cannot
+// be done, its members become unallocated instead of being shown in an invalid
+// table.
+func repairOrDropUnderfilledGroups(view solverProblemView, assignment map[int]int) {
+	if !view.problem.HardRestrictions.EnforceMinCandidatesOnCompleteState {
+		return
+	}
+	counts := make(map[int]int, len(view.sortedGroupIDs))
+	for _, groupID := range assignment {
+		counts[groupID]++
+	}
+	for _, targetGroupID := range view.sortedGroupIDs {
+		target := view.groups[targetGroupID]
+		for counts[targetGroupID] > 0 && counts[targetGroupID] < target.MinCandidates {
+			bestCandidateID := 0
+			bestSourceGroupID := 0
+			bestDelta := math.MaxInt
+			for _, candidateID := range view.sortedCandidateIDs {
+				sourceGroupID, assigned := assignment[candidateID]
+				if !assigned || sourceGroupID == targetGroupID {
+					continue
+				}
+				if _, allowed := view.assignmentPenaltyByKey[candidateID][targetGroupID]; !allowed {
+					continue
+				}
+				sourceRemaining := counts[sourceGroupID] - 1
+				sourceMinimum := view.groups[sourceGroupID].MinCandidates
+				if sourceRemaining != 0 && sourceRemaining < sourceMinimum {
+					continue
+				}
+				delta := view.assignmentPenaltyByKey[candidateID][targetGroupID] - view.assignmentPenaltyByKey[candidateID][sourceGroupID]
+				if delta < bestDelta || (delta == bestDelta && (bestCandidateID == 0 || candidateID < bestCandidateID)) {
+					bestCandidateID, bestSourceGroupID, bestDelta = candidateID, sourceGroupID, delta
+				}
+			}
+			if bestCandidateID == 0 {
+				for candidateID, groupID := range assignment {
+					if groupID == targetGroupID {
+						delete(assignment, candidateID)
+					}
+				}
+				counts[targetGroupID] = 0
+				break
+			}
+			assignment[bestCandidateID] = targetGroupID
+			counts[bestSourceGroupID]--
+			counts[targetGroupID]++
+		}
+	}
 }
 
 func runMinCostFlow(graph [][]flowEdge, source, sink, requiredFlow int) (int, int) {

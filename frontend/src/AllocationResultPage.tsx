@@ -151,6 +151,7 @@ export default function AllocationResultPage() {
 	const activeQualityNonPenalizedGroupIDs = new Set<number>(activeQuality?.nonPenalizedGroupIds || []);
 	const progressPercentage = clampProgressPercent(allocationRun.progress.percent);
 	const remainingPossibilities = formatRemainingPossibilityCount(allocationRun.progress.totalBranches, allocationRun.progress.branchesResolved);
+	const hasUnallocatedCandidates = (result?.naoAlocados?.length || 0) > 0;
 
 	if (!result) {
 		return (
@@ -216,9 +217,9 @@ export default function AllocationResultPage() {
 		<div className="space-y-6" data-testid="allocation-result-page">
 		{allocationRun.running ? (
 			<SectionCard
-				title="Solução válida encontrada — verificação continua"
-				description="Esta distribuição já pode ser usada. O solver continua analisando as possibilidades restantes para tentar reduzir o score e provar a melhor solução."
-				aside={<StatusBadge tone="accent">Verificando alternativas</StatusBadge>}
+				title={hasUnallocatedCandidates ? "Alocação parcial disponível — busca continua" : "Solução válida encontrada — verificação continua"}
+				description={hasUnallocatedCandidates ? "Esta é a distribuição com menos candidatos não alocados encontrada até agora. O solver continua procurando uma solução completa ou parcial melhor." : "Esta distribuição já pode ser usada. O solver continua analisando as possibilidades restantes para tentar reduzir o score e provar a melhor solução."}
+				aside={<StatusBadge tone={hasUnallocatedCandidates ? "danger" : "accent"}>{hasUnallocatedCandidates ? "Resultado provisório" : "Verificando alternativas"}</StatusBadge>}
 				className="border-indigo-200 ring-1 ring-indigo-100"
 			>
 				<div className="space-y-4 overflow-hidden">
@@ -260,10 +261,14 @@ export default function AllocationResultPage() {
 			<SectionCard title="Verificação concluída" description="Todas as possibilidades foram analisadas e nenhuma alocação válida atende às restrições configuradas." aside={<StatusBadge tone="danger">Sem solução viável</StatusBadge>}>
 				<p className="text-sm text-[var(--muted)]" data-testid="search-complete-message">Não restam possibilidades para analisar; a busca terminou normalmente.</p>
 			</SectionCard>
+		) : result.solverStatus === "partial" ? (
+			<SectionCard title="Melhor alocação parcial encontrada" description="Não existe uma alocação completa que respeite todas as restrições obrigatórias. Os candidatos que não puderam ser posicionados aparecem em “Candidatos não alocados”." aside={<StatusBadge tone="danger">Resultado parcial</StatusBadge>}>
+				<p className="text-sm text-[var(--muted)]" data-testid="search-complete-message">As mesas exibidas respeitam as restrições obrigatórias; somente os candidatos listados como não alocados ficaram sem uma posição válida.</p>
+			</SectionCard>
 		) : null}
 			<SectionCard
 				title="Resumo da alocação"
-				description={allocationRun.running ? "Melhor solução válida encontrada até agora." : "Visão geral da rodada concluída."}
+				description={allocationRun.running ? (hasUnallocatedCandidates ? "Melhor alocação parcial encontrada até agora." : "Melhor solução válida encontrada até agora.") : "Visão geral da rodada concluída."}
 				aside={<StatusBadge tone={result.status === "Sucesso!" ? "success" : "accent"}>{result.status || "Finalizado"}</StatusBadge>}
 			>
 				<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

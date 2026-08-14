@@ -42,13 +42,29 @@ func TestEstimateLowerBoundIsOptimistic(t *testing.T) {
 	}
 }
 
+func TestLowerBoundAndNextCandidateUsesTheSameFeasibilityScan(t *testing.T) {
+	view := buildSolverProblemView(makeBoundPruneProblem())
+	state := stateFromPartial(view, types.PartialAllocationState{Assignments: map[int]int{1: 1}})
+
+	bound, candidateID, feasible := lowerBoundAndNextCandidate(view, &state)
+	if !feasible || candidateID != 2 {
+		t.Fatalf("expected candidate 2 to be the remaining feasible choice, got candidate=%d feasible=%t", candidateID, feasible)
+	}
+	legacyBound, legacyFeasible := simpleLowerBound(view, &state)
+	if bound != legacyBound || feasible != legacyFeasible {
+		t.Fatalf("combined analysis changed the lower bound: combined=(%d,%t) wrapper=(%d,%t)", bound, feasible, legacyBound, legacyFeasible)
+	}
+}
+
 func TestCriterionLowerBoundsReachCompleteScoresForAllSoftCriteria(t *testing.T) {
 	tests := []types.SoftCriterion{
 		{Type: types.SoftCriterionMinValue, ColumnKey: "curso", SelectedValues: []string{"adm"}, Threshold: 2},
+		{Type: types.SoftCriterionMaxValue, ColumnKey: "curso", SelectedValues: []string{"adm"}, Threshold: 1},
 		{Type: types.SoftCriterionAtLeastOneEach, ColumnKey: "curso", SelectedValues: []string{"adm", "eco"}},
 		{Type: types.SoftCriterionBalancedDistribution, ColumnKey: "curso", SelectedValues: []string{"adm", "eco"}},
+		{Type: types.SoftCriterionGroupTogether, ColumnKey: "curso", SelectedValues: []string{"adm"}},
 	}
-	complete := types.PartialAllocationState{Assignments: map[int]int{1: 1, 2: 2, 3: 1}}
+	complete := types.PartialAllocationState{Assignments: map[int]int{1: 1, 2: 1, 3: 2}}
 	for _, criterion := range tests {
 		problem := mustBuildFixtureProblem(t)
 		problem.SoftRules.Criteria = []types.SoftCriterion{criterion}
@@ -76,6 +92,47 @@ func TestInitialSolutionLocalSearchImprovesSoftScore(t *testing.T) {
 	}
 	if viable, violations := IsStateViable(problem, types.PartialAllocationState{Assignments: improved}); !viable {
 		t.Fatalf("improved assignment violates hard constraints: %#v", violations)
+	}
+}
+
+func TestLocalImprovementRunsBelowFortyPointsAndSkipsAtThreshold(t *testing.T) {
+	problem := types.AllocationProblem{
+		Candidates: []types.SolverCandidate{{
+			ID: 1, PreferredGroupIDs: []int{1, 2}, PreferenceRankByGroupID: map[int]int{1: 0, 2: 1},
+		}},
+		Groups: []types.SolverGroup{{ID: 1, MinCandidates: 1, MaxCandidates: 1}, {ID: 2, MinCandidates: 1, MaxCandidates: 1}},
+		HardRestrictions: types.SolverHardRestrictions{
+			AllCandidatesMustBeAssigned: true, RespectCandidatePreferences: true,
+			EnforceGroupCapacity: true, EnforceMinCandidatesOnCompleteState: true,
+		},
+		SoftRules: types.SolverSoftRules{PreferencePenaltyByRank: []int{0, 39}},
+	}
+	assignment := map[int]int{1: 2}
+	improved := improveInitialAssignment(buildSolverProblemView(problem), assignment)
+	if improved[1] != 1 {
+		t.Fatalf("expected a 39-point assignment to improve, got %#v", improved)
+	}
+
+	problem.SoftRules.PreferencePenaltyByRank[1] = localImprovementScoreThreshold
+	skipped := improveInitialAssignment(buildSolverProblemView(problem), assignment)
+	if skipped[1] != 2 {
+		t.Fatalf("expected a 40-point assignment to skip the extra pass, got %#v", skipped)
+	}
+}
+
+func TestCompleteStateFastScoreUsesGroupContaminationPenalty(t *testing.T) {
+	problem := mustBuildFixtureProblem(t)
+	problem.SoftRules.Criteria = []types.SoftCriterion{
+		{Type: types.SoftCriterionGroupTogether, ColumnKey: "curso", SelectedValues: []string{"adm"}},
+	}
+	partial := types.PartialAllocationState{Assignments: map[int]int{1: 1, 2: 1, 3: 2}}
+	view := buildSolverProblemView(problem)
+	state := stateFromPartial(view, partial)
+
+	got := scoreCompleteSolverState(view, &state)
+	want := ScoreAllocation(problem, partial).TotalPenalty
+	if got != want {
+		t.Fatalf("fast complete score diverged from official score: got=%d want=%d", got, want)
 	}
 }
 
@@ -123,12 +180,12 @@ func TestSolveAllocationFindsKnownOptimalSolution(t *testing.T) {
 	}
 }
 
-func TestSolveAllocationReturnsExplicitInfeasibleResult(t *testing.T) {
+func TestSolveAllocationReturnsBestPartialResultWhenCompleteAllocationIsImpossible(t *testing.T) {
 	problem := makeInfeasibleMinGroupProblem()
 	result := SolveAllocation(problem, SolverOptions{})
 
-	if result.Status != "infeasible" {
-		t.Fatalf("expected infeasible result, got %#v", result)
+	if result.Status != "partial" {
+		t.Fatalf("expected partial result, got %#v", result)
 	}
 	if len(result.Assignments) != 0 {
 		t.Fatalf("expected no assignments for infeasible problem, got %#v", result.Assignments)
@@ -136,9 +193,44 @@ func TestSolveAllocationReturnsExplicitInfeasibleResult(t *testing.T) {
 	if result.RejectionReason == "" {
 		t.Fatalf("expected rejection reason, got %#v", result)
 	}
-	assertHasViolationCode(t, result.HardViolations, "group_cannot_reach_min_candidates")
+	assertHasViolationCode(t, result.HardViolations, "missing_assignment")
 	if result.Metrics.NodesPrunedByHard == 0 {
 		t.Fatalf("expected hard-pruned nodes, got %#v", result.Metrics)
+	}
+}
+
+func TestSolveAllocationPublishesPartialFallbackBeforeProvingInfeasibility(t *testing.T) {
+	problem := makeInfeasibleMinGroupProblem()
+	var published []types.SolverResult
+	result := SolveAllocation(problem, SolverOptions{Incumbent: func(snapshot types.SolverResult) {
+		published = append(published, snapshot)
+	}})
+
+	if len(published) == 0 || published[0].Status != "partial" {
+		t.Fatalf("expected an immediate partial publication, got %#v", published)
+	}
+	if result.Status != "partial" || len(result.HardViolations) != 1 {
+		t.Fatalf("expected final partial fallback, got %#v", result)
+	}
+}
+
+func TestMaximumCardinalityFallbackKeepsMostCandidatesAllocated(t *testing.T) {
+	problem := types.AllocationProblem{
+		Candidates: []types.SolverCandidate{
+			{ID: 1, PreferredGroupIDs: []int{1}, PreferenceRankByGroupID: map[int]int{1: 0}},
+			{ID: 2, PreferredGroupIDs: []int{1}, PreferenceRankByGroupID: map[int]int{1: 0}},
+			{ID: 3, PreferredGroupIDs: []int{1}, PreferenceRankByGroupID: map[int]int{1: 0}},
+		},
+		Groups: []types.SolverGroup{{ID: 1, MinCandidates: 1, MaxCandidates: 2}},
+		HardRestrictions: types.SolverHardRestrictions{
+			AllCandidatesMustBeAssigned: true, RespectCandidatePreferences: true,
+			EnforceGroupCapacity: true, EnforceMinCandidatesOnCompleteState: true,
+		},
+		SoftRules: types.SolverSoftRules{PreferencePenaltyByRank: []int{0}},
+	}
+	result := SolveAllocation(problem, SolverOptions{})
+	if result.Status != "partial" || len(result.Assignments) != 2 || len(result.HardViolations) != 1 {
+		t.Fatalf("expected two assigned and one unallocated candidate, got %#v", result)
 	}
 }
 

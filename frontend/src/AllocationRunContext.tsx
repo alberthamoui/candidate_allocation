@@ -9,6 +9,12 @@ export type SolverProgress = {
 	branchesPruned: string;
 	nodesVisited: number;
 	prunedSubtrees: number;
+	firstMinuteComplete: boolean;
+	firstMinuteBranchesResolved: string;
+	firstMinuteNodesVisited: number;
+	secondMinuteComplete: boolean;
+	secondMinuteBranchesResolved: string;
+	secondMinuteNodesVisited: number;
 };
 
 type BackendAllocationRunState = {
@@ -27,6 +33,12 @@ export const initialSolverProgress: SolverProgress = {
 	branchesPruned: "0",
 	nodesVisited: 0,
 	prunedSubtrees: 0,
+	firstMinuteComplete: false,
+	firstMinuteBranchesResolved: "0",
+	firstMinuteNodesVisited: 0,
+	secondMinuteComplete: false,
+	secondMinuteBranchesResolved: "0",
+	secondMinuteNodesVisited: 0,
 };
 
 type AllocationRunState = {
@@ -96,7 +108,7 @@ export function AllocationRunProvider({ children }: { children: ReactNode }) {
 
 		void synchronize(true);
 		if (!running) return () => { active = false; };
-		const interval = window.setInterval(() => void synchronize(false), 500);
+		const interval = window.setInterval(() => void synchronize(false), 2000);
 		return () => {
 			active = false;
 			window.clearInterval(interval);

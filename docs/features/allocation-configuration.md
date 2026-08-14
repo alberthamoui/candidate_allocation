@@ -40,8 +40,8 @@ Na CLI, dia e hora são perguntados ao usuário. No desktop atual, `BuildConfigu
 |---|---|---|
 | `min_value` | quando o valor aparece no grupo, prefere pelo menos N ocorrências | obrigatório |
 | `at_least_one_each` | prefere representação de todos os valores escolhidos | não usa |
-| `balanced_distribution` | reduz desequilíbrio entre grupos | não usa |
-| `group_together` | prefere manter valores escolhidos juntos | não usa |
+| `balanced_distribution` | soma as diferenças absolutas entre cada grupo e a mediana das quantidades | não usa |
+| `group_together` | penaliza cada pessoa escolhida que esteja em uma mesa misturada com outros valores | não usa |
 | `max_value` | prefere no máximo N ocorrências por grupo | obrigatório |
 
 Critérios são soft: adicionam penalidade, mas não tornam uma solução estruturalmente inválida.

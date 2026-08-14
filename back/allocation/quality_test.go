@@ -1,6 +1,7 @@
 package allocation
 
 import (
+	"reflect"
 	"testing"
 
 	types "candidate_alocator/back/type"
@@ -103,8 +104,8 @@ func TestQualitySubjectsDistinguishSoftPenaltyContributors(t *testing.T) {
 		{name: "minimum", criterion: types.SoftCriterion{Type: types.SoftCriterionMinValue, ColumnKey: "curso", SelectedValues: []string{"adm"}, Threshold: 2}, penalizedCandidates: 1, nonPenalizedCandidates: 2, penalizedGroups: 1, nonPenalizedGroups: 1},
 		{name: "maximum", criterion: types.SoftCriterion{Type: types.SoftCriterionMaxValue, ColumnKey: "curso", SelectedValues: []string{"adm"}, Threshold: 1}, penalizedCandidates: 2, nonPenalizedCandidates: 1, penalizedGroups: 1, nonPenalizedGroups: 1},
 		{name: "at least one", criterion: types.SoftCriterion{Type: types.SoftCriterionAtLeastOneEach, ColumnKey: "curso", SelectedValues: []string{"adm", "eco"}}, penalizedCandidates: 0, nonPenalizedCandidates: 4, penalizedGroups: 1, nonPenalizedGroups: 1},
-		{name: "balanced", criterion: types.SoftCriterion{Type: types.SoftCriterionBalancedDistribution, ColumnKey: "curso", SelectedValues: []string{"adm"}}, penalizedCandidates: 2, nonPenalizedCandidates: 1, penalizedGroups: 1, nonPenalizedGroups: 1},
-		{name: "together", criterion: types.SoftCriterion{Type: types.SoftCriterionGroupTogether, ColumnKey: "curso", SelectedValues: []string{"adm"}}, penalizedCandidates: 3, nonPenalizedCandidates: 0, penalizedGroups: 2, nonPenalizedGroups: 0},
+		{name: "balanced", criterion: types.SoftCriterion{Type: types.SoftCriterionBalancedDistribution, ColumnKey: "curso", SelectedValues: []string{"adm"}}, penalizedCandidates: 1, nonPenalizedCandidates: 2, penalizedGroups: 1, nonPenalizedGroups: 1},
+		{name: "together", criterion: types.SoftCriterion{Type: types.SoftCriterionGroupTogether, ColumnKey: "curso", SelectedValues: []string{"adm"}}, penalizedCandidates: 1, nonPenalizedCandidates: 2, penalizedGroups: 1, nonPenalizedGroups: 1},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -113,6 +114,25 @@ func TestQualitySubjectsDistinguishSoftPenaltyContributors(t *testing.T) {
 				t.Fatalf("unexpected classification: penalizedCandidates=%#v nonPenalizedCandidates=%#v penalizedGroups=%#v nonPenalizedGroups=%#v", penalizedCandidates, nonPenalizedCandidates, penalizedGroups, nonPenalizedGroups)
 			}
 		})
+	}
+}
+
+func TestBalancedQualityColorsGroupsAgainstMedian(t *testing.T) {
+	problem := types.AllocationProblem{
+		Candidates: []types.SolverCandidate{
+			{ID: 1, Attributes: map[string]string{"curso": "adm"}},
+			{ID: 2, Attributes: map[string]string{"curso": "adm"}},
+			{ID: 3, Attributes: map[string]string{"curso": "adm"}},
+		},
+		Groups: []types.SolverGroup{{ID: 1}, {ID: 2}},
+	}
+	state := types.PartialAllocationState{Assignments: map[int]int{1: 1, 2: 1, 3: 2}}
+	criterion := types.SoftCriterion{Type: types.SoftCriterionBalancedDistribution, ColumnKey: "curso", SelectedValues: []string{"adm"}}
+
+	_, penalizedCandidates, nonPenalizedCandidates, _, penalizedGroups, nonPenalizedGroups := qualitySubjectsForCriterion(problem, state, criterion)
+	if !reflect.DeepEqual(penalizedCandidates, []int{3}) || !reflect.DeepEqual(nonPenalizedCandidates, []int{1, 2}) ||
+		!reflect.DeepEqual(penalizedGroups, []int{2}) || !reflect.DeepEqual(nonPenalizedGroups, []int{1}) {
+		t.Fatalf("median highlighting mismatch: redCandidates=%#v greenCandidates=%#v redGroups=%#v greenGroups=%#v", penalizedCandidates, nonPenalizedCandidates, penalizedGroups, nonPenalizedGroups)
 	}
 }
 

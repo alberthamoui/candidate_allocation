@@ -46,13 +46,13 @@ func SoftCriterionOptions() []types.SoftCriterionOption {
 		{
 			Type:              types.SoftCriterionBalancedDistribution,
 			Label:             "Distribuição equilibrada",
-			Description:       "Espalhe os valores selecionados entre os grupos",
+			Description:       "Minimize a soma das diferenças para a mediana por grupo",
 			RequiresThreshold: false,
 		},
 		{
 			Type:              types.SoftCriterionGroupTogether,
 			Label:             "Agrupamento",
-			Description:       "Prefira manter os valores selecionados juntos",
+			Description:       "Penalize cada pessoa selecionada que esteja em uma mesa misturada",
 			RequiresThreshold: false,
 		},
 		{

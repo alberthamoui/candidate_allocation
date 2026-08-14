@@ -199,29 +199,30 @@ func qualitySubjectsForCriterion(problem types.AllocationProblem, state types.Pa
 		}
 	case types.SoftCriterionBalancedDistribution:
 		for _, value := range criterion.SelectedValues {
-			minimum := -1
+			groupCounts := make([]int, 0, len(problem.Groups))
 			for _, group := range problem.Groups {
-				count := counts[group.ID][value]
-				if minimum < 0 || count < minimum {
-					minimum = count
-				}
+				groupCounts = append(groupCounts, counts[group.ID][value])
 			}
+			median := medianInt(groupCounts)
 			for _, group := range problem.Groups {
-				if counts[group.ID][value] > minimum {
+				if counts[group.ID][value] != median {
 					markPenalized(group.ID, value)
 				}
 			}
 		}
 	case types.SoftCriterionGroupTogether:
-		subjectGroups := make(map[int]struct{})
+		selectedByGroup := make(map[int]bool)
+		outsiderByGroup := make(map[int]bool)
 		for candidateID, groupID := range state.Assignments {
 			value := normalizeSolverText(candidates[candidateID].Attributes[criterion.ColumnKey])
 			if _, ok := selected[value]; ok {
-				subjectGroups[groupID] = struct{}{}
+				selectedByGroup[groupID] = true
+			} else {
+				outsiderByGroup[groupID] = true
 			}
 		}
-		if len(subjectGroups) > 1 {
-			for groupID := range subjectGroups {
+		for groupID := range selectedByGroup {
+			if outsiderByGroup[groupID] {
 				markPenalized(groupID, "*")
 			}
 		}

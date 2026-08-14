@@ -59,7 +59,7 @@ Rotas de configuração e processamento podem montar antes de `window.go.main.Ap
 
 ## Eventos
 
-Durante o solver, `App.RunAllocation` publica `allocation:progress`. `AllocationLoadingPage` assina o evento por `EventsOn` e remove o listener ao desmontar. Contagens de branches são strings porque podem exceder inteiros JavaScript seguros.
+Durante o solver, `App` publica `allocation:progress` no máximo uma vez por segundo. `AllocationRunProvider` assina o evento por `EventsOn`, remove o listener ao desmontar e consulta o estado a cada dois segundos apenas como recuperação de eventos perdidos. Contagens de branches são strings porque podem exceder inteiros JavaScript seguros. As medições do primeiro e segundo minuto permanecem no contrato para diagnóstico, mas não são renderizadas na tela.
 
 ## Regra de alteração
 

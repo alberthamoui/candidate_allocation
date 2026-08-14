@@ -60,12 +60,16 @@ Quanto menor a penalidade, melhor. A política base sempre aplica:
 
 Depois são somados os componentes dos critérios configurados. Estados incompletos ou inválidos recebem penalidade sentinela de 1.000.000.
 
+No critério `group_together`, cada candidato com valor selecionado recebe uma penalidade quando sua mesa também contém candidatos de outros valores. Distribuir os selecionados entre várias mesas puras não gera penalidade. Em `balanced_distribution`, para cada valor selecionado, o score soma a distância absoluta da quantidade de cada grupo até a mediana dessas quantidades.
+
 ## Solver exato
 
 O solver usa branch-and-bound e prova optimalidade. Principais mecanismos:
 
-- incumbente inicial por min-cost flow;
+- incumbente inicial por min-cost flow e fallback de cardinalidade máxima quando uma solução completa não existe;
+- melhoria local direcionada às pessoas relacionadas ao score quando a solução tem menos de 40 pontos;
 - escolha do próximo candidato pela quantidade de opções viáveis;
+- uma única varredura dos candidatos restantes para calcular o lower bound simples e escolher o próximo candidato;
 - opções ordenadas por penalidade imediata e conflitos;
 - poda por hard constraint futura;
 - lower bound de score e min-cost completion;
@@ -73,11 +77,13 @@ O solver usa branch-and-bound e prova optimalidade. Principais mecanismos:
 - fronteira paralela com incumbente compartilhado;
 - decomposição de componentes independentes quando não há critérios adicionais e preferências são hard.
 
-O resultado é `optimal` ou `infeasible`. Métricas registram nós, estados completos, podas hard/bound/flow, simetrias, atualizações do melhor resultado e tarefas paralelas.
+O resultado é `optimal`, `feasible` ou `partial`. No resultado parcial, o solver maximiza quantas pessoas consegue alocar sem quebrar preferência obrigatória, avaliador proibido, capacidade ou o mínimo das mesas exibidas; as demais pessoas recebem violações `missing_assignment` e aparecem como não alocadas.
 
 ## Progresso
 
-O tracker estima o total como produto das opções estáticas por candidato, usa `big.Int`, contabiliza subárvores resolvidas/podadas e limita emissões a cada 100 ms. O evento Wails é `allocation:progress`.
+O tracker estima o total como produto das opções estáticas por candidato, usa `big.Int` e contabiliza subárvores resolvidas/podadas. As janelas internas do primeiro e do segundo minuto continuam disponíveis para diagnóstico e teste de desempenho, mas não são exibidas na interface.
+
+O evento Wails é `allocation:progress`, limitado a uma emissão por segundo. A serialização para o frontend ocorre fora dos mutexes usados pelos workers, assim como a publicação de uma nova solução incumbente, para que uma WebView lenta não serialize a busca paralela. Antes da enumeração exata, `allocation:solution` publica uma solução completa ou o fallback parcial, garantindo conteúdo útil sem esperar um minuto. Depois disso, uma solução só substitui a exibida quando aloca mais candidatos, reduz violações hard ou, nos demais empates, reduz estritamente o score soft.
 
 ## Caminho legado
 

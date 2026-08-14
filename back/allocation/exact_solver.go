@@ -69,10 +69,13 @@ type preparedTask struct {
 }
 
 type sharedIncumbent struct {
-	mu        sync.RWMutex
-	best      *types.SolverResult
-	taskIndex int
-	callback  func(types.SolverResult)
+	mu                   sync.RWMutex
+	callbackMu           sync.Mutex
+	best                 *types.SolverResult
+	taskIndex            int
+	callback             func(types.SolverResult)
+	nextCallbackSequence uint64
+	lastCallbackSequence uint64
 }
 
 type buildFrontierContext struct {
@@ -117,6 +120,7 @@ func solveConnectedAllocation(problem types.AllocationProblem, options SolverOpt
 		progress:  progress,
 		incumbent: incumbent,
 	}
+	fallback := buildPartialResult(problem, maximumCardinalityMinCostAssignment(view, &root))
 
 	if assignment, feasible := initialMinCostAssignment(view, &root); feasible {
 		assignment = improveInitialAssignment(view, assignment)
@@ -128,6 +132,8 @@ func solveConnectedAllocation(problem types.AllocationProblem, options SolverOpt
 				frontier.note(fmt.Sprintf("initial min-cost incumbent: score=%d", result.Score.TotalPenalty))
 			}
 		}
+	} else if normalizedOptions.Incumbent != nil {
+		normalizedOptions.Incumbent(cloneSolverResult(fallback))
 	}
 
 	frontier.expand(&root, normalizedOptions.ParallelDepth, rootWeight)
@@ -143,12 +149,13 @@ func solveConnectedAllocation(problem types.AllocationProblem, options SolverOpt
 			return *best
 		}
 		if normalizedOptions.cancelled() {
-			return types.SolverResult{Status: "cancelled", Metrics: frontier.metrics, DebugNotes: append([]string(nil), frontier.debugNotes...)}
+			fallback.Metrics = frontier.metrics
+			fallback.DebugNotes = append([]string(nil), frontier.debugNotes...)
+			return fallback
 		}
-		result := buildInfeasibleResult(frontier.hardWitness)
-		result.Metrics = frontier.metrics
-		result.DebugNotes = append([]string(nil), frontier.debugNotes...)
-		return result
+		fallback.Metrics = frontier.metrics
+		fallback.DebugNotes = append([]string(nil), frontier.debugNotes...)
+		return fallback
 	}
 
 	results := make([]subtreeOutcome, len(frontier.tasks))
@@ -194,13 +201,12 @@ func solveConnectedAllocation(problem types.AllocationProblem, options SolverOpt
 
 	best := incumbent.snapshot()
 	if best == nil {
-		if normalizedOptions.cancelled() {
-			return types.SolverResult{Status: "cancelled", Metrics: finalMetrics, DebugNotes: finalNotes}
+		fallback.Metrics = finalMetrics
+		fallback.DebugNotes = finalNotes
+		if len(fallback.HardViolations) == 0 {
+			fallback.HardViolations = append([]types.HardConstraintViolation(nil), finalWitness...)
 		}
-		result := buildInfeasibleResult(finalWitness)
-		result.Metrics = finalMetrics
-		result.DebugNotes = finalNotes
-		return result
+		return fallback
 	}
 	if normalizedOptions.cancelled() {
 		best.Status = "feasible"
@@ -448,7 +454,7 @@ func (solver *subtreeSolver) search(state *solverState, weight *big.Int) {
 	}
 	solver.metrics.NodesVisited++
 	solver.progress.visitNode()
-	if violation := futureHardViolation(solver.view, state); violation != nil {
+	if violation := futureStructuralHardViolation(solver.view, state); violation != nil {
 		solver.metrics.NodesPrunedByHard++
 		solver.captureWitness([]types.HardConstraintViolation{*violation})
 		solver.note("hard prune: " + violation.Code)
@@ -467,9 +473,10 @@ func (solver *subtreeSolver) resume(state *solverState, weight *big.Int) {
 		return
 	}
 
-	lowerBound, feasible := simpleLowerBound(solver.view, state)
+	lowerBound, candidateID, feasible := lowerBoundAndNextCandidate(solver.view, state)
 	if !feasible {
 		solver.metrics.NodesPrunedByHard++
+		solver.captureWitness([]types.HardConstraintViolation{candidateWithoutGroupViolation(candidateID)})
 		solver.progress.resolve(weight, true)
 		return
 	}
@@ -503,7 +510,7 @@ func (solver *subtreeSolver) resume(state *solverState, weight *big.Int) {
 		return
 	}
 
-	candidateID, options, symmetrySkipped := chooseNextCandidate(solver.view, state)
+	options, symmetrySkipped := currentFeasibleOptions(solver.view, state, candidateID, true)
 	solver.metrics.BranchesSkippedBySymmetry += symmetrySkipped
 	if candidateID == 0 || len(options) == 0 {
 		violation := candidateWithoutGroupViolation(candidateID)
@@ -534,7 +541,13 @@ func (solver *subtreeSolver) evaluateCompleteState(state *solverState, weight *b
 		solver.progress.resolve(weight, true)
 		return
 	}
-	result := types.SolverResult{Status: "feasible", Assignments: assignments, Score: ScoreAllocation(solver.view.problem, partial)}
+	score := ScoreAllocation(solver.view.problem, partial)
+	if score.TotalPenalty > 0 && score.TotalPenalty < localImprovementScoreThreshold && solver.incumbent.canImprove(score.TotalPenalty) {
+		assignments = improveInitialAssignment(solver.view, assignments)
+		partial.Assignments = assignments
+		score = ScoreAllocation(solver.view.problem, partial)
+	}
+	result := types.SolverResult{Status: "feasible", Assignments: assignments, Score: score}
 	if solver.incumbent.update(result, solver.taskIndex) {
 		solver.metrics.BestUpdates++
 		solver.note(fmt.Sprintf("best update: score=%d assignments=%s", result.Score.TotalPenalty, formatAssignments(assignments)))
@@ -543,24 +556,39 @@ func (solver *subtreeSolver) evaluateCompleteState(state *solverState, weight *b
 }
 
 func simpleLowerBound(view solverProblemView, state *solverState) (int, bool) {
+	total, _, feasible := lowerBoundAndNextCandidate(view, state)
+	return total, feasible
+}
+
+func lowerBoundAndNextCandidate(view solverProblemView, state *solverState) (int, int, bool) {
 	total := state.BasePenalty
+	nextCandidateID := 0
+	nextOptionCount := 0
 	for candidateIndex, candidateID := range view.sortedCandidateIDs {
 		if state.Assignments[candidateIndex] != 0 {
 			continue
 		}
-		options, _ := currentFeasibleOptions(view, state, candidateID, false)
-		if len(options) == 0 {
-			return 0, false
-		}
-		minimum := options[0].ImmediatePenalty
-		for _, option := range options[1:] {
-			if option.ImmediatePenalty < minimum {
+		optionCount := 0
+		minimum := 0
+		for _, option := range view.candidateGroupOptions[candidateID] {
+			if view.problem.HardRestrictions.EnforceGroupCapacity && state.GroupCounts[option.GroupIndex] >= view.groups[option.GroupID].MaxCandidates {
+				continue
+			}
+			if optionCount == 0 || option.ImmediatePenalty < minimum {
 				minimum = option.ImmediatePenalty
 			}
+			optionCount++
+		}
+		if optionCount == 0 {
+			return 0, candidateID, false
+		}
+		if nextCandidateID == 0 || optionCount < nextOptionCount || (optionCount == nextOptionCount && candidateID < nextCandidateID) {
+			nextCandidateID = candidateID
+			nextOptionCount = optionCount
 		}
 		total += minimum
 	}
-	return total + criterionLowerBound(view, state), true
+	return total + criterionLowerBound(view, state), nextCandidateID, true
 }
 
 func criterionLowerBound(view solverProblemView, state *solverState) int {
@@ -635,43 +663,55 @@ func lowerBoundBalancedDistributionCriterion(view solverProblemView, state *solv
 	criterion := view.criteria[criterionIndex].criterion
 	penalty := 0
 	for valueIndex := range criterion.SelectedValues {
-		maximumCurrent := 0
-		minimumReachable := int(^uint(0) >> 1)
+		minimums := make([]int, len(view.sortedGroupIDs))
+		maximums := make([]int, len(view.sortedGroupIDs))
+		minimumMedian := 0
+		maximumMedian := 0
 		for groupIndex := range view.sortedGroupIDs {
 			current := state.CriterionCounts[criterionIndex][groupIndex][valueIndex]
-			if current > maximumCurrent {
-				maximumCurrent = current
-			}
 			reachable := current + potentialValueCount(view, state, criterionIndex, groupIndex, valueIndex)
-			if reachable < minimumReachable {
-				minimumReachable = reachable
+			minimums[groupIndex] = current
+			maximums[groupIndex] = reachable
+			if groupIndex == 0 || current < minimumMedian {
+				minimumMedian = current
+			}
+			if groupIndex == 0 || reachable > maximumMedian {
+				maximumMedian = reachable
 			}
 		}
-		if difference := maximumCurrent - minimumReachable; difference > 0 {
-			penalty += difference
+		best := int(^uint(0) >> 1)
+		for median := minimumMedian; median <= maximumMedian; median++ {
+			deviation := 0
+			for groupIndex := range minimums {
+				if median < minimums[groupIndex] {
+					deviation += minimums[groupIndex] - median
+				} else if median > maximums[groupIndex] {
+					deviation += median - maximums[groupIndex]
+				}
+			}
+			if deviation < best {
+				best = deviation
+			}
+		}
+		if best != int(^uint(0)>>1) {
+			penalty += best
 		}
 	}
 	return penalty
 }
 
 func lowerBoundGroupTogetherCriterion(view solverProblemView, state *solverState, criterionIndex int) int {
-	groupsWithValues := 0
+	penalty := 0
 	for groupIndex := range view.sortedGroupIDs {
-		containsSelected := false
+		selectedCount := 0
 		for valueIndex := range view.criteria[criterionIndex].criterion.SelectedValues {
-			if state.CriterionCounts[criterionIndex][groupIndex][valueIndex] > 0 {
-				containsSelected = true
-				break
-			}
+			selectedCount += state.CriterionCounts[criterionIndex][groupIndex][valueIndex]
 		}
-		if containsSelected {
-			groupsWithValues++
+		if selectedCount > 0 && state.GroupCounts[groupIndex] > selectedCount {
+			penalty += selectedCount
 		}
 	}
-	if groupsWithValues <= 1 {
-		return 0
-	}
-	return groupsWithValues - 1
+	return penalty
 }
 
 func potentialValueCount(view solverProblemView, state *solverState, criterionIndex, groupIndex, valueIndex int) int {
@@ -696,10 +736,8 @@ func potentialValueCount(view solverProblemView, state *solverState, criterionIn
 }
 
 func futureHardViolation(view solverProblemView, state *solverState) *types.HardConstraintViolation {
-	remaining := len(view.sortedCandidateIDs) - state.AssignedCount
-	if view.problem.HardRestrictions.AllCandidatesMustBeAssigned && remaining > remainingCapacity(view, state) {
-		violation := insufficientCapacityViolation(remaining, remainingCapacity(view, state))
-		return &violation
+	if violation := futureStructuralHardViolation(view, state); violation != nil {
+		return violation
 	}
 	for candidateIndex, candidateID := range view.sortedCandidateIDs {
 		if state.Assignments[candidateIndex] != 0 {
@@ -709,6 +747,15 @@ func futureHardViolation(view solverProblemView, state *solverState) *types.Hard
 			violation := candidateWithoutGroupViolation(candidateID)
 			return &violation
 		}
+	}
+	return nil
+}
+
+func futureStructuralHardViolation(view solverProblemView, state *solverState) *types.HardConstraintViolation {
+	remaining := len(view.sortedCandidateIDs) - state.AssignedCount
+	if view.problem.HardRestrictions.AllCandidatesMustBeAssigned && remaining > remainingCapacity(view, state) {
+		violation := insufficientCapacityViolation(remaining, remainingCapacity(view, state))
+		return &violation
 	}
 	for groupIndex, groupID := range view.sortedGroupIDs {
 		group := view.groups[groupID]
@@ -917,7 +964,7 @@ func (incumbent *sharedIncumbent) update(result types.SolverResult, taskIndex in
 			incumbent.mu.Unlock()
 			return false
 		}
-		if result.Score.TotalPenalty == incumbent.best.Score.TotalPenalty && taskIndex >= incumbent.taskIndex {
+		if result.Score.TotalPenalty == incumbent.best.Score.TotalPenalty {
 			incumbent.mu.Unlock()
 			return false
 		}
@@ -926,23 +973,33 @@ func (incumbent *sharedIncumbent) update(result types.SolverResult, taskIndex in
 	incumbent.best = &copied
 	incumbent.taskIndex = taskIndex
 	callback := incumbent.callback
-	if callback != nil {
-		callback(cloneSolverResult(copied))
-	}
+	incumbent.nextCallbackSequence++
+	sequence := incumbent.nextCallbackSequence
 	incumbent.mu.Unlock()
+	incumbent.emitCallback(callback, copied, sequence)
 	return true
 }
 
-func (incumbent *sharedIncumbent) shouldPrune(lowerBound, taskIndex int) bool {
+func (incumbent *sharedIncumbent) emitCallback(callback func(types.SolverResult), result types.SolverResult, sequence uint64) {
+	if callback == nil {
+		return
+	}
+	incumbent.callbackMu.Lock()
+	defer incumbent.callbackMu.Unlock()
+	if sequence <= incumbent.lastCallbackSequence {
+		return
+	}
+	callback(cloneSolverResult(result))
+	incumbent.lastCallbackSequence = sequence
+}
+
+func (incumbent *sharedIncumbent) shouldPrune(lowerBound, _ int) bool {
 	incumbent.mu.RLock()
 	defer incumbent.mu.RUnlock()
 	if incumbent.best == nil {
 		return false
 	}
-	if lowerBound > incumbent.best.Score.TotalPenalty {
-		return true
-	}
-	return lowerBound == incumbent.best.Score.TotalPenalty && incumbent.taskIndex <= taskIndex
+	return lowerBound >= incumbent.best.Score.TotalPenalty
 }
 
 func (incumbent *sharedIncumbent) snapshot() *types.SolverResult {
@@ -953,6 +1010,12 @@ func (incumbent *sharedIncumbent) snapshot() *types.SolverResult {
 	}
 	copied := cloneSolverResult(*incumbent.best)
 	return &copied
+}
+
+func (incumbent *sharedIncumbent) canImprove(score int) bool {
+	incumbent.mu.RLock()
+	defer incumbent.mu.RUnlock()
+	return incumbent.best == nil || score < incumbent.best.Score.TotalPenalty
 }
 
 func mergeSolverMetrics(left, right types.SolverMetrics) types.SolverMetrics {
@@ -980,13 +1043,31 @@ func cloneSolverResult(result types.SolverResult) types.SolverResult {
 	return result
 }
 
-func buildInfeasibleResult(violations []types.HardConstraintViolation) types.SolverResult {
-	result := types.SolverResult{Status: "infeasible", Assignments: map[int]int{}, HardViolations: append([]types.HardConstraintViolation(nil), violations...), DebugNotes: []string{}}
-	if len(violations) == 0 {
-		result.RejectionReason = "nenhuma solucao hard valida foi encontrada"
-	} else {
-		result.RejectionReason = violations[0].Message
+func buildPartialResult(problem types.AllocationProblem, assignments map[int]int) types.SolverResult {
+	partial := types.PartialAllocationState{Assignments: cloneAssignments(assignments)}
+	violations := make([]types.HardConstraintViolation, 0, len(problem.Candidates)-len(assignments))
+	for _, candidate := range problem.Candidates {
+		if _, assigned := assignments[candidate.ID]; assigned {
+			continue
+		}
+		violations = append(violations, types.HardConstraintViolation{
+			Code:        "missing_assignment",
+			Message:     fmt.Sprintf("candidato %d nao foi alocado", candidate.ID),
+			CandidateID: candidate.ID,
+		})
 	}
+	result := types.SolverResult{
+		Status:         "partial",
+		Assignments:    partial.Assignments,
+		Score:          scoreAssignedAllocation(problem, partial),
+		HardViolations: violations,
+		DebugNotes:     []string{},
+	}
+	if len(violations) == 0 {
+		result.Status = "feasible"
+		return result
+	}
+	result.RejectionReason = fmt.Sprintf("%d candidato(s) nao puderam ser alocados sem violar restricoes obrigatorias", len(violations))
 	return result
 }
 

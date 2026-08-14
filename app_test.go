@@ -244,17 +244,25 @@ func TestAllocationRunStateTracksProgressSolutionAndCompletion(t *testing.T) {
 	app.allocationRunning = true
 	app.allocationRunID = 7
 	progress := allocation.SolverProgress{Percent: 99.9, TotalBranches: "100000000"}
-	provisional := UIAllocationResult{Status: "Solução provisória", SolverStatus: "feasible"}
+	provisional := UIAllocationResult{Status: "Solução provisória", SolverStatus: "feasible", Score: types.SoftScoreBreakdown{TotalPenalty: 10}}
+	equal := UIAllocationResult{Status: "Solução empatada", SolverStatus: "feasible", Score: types.SoftScoreBreakdown{TotalPenalty: 10}}
+	better := UIAllocationResult{Status: "Solução melhor", SolverStatus: "feasible", Score: types.SoftScoreBreakdown{TotalPenalty: 9}}
 	optimal := UIAllocationResult{Status: "Sucesso!", SolverStatus: "optimal"}
 
 	if !app.updateAllocationProgress(7, progress) || !app.updateAllocationSolution(7, provisional) {
 		t.Fatal("expected matching active run updates to be accepted")
 	}
+	if app.updateAllocationSolution(7, equal) {
+		t.Fatal("equal-score solution must not update the UI state")
+	}
+	if !app.updateAllocationSolution(7, better) {
+		t.Fatal("strictly better solution must update the UI state")
+	}
 	if lightweight := app.GetAllocationRunState(false); lightweight.Result != nil || !lightweight.HasResult {
 		t.Fatalf("lightweight polling state must report result availability without its payload: %#v", lightweight)
 	}
 	state := app.GetAllocationRunState(true)
-	if !state.Running || !state.HasResult || state.Progress.Percent != 99.9 || state.Result == nil || state.Result.SolverStatus != "feasible" {
+	if !state.Running || !state.HasResult || state.Progress.Percent != 99.9 || state.Result == nil || state.Result.Status != "Solução melhor" {
 		t.Fatalf("unexpected active run state: %#v", state)
 	}
 	if !app.completeAllocationRun(7, optimal) {
@@ -266,6 +274,24 @@ func TestAllocationRunStateTracksProgressSolutionAndCompletion(t *testing.T) {
 	}
 	if app.updateAllocationProgress(7, allocation.SolverProgress{Percent: 50}) || app.completeAllocationRun(6, optimal) {
 		t.Fatal("completed or stale runs must not mutate the authoritative state")
+	}
+}
+
+func TestAllocationRunPrefersMoreAllocatedCandidatesBeforeSoftScore(t *testing.T) {
+	app := NewApp()
+	app.allocationRunning = true
+	app.allocationRunID = 8
+	partial := UIAllocationResult{
+		SolverStatus: "partial", NaoAlocados: []UICandidate{{ID: 2}},
+		HardViolations: []types.HardConstraintViolation{{Code: "missing_assignment", CandidateID: 2}},
+		Score:          types.SoftScoreBreakdown{TotalPenalty: 1},
+	}
+	complete := UIAllocationResult{SolverStatus: "feasible", Score: types.SoftScoreBreakdown{TotalPenalty: 25}}
+	if !app.updateAllocationSolution(8, partial) || !app.updateAllocationSolution(8, complete) {
+		t.Fatal("a complete allocation must replace a lower-score partial allocation")
+	}
+	if got := app.GetAllocationRunState(true); got.Result == nil || got.Result.SolverStatus != "feasible" {
+		t.Fatalf("expected complete result to be retained, got %#v", got)
 	}
 }
 
@@ -297,5 +323,23 @@ func TestBuildUIAllocationResultMarksFeasibleSolutionAsProvisional(t *testing.T)
 	result := buildUIAllocationResult(run)
 	if result.Status != "Solução provisória" || result.SolverStatus != "feasible" || len(result.Mesas) != 1 {
 		t.Fatalf("unexpected provisional UI result: %#v", result)
+	}
+}
+
+func TestBuildUIAllocationResultExposesPartialCandidatesAsUnallocated(t *testing.T) {
+	run := allocation.ConfiguredAllocationResult{
+		Problem: types.AllocationProblem{
+			Candidates: []types.SolverCandidate{{ID: 1, Name: "Ana"}, {ID: 2, Name: "Bia"}},
+			Groups:     []types.SolverGroup{{ID: 1, Label: "segunda grupo 1"}},
+		},
+		Result: types.SolverResult{
+			Status: "partial", Assignments: map[int]int{1: 1},
+			HardViolations: []types.HardConstraintViolation{{Code: "missing_assignment", CandidateID: 2}},
+		},
+		Candidatos: []types.Candidato{{Nome: "Ana"}, {Nome: "Bia"}},
+	}
+	result := buildUIAllocationResult(run)
+	if result.Status != "Alocação parcial" || len(result.Mesas) != 1 || len(result.NaoAlocados) != 1 || result.NaoAlocados[0].Nome != "Bia" {
+		t.Fatalf("unexpected partial UI result: %#v", result)
 	}
 }

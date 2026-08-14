@@ -7,6 +7,12 @@ export namespace allocation {
 	    branchesPruned: string;
 	    nodesVisited: number;
 	    prunedSubtrees: number;
+	    firstMinuteComplete: boolean;
+	    firstMinuteBranchesResolved: string;
+	    firstMinuteNodesVisited: number;
+	    secondMinuteComplete: boolean;
+	    secondMinuteBranchesResolved: string;
+	    secondMinuteNodesVisited: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new SolverProgress(source);
@@ -20,6 +26,12 @@ export namespace allocation {
 	        this.branchesPruned = source["branchesPruned"];
 	        this.nodesVisited = source["nodesVisited"];
 	        this.prunedSubtrees = source["prunedSubtrees"];
+	        this.firstMinuteComplete = source["firstMinuteComplete"];
+	        this.firstMinuteBranchesResolved = source["firstMinuteBranchesResolved"];
+	        this.firstMinuteNodesVisited = source["firstMinuteNodesVisited"];
+	        this.secondMinuteComplete = source["secondMinuteComplete"];
+	        this.secondMinuteBranchesResolved = source["secondMinuteBranchesResolved"];
+	        this.secondMinuteNodesVisited = source["secondMinuteNodesVisited"];
 	    }
 	}
 
