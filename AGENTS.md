@@ -1,18 +1,14 @@
-# Recomendações e regras para o código
+# Regras para agentes
 
-O workflow oficial deve ter uma única fonte de verdade no backend. Para alterar etapas, defaults ou critérios soft, atualize primeiro `back/logic/workflow_definition.go` e faça CLI, Wails e frontend consumirem esse contrato, sem duplicar regras no frontend ou em `back/workflow/import_cli.go`. (necessário)
+## Fontes de verdade
 
-Sempre rode os testes depois para validar que você não quebrou nada. (necessário)
-Sempre rode o linter depois para validar se não existe algum erro (necessário)
+- O workflow, seus defaults, critérios soft e otimização base têm uma única fonte de verdade em `back/logic/workflow_definition.go`.
+- Os modelos e metadados de persistência/mapeamento vêm de `back/type/types.go` e `back/type/metadata.go`.
+- Não duplique essas regras no frontend, no CLI ou na documentação. Consumidores devem usar o contrato do backend.
 
-Sempre que você tiver alguma informação util para que o proximo agente não se perca na implementação do código altere o arquivo Docs.md nele faça uma documentação high level de como funciona a solução .
+## Implementação e testes
 
-Se você considerar que existe informações desnecessárias no AGENTS.md ou no Docs.md Você pode altera-las e removelas.(necessário)
-
-Sempre que você fizer uma função crie um teste para essa função
-
-Sempre que você criar, modificar ou adicionar uma feature no front-end (UI), você **deve** criar ou atualizar os testes no diretório `tools/ui-testing`. (necessário)
-
-Para rodar os testes de UI após implementar qualquer funcionalidade e garantir que você não quebrou nada no layout ou comportamento do front-end:
-1. Certifique-se de que a aplicação `wails dev` está rodando em background (`wails dev &` caso não esteja).
-2. Vá para `tools/ui-testing` e rode `./runner.sh`. Verifique se os testes passam, olhando também `test-results/report.json` se houver falhas.
+- Toda função nova deve ter teste.
+- Sempre execute `go test ./...` e `make lint` depois de mudanças.
+- Toda criação ou alteração de UI deve criar ou atualizar testes em `tools/ui-testing`.
+- Para testes de UI, mantenha `wails dev` ativo, execute `tools/ui-testing/runner.sh` e examine `tools/ui-testing/test-results/report.json` em caso de falha.

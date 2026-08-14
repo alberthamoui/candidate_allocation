@@ -1,0 +1,137 @@
+version: 1
+
+entrypoint: docs/README.md
+
+policy:
+  code_and_tests_are_evidence: true
+  historical_adrs_are_append_only: true
+  unknown_facts_must_be_marked_needs_review: true
+  use_relative_paths: true
+
+ignored_paths:
+  - path: .git/**
+    reason: metadata do controle de versão
+  - path: build/**
+    reason: artefatos de build
+  - path: frontend/dist/**
+    reason: frontend compilado
+  - path: frontend/wailsjs/runtime/**
+    reason: runtime gerado pelo Wails
+  - path: '**/node_modules/**'
+    reason: dependências instaladas
+  - path: '**/test-results/**'
+    reason: artefatos de testes
+
+documents:
+  - id: documentation-index
+    path: docs/README.md
+    sources: [docs/manifest.yaml, docs/**/*.md]
+    related: [documentation-update, code-map, glossary]
+
+  - id: system-overview
+    path: docs/architecture/system-overview.md
+    sources: [main.go, cli.go, app.go, back/**, frontend/src/**]
+    related: [frontend-backend-boundary, data-flow, code-map]
+
+  - id: frontend-backend-boundary
+    path: docs/architecture/frontend-backend-boundary.md
+    sources: [app.go, frontend/src/**, frontend/wailsjs/go/**]
+    tests: [app_test.go, wails_bindings_test.go, tools/ui-testing/tests/**]
+
+  - id: data-flow
+    path: docs/architecture/data-flow.md
+    sources: [back/logic/**, back/db/**, back/allocation/**, app.go, frontend/src/main.tsx]
+
+  - id: import-workflow
+    path: docs/features/import-workflow.md
+    sources: [back/logic/logic.go, back/logic/mapping_suggester.go, back/workflow/import_cli.go, frontend/src/App.tsx]
+    tests: [back/logic/logic_test.go, back/logic/mapping_suggester_test.go, back/workflow/import_cli_test.go, tools/ui-testing/tests/01-home.spec.ts, tools/ui-testing/tests/04-full-journey.spec.ts]
+
+  - id: mapping-and-review
+    path: docs/features/mapping-and-review.md
+    sources: [back/type/metadata.go, back/logic/logic.go, frontend/src/MappingEditorPage.tsx, frontend/src/EntityVerificationView.tsx, frontend/src/Mapping*.tsx, frontend/src/Verify*.tsx]
+    tests: [back/type/metadata_test.go, back/logic/logic_test.go, tools/ui-testing/tests/02-mapping-erros.spec.ts, tools/ui-testing/tests/03-verification.spec.ts]
+
+  - id: allocation-configuration
+    path: docs/features/allocation-configuration.md
+    sources: [back/logic/workflow_definition.go, back/logic/preference_logic.go, back/logic/allocation_config_logic.go, back/logic/allocation_quantities.go, frontend/src/AllocationConfigPage.tsx]
+    tests: [back/logic/workflow_definition_test.go, back/logic/preference_logic_test.go, back/logic/allocation_config_logic_test.go, back/logic/allocation_quantities_test.go, tools/ui-testing/tests/05-allocation.spec.ts]
+
+  - id: allocation-execution
+    path: docs/features/allocation-execution.md
+    sources: [back/allocation/**, back/type/types.go, app.go, frontend/src/AllocationLoadingPage.tsx]
+    tests: [back/allocation/*_test.go, app_test.go, tools/ui-testing/tests/05-allocation.spec.ts]
+
+  - id: allocation-results
+    path: docs/features/allocation-results.md
+    sources: [back/allocation/quality.go, app.go, frontend/src/AllocationResultPage.tsx]
+    tests: [back/allocation/quality_test.go, app_test.go, tools/ui-testing/tests/05-allocation.spec.ts]
+
+  - id: workflow-definition
+    path: docs/contracts/workflow-definition.md
+    sources: [back/logic/workflow_definition.go, back/type/types.go]
+    consumers: [back/workflow/import_cli.go, app.go, frontend/src/AllocationConfigPage.tsx, frontend/src/workflowMeta.ts]
+    tests: [back/logic/workflow_definition_test.go, app_test.go, wails_bindings_test.go]
+
+  - id: domain-models
+    path: docs/contracts/domain-models.md
+    sources: [back/type/types.go, back/type/metadata.go]
+    tests: [back/type/*_test.go, wails_bindings_test.go]
+
+  - id: wails-api
+    path: docs/contracts/wails-api.md
+    sources: [app.go, frontend/wailsjs/go/main/App.d.ts, frontend/wailsjs/go/models.ts]
+    tests: [app_test.go, wails_bindings_test.go]
+
+  - id: database-schema
+    path: docs/contracts/database-schema.md
+    sources: [back/db/**, back/logic/logic.go, back/allocation/configured_service.go]
+    tests: [back/db/*_test.go, back/logic/logic_test.go, back/allocation/configured_service_test.go]
+
+  - id: development
+    path: docs/operations/development.md
+    sources: [go.mod, go.sum, wails.json, Makefile, package.json, package-lock.json, frontend/package.json*, frontend/package-lock.json, frontend/index.html, frontend/*.config.*, frontend/tsconfig*.json, scripts/**, opencode.json]
+
+  - id: testing
+    path: docs/operations/testing.md
+    sources: [Makefile, tools/unexported/**, tools/ui-testing/**, '**/*_test.go', Execelteste/**]
+
+  - id: troubleshooting
+    path: docs/operations/troubleshooting.md
+    sources: [tools/ui-testing/runner.sh, tools/ui-testing/agent_inspect.js, frontend/src/wailsReady.ts, app.go, opencode.json]
+
+  - id: documentation-update
+    path: docs/operations/documentation-update.md
+    sources: [AGENTS.md, docs/manifest.yaml, docs/**]
+
+  - id: decisions-index
+    path: docs/decisions/README.md
+    sources: [docs/decisions/ADR-*.md]
+
+  - id: adr-0001
+    path: docs/decisions/ADR-0001-workflow-single-source-of-truth.md
+    sources: [AGENTS.md, back/logic/workflow_definition.go, back/logic/workflow_definition_test.go]
+
+  - id: adr-0002
+    path: docs/decisions/ADR-0002-configured-exact-solver.md
+    sources: [back/allocation/configured_service.go, back/allocation/configured_problem.go, back/allocation/exact_solver.go, back/allocation/configured_service_test.go, back/allocation/exact_solver_test.go]
+
+  - id: code-map
+    path: docs/reference/code-map.md
+    sources: ['**/*.go', frontend/src/**, tools/**, scripts/**]
+
+  - id: glossary
+    path: docs/reference/glossary.md
+    sources: [back/type/**, back/logic/workflow_definition.go, back/allocation/**, frontend/src/**]
+
+  - id: known-limitations
+    path: docs/reference/known-limitations.md
+    sources: [back/**, frontend/src/**, draft_app.go, fix-helphint.js, README.md]
+
+  - id: generated-wails-bindings
+    path: docs/generated/wails-bindings.md
+    sources: [app.go, frontend/wailsjs/go/**]
+
+  - id: generated-test-inventory
+    path: docs/generated/test-inventory.md
+    sources: ['**/*_test.go', tools/ui-testing/tests/**, tools/ui-testing/agent_inspect.test.js]
