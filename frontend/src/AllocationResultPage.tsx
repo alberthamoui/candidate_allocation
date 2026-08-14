@@ -4,9 +4,12 @@ import { Tooltip } from "./components/Tooltip";
 import {
 	EmptyState,
 	MetricPill,
+	PrimaryButton,
+	SecondaryButton,
 	SectionCard,
 	StatusBadge,
 } from "./workflowShell";
+import { useAllocationRun } from "./AllocationRunContext";
 
 type PersonSelection =
 	| { kind: "candidate"; person: any }
@@ -15,6 +18,14 @@ type PersonSelection =
 
 const normalizeFilterValue = (value: unknown) =>
 	String(value ?? "").trim().toLocaleLowerCase("pt-BR");
+
+const formatLargeCount = (value: string) => {
+	try {
+		return BigInt(value).toLocaleString("pt-BR");
+	} catch {
+		return value;
+	}
+};
 
 const uniqueDisplayValues = (values: unknown[]) => {
 	const byNormalizedValue = new Map<string, string>();
@@ -112,7 +123,9 @@ function PersonDetailsPopover({ selection, onClose }: { selection: PersonSelecti
 
 export default function AllocationResultPage() {
 	const location = useLocation();
-	const result = location.state?.result;
+	const allocationRun = useAllocationRun();
+	const result = allocationRun.result || location.state?.result;
+	const [continueConfirmed, setContinueConfirmed] = useState(false);
 	const [selectedSemestre, setSelectedSemestre] = useState("");
 	const [selectedCurso, setSelectedCurso] = useState("");
 	const [searchTerm, setSearchTerm] = useState("");
@@ -195,9 +208,41 @@ export default function AllocationResultPage() {
 
 	return (
 		<div className="space-y-6" data-testid="allocation-result-page">
+		{allocationRun.running ? (
+			<SectionCard
+				title="Solução válida encontrada — verificação continua"
+				description="Esta distribuição já pode ser usada. O solver continua analisando as possibilidades restantes para tentar reduzir o score e provar a melhor solução."
+				aside={<StatusBadge tone="accent">Verificando alternativas</StatusBadge>}
+				className="border-indigo-200 ring-1 ring-indigo-100"
+			>
+				<div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
+					<div>
+						<div className="mb-3 flex items-end justify-between gap-4">
+							<div>
+								<div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Possibilidades totais</div>
+								<div className="mt-1 font-semibold" data-testid="result-total-possibilities">{formatLargeCount(allocationRun.progress.totalBranches)}</div>
+							</div>
+							<div className="text-2xl font-semibold text-[var(--accent)]" data-testid="result-progress-percent">{Math.min(100, Math.max(0, allocationRun.progress.percent)).toFixed(1)}%</div>
+						</div>
+						<div className="h-3 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Verificação de outras soluções" aria-valuemin={0} aria-valuemax={100} aria-valuenow={allocationRun.progress.percent}>
+							<div className="h-full rounded-full bg-[linear-gradient(90deg,var(--accent),#8b94ed)] transition-[width] duration-300" style={{ width: `${Math.min(100, Math.max(0, allocationRun.progress.percent))}%` }} />
+						</div>
+						{continueConfirmed ? <p className="mt-3 text-sm font-medium text-indigo-800">A verificação continuará; esta tela será atualizada quando surgir uma solução melhor.</p> : null}
+					</div>
+					<div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+						<PrimaryButton type="button" data-testid="continue-search-button" onClick={() => setContinueConfirmed(true)}>Continuar verificando</PrimaryButton>
+						<SecondaryButton type="button" data-testid="stop-search-button" onClick={() => allocationRun.stop()}>Parar e ficar com esta solução</SecondaryButton>
+					</div>
+				</div>
+			</SectionCard>
+		) : result.solverStatus === "feasible" ? (
+			<SectionCard title="Verificação interrompida" description="A melhor solução encontrada foi preservada, mas a optimalidade não foi comprovada." aside={<StatusBadge tone="success">Solução mantida</StatusBadge>}>
+				<p className="text-sm text-[var(--muted)]">Você pode usar esta alocação normalmente ou iniciar uma nova execução para continuar refinando.</p>
+			</SectionCard>
+		) : null}
 			<SectionCard
 				title="Resumo da alocação"
-				description="Visão geral da rodada concluída."
+				description={allocationRun.running ? "Melhor solução válida encontrada até agora." : "Visão geral da rodada concluída."}
 				aside={<StatusBadge tone={result.status === "Sucesso!" ? "success" : "accent"}>{result.status || "Finalizado"}</StatusBadge>}
 			>
 				<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

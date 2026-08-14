@@ -98,6 +98,14 @@ export function SaveUsuariosFromMaps(arg1) {
   return window['go']['main']['App']['SaveUsuariosFromMaps'](arg1);
 }
 
+export function StartAllocation(arg1) {
+  return window['go']['main']['App']['StartAllocation'](arg1);
+}
+
+export function StopAllocation() {
+  return window['go']['main']['App']['StopAllocation']();
+}
+
 export function SuggestMapping(arg1, arg2) {
   return window['go']['main']['App']['SuggestMapping'](arg1, arg2);
 }

@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"candidate_alocator/back/allocation"
 	"candidate_alocator/back/logic"
 	types "candidate_alocator/back/type"
 )
@@ -190,5 +191,60 @@ func TestBuildUIPeopleIncludesPreferencesRestrictionsAndExtras(t *testing.T) {
 func TestNullableExtrasToStringsHandlesEmptyMap(t *testing.T) {
 	if got := nullableExtrasToStrings(nil); len(got) != 0 {
 		t.Fatalf("expected empty extras map, got %#v", got)
+	}
+}
+
+func TestStopAllocationCancelsActiveSearch(t *testing.T) {
+	app := NewApp()
+	ctx, cancel := context.WithCancel(context.Background())
+	app.allocationRunning = true
+	app.allocationCancel = cancel
+	if !app.StopAllocation() {
+		t.Fatal("expected active allocation to be stopped")
+	}
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("expected allocation context cancellation")
+	}
+	if app.StopAllocation() {
+		t.Fatal("second stop should report no cancellable search")
+	}
+}
+
+func TestStartAllocationRejectsConcurrentRun(t *testing.T) {
+	app := NewApp()
+	app.allocationRunning = true
+	if err := app.StartAllocation(types.AllocationConfiguration{}); err == nil {
+		t.Fatal("expected concurrent allocation rejection")
+	}
+}
+
+func TestFinishAllocationRunOnlyClearsMatchingRun(t *testing.T) {
+	app := NewApp()
+	app.allocationRunning = true
+	app.allocationRunID = 2
+	app.finishAllocationRun(1)
+	if !app.allocationRunning {
+		t.Fatal("stale run must not clear the active search")
+	}
+	app.finishAllocationRun(2)
+	if app.allocationRunning || app.allocationCancel != nil {
+		t.Fatal("matching run should clear execution state")
+	}
+}
+
+func TestBuildUIAllocationResultMarksFeasibleSolutionAsProvisional(t *testing.T) {
+	run := allocation.ConfiguredAllocationResult{
+		Problem: types.AllocationProblem{
+			Candidates: []types.SolverCandidate{{ID: 1, Name: "Ana"}},
+			Groups:     []types.SolverGroup{{ID: 1, Label: "segunda grupo 1"}},
+		},
+		Result:     types.SolverResult{Status: "feasible", Assignments: map[int]int{1: 1}},
+		Candidatos: []types.Candidato{{Nome: "Ana"}},
+	}
+	result := buildUIAllocationResult(run)
+	if result.Status != "Solução provisória" || result.SolverStatus != "feasible" || len(result.Mesas) != 1 {
+		t.Fatalf("unexpected provisional UI result: %#v", result)
 	}
 }

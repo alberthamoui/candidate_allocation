@@ -1,6 +1,7 @@
 package allocation
 
 import (
+	"context"
 	"database/sql"
 	"testing"
 
@@ -65,6 +66,30 @@ func TestRunConfiguredAllocationRejectsInvalidConfiguration(t *testing.T) {
 
 	if _, err := RunConfiguredAllocation(db, config, nil); err == nil {
 		t.Fatal("expected invalid configuration to fail")
+	}
+}
+
+func TestRunConfiguredAllocationStreamingPublishesAndPreservesSolutionOnCancel(t *testing.T) {
+	db := openTempSQLiteDB(t)
+	seedConfiguredAllocationDB(t, db)
+	params := types.AllocationParams{
+		GruposPorHorario: 1, MinPessoasPorGrupo: 1, MaxPessoasPorGrupo: 2, AvaliadoresPorGrupo: 1,
+	}
+	config, err := BuildConfigurationFromPersistedData(db, params)
+	if err != nil {
+		t.Fatalf("BuildConfigurationFromPersistedData returned error: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var solutions []ConfiguredAllocationResult
+	got, err := RunConfiguredAllocationStreaming(ctx, db, config, ConfiguredAllocationCallbacks{
+		Solution: func(solution ConfiguredAllocationResult) { solutions = append(solutions, solution) },
+	})
+	if err != nil {
+		t.Fatalf("RunConfiguredAllocationStreaming returned error: %v", err)
+	}
+	if got.Result.Status != "feasible" || len(solutions) == 0 || solutions[0].Result.Status != "feasible" {
+		t.Fatalf("expected published feasible solution after cancellation, got result=%#v solutions=%#v", got.Result, solutions)
 	}
 }
 

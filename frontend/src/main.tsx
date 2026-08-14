@@ -16,6 +16,7 @@ import AllocationConfigPage from "./AllocationConfigPage";
 import type { MappingDraft, MappingFieldInfo } from "./importTypes";
 import { WorkflowLayout } from "./workflowShell";
 import ScrollToTop from "./ScrollToTop";
+import { AllocationRunProvider } from "./AllocationRunContext";
 
 function Root() {
 	const [mappingData, setMappingData] = useState<MappingDraft[] | null>(null);
@@ -38,8 +39,9 @@ function Root() {
 	return (
 		<React.StrictMode>
 			<BrowserRouter>
-				<ScrollToTop />
-				<Routes>
+				<AllocationRunProvider>
+					<ScrollToTop />
+					<Routes>
 					<Route element={<WorkflowLayout />}>
 						<Route
 							path="/"
@@ -120,7 +122,8 @@ function Root() {
 						<Route path="/allocation-loading" element={<AllocationLoadingPage />} />
 						<Route path="/allocation-result" element={<AllocationResultPage />} />
 					</Route>
-				</Routes>
+					</Routes>
+				</AllocationRunProvider>
 			</BrowserRouter>
 		</React.StrictMode>
 	);

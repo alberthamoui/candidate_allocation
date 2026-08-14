@@ -1,9 +1,11 @@
 package allocation
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -21,6 +23,8 @@ type SolverOptions struct {
 	MaxDebugEvents int
 	FlowBoundDepth int
 	Progress       ProgressCallback
+	Context        context.Context
+	Incumbent      func(types.SolverResult)
 }
 
 type solverProblemView struct {
@@ -34,6 +38,14 @@ type solverProblemView struct {
 	candidateGroupOptions  map[int][]solverGroupOption
 	assignmentPenaltyByKey map[int]map[int]int
 	groupSymmetryClass     map[int]int
+	criteria               []solverCriterionView
+}
+
+type solverCriterionView struct {
+	criterion             types.SoftCriterion
+	valueIndexByName      map[string]int
+	candidateValueIndex   []int
+	potentialByGroupValue [][][]int
 }
 
 type solverGroupOption struct {
@@ -44,10 +56,11 @@ type solverGroupOption struct {
 }
 
 type solverState struct {
-	Assignments   []int
-	GroupCounts   []int
-	AssignedCount int
-	BasePenalty   int
+	Assignments     []int
+	GroupCounts     []int
+	CriterionCounts [][][]int
+	AssignedCount   int
+	BasePenalty     int
 }
 
 type preparedTask struct {
@@ -59,6 +72,7 @@ type sharedIncumbent struct {
 	mu        sync.RWMutex
 	best      *types.SolverResult
 	taskIndex int
+	callback  func(types.SolverResult)
 }
 
 type buildFrontierContext struct {
@@ -93,10 +107,10 @@ func solveConnectedAllocation(problem types.AllocationProblem, options SolverOpt
 	normalizedOptions := NormalizeSolverOptions(options)
 	view := buildSolverProblemView(problem)
 	progress, rootWeight := newSolverProgressTracker(view, normalizedOptions.Progress)
-	defer progress.finish()
+	defer func() { progress.finish(!normalizedOptions.cancelled()) }()
 
 	root := newSolverState(view)
-	incumbent := &sharedIncumbent{taskIndex: int(^uint(0) >> 1)}
+	incumbent := &sharedIncumbent{taskIndex: int(^uint(0) >> 1), callback: normalizedOptions.Incumbent}
 	frontier := buildFrontierContext{
 		view:      view,
 		options:   normalizedOptions,
@@ -105,10 +119,11 @@ func solveConnectedAllocation(problem types.AllocationProblem, options SolverOpt
 	}
 
 	if assignment, feasible := initialMinCostAssignment(view, &root); feasible {
+		assignment = improveInitialAssignment(view, assignment)
 		partial := types.PartialAllocationState{Assignments: assignment}
 		if viable, _ := IsStateViable(problem, partial); viable && IsCompleteState(problem, partial) {
-			result := types.SolverResult{Status: "optimal", Assignments: assignment, Score: ScoreAllocation(problem, partial)}
-			if incumbent.update(result, incumbent.taskIndex) {
+			result := types.SolverResult{Status: "feasible", Assignments: assignment, Score: ScoreAllocation(problem, partial)}
+			if incumbent.update(result, -1) {
 				frontier.metrics.BestUpdates++
 				frontier.note(fmt.Sprintf("initial min-cost incumbent: score=%d", result.Score.TotalPenalty))
 			}
@@ -118,9 +133,17 @@ func solveConnectedAllocation(problem types.AllocationProblem, options SolverOpt
 	frontier.expand(&root, normalizedOptions.ParallelDepth, rootWeight)
 	if len(frontier.tasks) == 0 {
 		if best := incumbent.snapshot(); best != nil {
+			if normalizedOptions.cancelled() {
+				best.Status = "feasible"
+			} else {
+				best.Status = "optimal"
+			}
 			best.Metrics = frontier.metrics
 			best.DebugNotes = append([]string(nil), frontier.debugNotes...)
 			return *best
+		}
+		if normalizedOptions.cancelled() {
+			return types.SolverResult{Status: "cancelled", Metrics: frontier.metrics, DebugNotes: append([]string(nil), frontier.debugNotes...)}
 		}
 		result := buildInfeasibleResult(frontier.hardWitness)
 		result.Metrics = frontier.metrics
@@ -171,10 +194,18 @@ func solveConnectedAllocation(problem types.AllocationProblem, options SolverOpt
 
 	best := incumbent.snapshot()
 	if best == nil {
+		if normalizedOptions.cancelled() {
+			return types.SolverResult{Status: "cancelled", Metrics: finalMetrics, DebugNotes: finalNotes}
+		}
 		result := buildInfeasibleResult(finalWitness)
 		result.Metrics = finalMetrics
 		result.DebugNotes = finalNotes
 		return result
+	}
+	if normalizedOptions.cancelled() {
+		best.Status = "feasible"
+	} else {
+		best.Status = "optimal"
 	}
 	best.Metrics = finalMetrics
 	best.DebugNotes = finalNotes
@@ -198,7 +229,22 @@ func NormalizeSolverOptions(options SolverOptions) SolverOptions {
 	if normalized.FlowBoundDepth <= 0 {
 		normalized.FlowBoundDepth = defaultFlowBoundDepth
 	}
+	if normalized.Context == nil {
+		normalized.Context = context.Background()
+	}
 	return normalized
+}
+
+func (options SolverOptions) cancelled() bool {
+	if options.Context == nil {
+		return false
+	}
+	select {
+	case <-options.Context.Done():
+		return true
+	default:
+		return false
+	}
 }
 
 // EstimateLowerBound returns a safe optimistic score for a partial state.
@@ -270,11 +316,23 @@ func buildSolverProblemView(problem types.AllocationProblem) solverProblemView {
 		view.assignmentPenaltyByKey[candidateID] = penalties
 	}
 	view.groupSymmetryClass = buildGroupSymmetryClasses(view)
+	view.criteria = buildSolverCriterionViews(view)
 	return view
 }
 
 func newSolverState(view solverProblemView) solverState {
-	return solverState{Assignments: make([]int, len(view.sortedCandidateIDs)), GroupCounts: make([]int, len(view.sortedGroupIDs))}
+	criterionCounts := make([][][]int, len(view.criteria))
+	for criterionIndex, criterion := range view.criteria {
+		criterionCounts[criterionIndex] = make([][]int, len(view.sortedGroupIDs))
+		for groupIndex := range view.sortedGroupIDs {
+			criterionCounts[criterionIndex][groupIndex] = make([]int, len(criterion.criterion.SelectedValues))
+		}
+	}
+	return solverState{
+		Assignments:     make([]int, len(view.sortedCandidateIDs)),
+		GroupCounts:     make([]int, len(view.sortedGroupIDs)),
+		CriterionCounts: criterionCounts,
+	}
 }
 
 func stateFromPartial(view solverProblemView, partial types.PartialAllocationState) solverState {
@@ -289,8 +347,49 @@ func stateFromPartial(view solverProblemView, partial types.PartialAllocationSta
 		state.GroupCounts[groupIndex]++
 		state.AssignedCount++
 		state.BasePenalty += view.assignmentPenaltyByKey[candidateID][groupID]
+		updateCriterionCounts(view, &state, candidateIndex, groupIndex, 1)
 	}
 	return state
+}
+
+func buildSolverCriterionViews(view solverProblemView) []solverCriterionView {
+	criteria := make([]solverCriterionView, 0, len(view.problem.SoftRules.Criteria))
+	for _, criterion := range view.problem.SoftRules.Criteria {
+		criterionView := solverCriterionView{
+			criterion:             criterion,
+			valueIndexByName:      make(map[string]int, len(criterion.SelectedValues)),
+			candidateValueIndex:   make([]int, len(view.sortedCandidateIDs)),
+			potentialByGroupValue: make([][][]int, len(view.sortedGroupIDs)),
+		}
+		for candidateIndex := range criterionView.candidateValueIndex {
+			criterionView.candidateValueIndex[candidateIndex] = -1
+		}
+		for valueIndex, value := range criterion.SelectedValues {
+			criterionView.valueIndexByName[value] = valueIndex
+		}
+		for candidateIndex, candidateID := range view.sortedCandidateIDs {
+			value := view.candidates[candidateID].Attributes[criterion.ColumnKey]
+			if valueIndex, ok := criterionView.valueIndexByName[value]; ok {
+				criterionView.candidateValueIndex[candidateIndex] = valueIndex
+			}
+		}
+		for groupIndex, groupID := range view.sortedGroupIDs {
+			criterionView.potentialByGroupValue[groupIndex] = make([][]int, len(criterion.SelectedValues))
+			for candidateIndex, candidateID := range view.sortedCandidateIDs {
+				valueIndex := criterionView.candidateValueIndex[candidateIndex]
+				if valueIndex < 0 {
+					continue
+				}
+				if _, allowed := view.assignmentPenaltyByKey[candidateID][groupID]; allowed {
+					criterionView.potentialByGroupValue[groupIndex][valueIndex] = append(
+						criterionView.potentialByGroupValue[groupIndex][valueIndex], candidateIndex,
+					)
+				}
+			}
+		}
+		criteria = append(criteria, criterionView)
+	}
+	return criteria
 }
 
 func solvePreparedTask(view solverProblemView, options SolverOptions, task preparedTask, taskIndex int, progress *solverProgressTracker, incumbent *sharedIncumbent) subtreeOutcome {
@@ -300,6 +399,9 @@ func solvePreparedTask(view solverProblemView, options SolverOptions, task prepa
 }
 
 func (builder *buildFrontierContext) expand(state *solverState, depth int, weight *big.Int) {
+	if builder.options.cancelled() {
+		return
+	}
 	builder.metrics.NodesVisited++
 	builder.progress.visitNode()
 	if violation := futureHardViolation(builder.view, state); violation != nil {
@@ -341,6 +443,9 @@ func (builder *buildFrontierContext) resolveSkippedBranches(candidateID, feasibl
 }
 
 func (solver *subtreeSolver) search(state *solverState, weight *big.Int) {
+	if solver.options.cancelled() {
+		return
+	}
 	solver.metrics.NodesVisited++
 	solver.progress.visitNode()
 	if violation := futureHardViolation(solver.view, state); violation != nil {
@@ -354,6 +459,9 @@ func (solver *subtreeSolver) search(state *solverState, weight *big.Int) {
 }
 
 func (solver *subtreeSolver) resume(state *solverState, weight *big.Int) {
+	if solver.options.cancelled() {
+		return
+	}
 	if state.AssignedCount == len(solver.view.sortedCandidateIDs) {
 		solver.evaluateCompleteState(state, weight)
 		return
@@ -372,9 +480,6 @@ func (solver *subtreeSolver) resume(state *solverState, weight *big.Int) {
 		return
 	}
 	flowUsed := state.AssignedCount <= solver.options.FlowBoundDepth || len(solver.view.sortedCandidateIDs)-state.AssignedCount <= 8
-	if incumbentScore, exists := solver.incumbent.score(); exists && lowerBound <= incumbentScore {
-		flowUsed = true
-	}
 	if flowUsed {
 		flowCost, _, flowFeasible := minCostCompletion(solver.view, state)
 		if !flowFeasible {
@@ -429,7 +534,7 @@ func (solver *subtreeSolver) evaluateCompleteState(state *solverState, weight *b
 		solver.progress.resolve(weight, true)
 		return
 	}
-	result := types.SolverResult{Status: "optimal", Assignments: assignments, Score: ScoreAllocation(solver.view.problem, partial)}
+	result := types.SolverResult{Status: "feasible", Assignments: assignments, Score: ScoreAllocation(solver.view.problem, partial)}
 	if solver.incumbent.update(result, solver.taskIndex) {
 		solver.metrics.BestUpdates++
 		solver.note(fmt.Sprintf("best update: score=%d assignments=%s", result.Score.TotalPenalty, formatAssignments(assignments)))
@@ -459,55 +564,135 @@ func simpleLowerBound(view solverProblemView, state *solverState) (int, bool) {
 }
 
 func criterionLowerBound(view solverProblemView, state *solverState) int {
-	if len(view.problem.SoftRules.Criteria) == 0 {
-		return 0
-	}
-	partial := types.PartialAllocationState{Assignments: assignmentsMap(view, state)}
 	total := 0
-	for _, criterion := range view.problem.SoftRules.Criteria {
-		switch criterion.Type {
+	for criterionIndex, criterionView := range view.criteria {
+		switch criterionView.criterion.Type {
+		case types.SoftCriterionMinValue:
+			total += lowerBoundMinValueCriterion(view, state, criterionIndex)
 		case types.SoftCriterionMaxValue:
-			total += lowerBoundMaxValueCriterion(view, partial, criterion)
+			total += lowerBoundMaxValueCriterion(view, state, criterionIndex)
+		case types.SoftCriterionAtLeastOneEach:
+			total += lowerBoundAtLeastOneEachCriterion(view, state, criterionIndex)
+		case types.SoftCriterionBalancedDistribution:
+			total += lowerBoundBalancedDistributionCriterion(view, state, criterionIndex)
 		case types.SoftCriterionGroupTogether:
-			total += lowerBoundGroupTogetherCriterion(view, partial, criterion)
+			total += lowerBoundGroupTogetherCriterion(view, state, criterionIndex)
 		}
 	}
 	return total
 }
 
-func lowerBoundMaxValueCriterion(view solverProblemView, state types.PartialAllocationState, criterion types.SoftCriterion) int {
+func lowerBoundMinValueCriterion(view solverProblemView, state *solverState, criterionIndex int) int {
+	criterion := view.criteria[criterionIndex].criterion
 	if len(criterion.SelectedValues) != 1 {
 		return 0
 	}
-	selectedValue := criterion.SelectedValues[0]
-	counts := countSelectedValuesByGroup(view.problem, state, criterion.ColumnKey, criterion.SelectedValues)
 	penalty := 0
-	for _, group := range view.problem.Groups {
-		if count := counts[group.ID][selectedValue]; count > criterion.Threshold {
+	for groupIndex := range view.sortedGroupIDs {
+		count := state.CriterionCounts[criterionIndex][groupIndex][0]
+		if count == 0 || count >= criterion.Threshold {
+			continue
+		}
+		maximum := count + potentialValueCount(view, state, criterionIndex, groupIndex, 0)
+		if maximum < criterion.Threshold {
+			penalty += criterion.Threshold - maximum
+		}
+	}
+	return penalty
+}
+
+func lowerBoundMaxValueCriterion(view solverProblemView, state *solverState, criterionIndex int) int {
+	criterion := view.criteria[criterionIndex].criterion
+	if len(criterion.SelectedValues) != 1 {
+		return 0
+	}
+	penalty := 0
+	for groupIndex := range view.sortedGroupIDs {
+		if count := state.CriterionCounts[criterionIndex][groupIndex][0]; count > criterion.Threshold {
 			penalty += count - criterion.Threshold
 		}
 	}
 	return penalty
 }
 
-func lowerBoundGroupTogetherCriterion(view solverProblemView, state types.PartialAllocationState, criterion types.SoftCriterion) int {
-	selectedValues := make(map[string]struct{}, len(criterion.SelectedValues))
-	for _, selectedValue := range criterion.SelectedValues {
-		selectedValues[selectedValue] = struct{}{}
+func lowerBoundAtLeastOneEachCriterion(view solverProblemView, state *solverState, criterionIndex int) int {
+	criterion := view.criteria[criterionIndex].criterion
+	penalty := 0
+	for groupIndex := range view.sortedGroupIDs {
+		for valueIndex := range criterion.SelectedValues {
+			if state.CriterionCounts[criterionIndex][groupIndex][valueIndex] > 0 {
+				continue
+			}
+			if potentialValueCount(view, state, criterionIndex, groupIndex, valueIndex) == 0 {
+				penalty++
+			}
+		}
 	}
-	groupsWithValues := make(map[int]struct{})
-	for groupID, members := range buildStateGroupMembers(state) {
-		for _, candidateID := range members {
-			if _, ok := selectedValues[view.candidates[candidateID].Attributes[criterion.ColumnKey]]; ok {
-				groupsWithValues[groupID] = struct{}{}
+	return penalty
+}
+
+func lowerBoundBalancedDistributionCriterion(view solverProblemView, state *solverState, criterionIndex int) int {
+	criterion := view.criteria[criterionIndex].criterion
+	penalty := 0
+	for valueIndex := range criterion.SelectedValues {
+		maximumCurrent := 0
+		minimumReachable := int(^uint(0) >> 1)
+		for groupIndex := range view.sortedGroupIDs {
+			current := state.CriterionCounts[criterionIndex][groupIndex][valueIndex]
+			if current > maximumCurrent {
+				maximumCurrent = current
+			}
+			reachable := current + potentialValueCount(view, state, criterionIndex, groupIndex, valueIndex)
+			if reachable < minimumReachable {
+				minimumReachable = reachable
+			}
+		}
+		if difference := maximumCurrent - minimumReachable; difference > 0 {
+			penalty += difference
+		}
+	}
+	return penalty
+}
+
+func lowerBoundGroupTogetherCriterion(view solverProblemView, state *solverState, criterionIndex int) int {
+	groupsWithValues := 0
+	for groupIndex := range view.sortedGroupIDs {
+		containsSelected := false
+		for valueIndex := range view.criteria[criterionIndex].criterion.SelectedValues {
+			if state.CriterionCounts[criterionIndex][groupIndex][valueIndex] > 0 {
+				containsSelected = true
+				break
+			}
+		}
+		if containsSelected {
+			groupsWithValues++
+		}
+	}
+	if groupsWithValues <= 1 {
+		return 0
+	}
+	return groupsWithValues - 1
+}
+
+func potentialValueCount(view solverProblemView, state *solverState, criterionIndex, groupIndex, valueIndex int) int {
+	capacity := len(view.sortedCandidateIDs)
+	if view.problem.HardRestrictions.EnforceGroupCapacity {
+		groupID := view.sortedGroupIDs[groupIndex]
+		capacity = view.groups[groupID].MaxCandidates - state.GroupCounts[groupIndex]
+	}
+	if capacity <= 0 {
+		return 0
+	}
+	count := 0
+	for _, candidateIndex := range view.criteria[criterionIndex].potentialByGroupValue[groupIndex][valueIndex] {
+		if state.Assignments[candidateIndex] == 0 {
+			count++
+			if count == capacity {
 				break
 			}
 		}
 	}
-	if len(groupsWithValues) <= 1 {
-		return 0
-	}
-	return len(groupsWithValues) - 1
+	return count
 }
 
 func futureHardViolation(view solverProblemView, state *solverState) *types.HardConstraintViolation {
@@ -562,14 +747,14 @@ func chooseNextCandidate(view solverProblemView, state *solverState) (int, []sol
 func currentFeasibleOptions(view solverProblemView, state *solverState, candidateID int, breakSymmetry bool) ([]solverGroupOption, int) {
 	options := view.candidateGroupOptions[candidateID]
 	result := make([]solverGroupOption, 0, len(options))
-	seenSymmetryState := make(map[[2]int]struct{})
+	seenSymmetryState := make(map[string]struct{})
 	skipped := 0
 	for _, option := range options {
 		if view.problem.HardRestrictions.EnforceGroupCapacity && state.GroupCounts[option.GroupIndex] >= view.groups[option.GroupID].MaxCandidates {
 			continue
 		}
 		if breakSymmetry {
-			key := [2]int{view.groupSymmetryClass[option.GroupID], state.GroupCounts[option.GroupIndex]}
+			key := groupStateSymmetryKey(view, state, option.GroupID, option.GroupIndex)
 			if _, exists := seenSymmetryState[key]; exists {
 				skipped++
 				continue
@@ -581,12 +766,29 @@ func currentFeasibleOptions(view solverProblemView, state *solverState, candidat
 	return result, skipped
 }
 
+func groupStateSymmetryKey(view solverProblemView, state *solverState, groupID, groupIndex int) string {
+	var key strings.Builder
+	key.WriteString(strconv.Itoa(view.groupSymmetryClass[groupID]))
+	key.WriteByte(':')
+	key.WriteString(strconv.Itoa(state.GroupCounts[groupIndex]))
+	for criterionIndex := range state.CriterionCounts {
+		key.WriteByte('|')
+		for valueIndex, count := range state.CriterionCounts[criterionIndex][groupIndex] {
+			if valueIndex > 0 {
+				key.WriteByte(',')
+			}
+			key.WriteString(strconv.Itoa(count))
+		}
+	}
+	return key.String()
+}
+
 func buildGroupSymmetryClasses(view solverProblemView) map[int]int {
 	classes := make(map[int]int, len(view.sortedGroupIDs))
 	signatureClass := make(map[string]int)
 	for _, groupID := range view.sortedGroupIDs {
 		group := view.groups[groupID]
-		parts := []string{group.ScheduleKey, fmt.Sprint(group.MinCandidates), fmt.Sprint(group.MaxCandidates), fmt.Sprint(group.EvaluatorIDs)}
+		parts := []string{group.ScheduleKey, fmt.Sprint(group.MinCandidates), fmt.Sprint(group.MaxCandidates)}
 		for _, candidateID := range view.sortedCandidateIDs {
 			penalty, allowed := view.assignmentPenaltyByKey[candidateID][groupID]
 			parts = append(parts, fmt.Sprintf("%t:%d", allowed, penalty))
@@ -603,21 +805,47 @@ func buildGroupSymmetryClasses(view solverProblemView) map[int]int {
 }
 
 func applyAssignment(view solverProblemView, state *solverState, candidateID int, option solverGroupOption) {
-	state.Assignments[view.candidateIndexByID[candidateID]] = option.GroupID
+	candidateIndex := view.candidateIndexByID[candidateID]
+	state.Assignments[candidateIndex] = option.GroupID
 	state.GroupCounts[option.GroupIndex]++
 	state.AssignedCount++
 	state.BasePenalty += option.ImmediatePenalty
+	updateCriterionCounts(view, state, candidateIndex, option.GroupIndex, 1)
 }
 
 func undoAssignment(view solverProblemView, state *solverState, candidateID int, option solverGroupOption) {
+	candidateIndex := view.candidateIndexByID[candidateID]
+	updateCriterionCounts(view, state, candidateIndex, option.GroupIndex, -1)
 	state.BasePenalty -= option.ImmediatePenalty
 	state.AssignedCount--
 	state.GroupCounts[option.GroupIndex]--
-	state.Assignments[view.candidateIndexByID[candidateID]] = 0
+	state.Assignments[candidateIndex] = 0
 }
 
 func cloneSolverState(state solverState) solverState {
-	return solverState{Assignments: append([]int(nil), state.Assignments...), GroupCounts: append([]int(nil), state.GroupCounts...), AssignedCount: state.AssignedCount, BasePenalty: state.BasePenalty}
+	criterionCounts := make([][][]int, len(state.CriterionCounts))
+	for criterionIndex := range state.CriterionCounts {
+		criterionCounts[criterionIndex] = make([][]int, len(state.CriterionCounts[criterionIndex]))
+		for groupIndex := range state.CriterionCounts[criterionIndex] {
+			criterionCounts[criterionIndex][groupIndex] = append([]int(nil), state.CriterionCounts[criterionIndex][groupIndex]...)
+		}
+	}
+	return solverState{
+		Assignments:     append([]int(nil), state.Assignments...),
+		GroupCounts:     append([]int(nil), state.GroupCounts...),
+		CriterionCounts: criterionCounts,
+		AssignedCount:   state.AssignedCount,
+		BasePenalty:     state.BasePenalty,
+	}
+}
+
+func updateCriterionCounts(view solverProblemView, state *solverState, candidateIndex, groupIndex, delta int) {
+	for criterionIndex, criterion := range view.criteria {
+		valueIndex := criterion.candidateValueIndex[candidateIndex]
+		if valueIndex >= 0 {
+			state.CriterionCounts[criterionIndex][groupIndex][valueIndex] += delta
+		}
+	}
 }
 
 func assignmentsMap(view solverProblemView, state *solverState) map[int]int {
@@ -684,18 +912,24 @@ func countPotentialCandidatesForGroup(view solverProblemView, state *solverState
 
 func (incumbent *sharedIncumbent) update(result types.SolverResult, taskIndex int) bool {
 	incumbent.mu.Lock()
-	defer incumbent.mu.Unlock()
 	if incumbent.best != nil {
 		if result.Score.TotalPenalty > incumbent.best.Score.TotalPenalty {
+			incumbent.mu.Unlock()
 			return false
 		}
 		if result.Score.TotalPenalty == incumbent.best.Score.TotalPenalty && taskIndex >= incumbent.taskIndex {
+			incumbent.mu.Unlock()
 			return false
 		}
 	}
 	copied := cloneSolverResult(result)
 	incumbent.best = &copied
 	incumbent.taskIndex = taskIndex
+	callback := incumbent.callback
+	if callback != nil {
+		callback(cloneSolverResult(copied))
+	}
+	incumbent.mu.Unlock()
 	return true
 }
 
@@ -719,15 +953,6 @@ func (incumbent *sharedIncumbent) snapshot() *types.SolverResult {
 	}
 	copied := cloneSolverResult(*incumbent.best)
 	return &copied
-}
-
-func (incumbent *sharedIncumbent) score() (int, bool) {
-	incumbent.mu.RLock()
-	defer incumbent.mu.RUnlock()
-	if incumbent.best == nil {
-		return 0, false
-	}
-	return incumbent.best.Score.TotalPenalty, true
 }
 
 func mergeSolverMetrics(left, right types.SolverMetrics) types.SolverMetrics {

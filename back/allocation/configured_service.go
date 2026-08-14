@@ -1,6 +1,7 @@
 package allocation
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -22,9 +23,25 @@ type ConfiguredAllocationResult struct {
 	Avaliadores []types.Avaliador             `json:"avaliadores"`
 }
 
+type ConfiguredAllocationCallbacks struct {
+	Progress ProgressCallback
+	Solution func(ConfiguredAllocationResult)
+}
+
 // RunConfiguredAllocation executes the official configured allocation path and
 // optionally streams progress snapshots from the exact solver.
 func RunConfiguredAllocation(db *sql.DB, config types.AllocationConfiguration, progress ProgressCallback) (ConfiguredAllocationResult, error) {
+	return RunConfiguredAllocationStreaming(context.Background(), db, config, ConfiguredAllocationCallbacks{Progress: progress})
+}
+
+// RunConfiguredAllocationStreaming publishes improving feasible solutions and
+// honors cancellation while preserving the best incumbent found so far.
+func RunConfiguredAllocationStreaming(
+	ctx context.Context,
+	db *sql.DB,
+	config types.AllocationConfiguration,
+	callbacks ConfiguredAllocationCallbacks,
+) (ConfiguredAllocationResult, error) {
 	if db == nil {
 		return ConfiguredAllocationResult{}, errors.New("conexao do banco nao pode ser nil")
 	}
@@ -42,11 +59,23 @@ func RunConfiguredAllocation(db *sql.DB, config types.AllocationConfiguration, p
 		return ConfiguredAllocationResult{}, err
 	}
 
-	result := SolveAllocation(problem, NormalizeSolverOptions(SolverOptions{
+	options := NormalizeSolverOptions(SolverOptions{
 		WorkerCount:   4,
 		ParallelDepth: 2,
-		Progress:      progress,
-	}))
+		Progress:      callbacks.Progress,
+		Context:       ctx,
+	})
+	if callbacks.Solution != nil {
+		options.Incumbent = func(solution types.SolverResult) {
+			snapshotConfig := config
+			snapshotConfig.Result = types.AllocationExecutionResult{Status: solution.Status, Notes: append([]string(nil), solution.DebugNotes...)}
+			callbacks.Solution(ConfiguredAllocationResult{
+				Config: snapshotConfig, Problem: problem, Result: solution,
+				Candidatos: data.Candidatos, Avaliadores: data.Avaliadores,
+			})
+		}
+	}
+	result := SolveAllocation(problem, options)
 
 	config.Result = types.AllocationExecutionResult{
 		Status: result.Status,

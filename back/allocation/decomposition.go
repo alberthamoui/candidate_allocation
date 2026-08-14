@@ -26,6 +26,9 @@ type aggregateProgress struct {
 // SolveAllocation solves every independent component exactly and combines
 // their proven optima. Coupled additional criteria keep the problem unified.
 func SolveAllocation(problem types.AllocationProblem, options SolverOptions) types.SolverResult {
+	if options.Incumbent != nil {
+		return solveConnectedAllocation(problem, options)
+	}
 	components := independentSolverComponents(problem)
 	if len(components) <= 1 {
 		return solveConnectedAllocation(problem, options)
@@ -63,7 +66,7 @@ func SolveAllocation(problem types.AllocationProblem, options SolverOptions) typ
 }
 
 func independentSolverComponents(problem types.AllocationProblem) []solverComponent {
-	if len(problem.SoftRules.Criteria) > 0 || len(problem.Candidates) == 0 || !problem.HardRestrictions.RespectCandidatePreferences {
+	if hasCoupledSoftCriteria(problem.SoftRules.Criteria) || len(problem.Candidates) == 0 || !problem.HardRestrictions.RespectCandidatePreferences {
 		return []solverComponent{{}}
 	}
 	groupToCandidates := make(map[int][]int, len(problem.Groups))
@@ -108,6 +111,15 @@ func independentSolverComponents(problem types.AllocationProblem) []solverCompon
 		components = append(components, component)
 	}
 	return components
+}
+
+func hasCoupledSoftCriteria(criteria []types.SoftCriterion) bool {
+	for _, criterion := range criteria {
+		if criterion.Type == types.SoftCriterionBalancedDistribution || criterion.Type == types.SoftCriterionGroupTogether {
+			return true
+		}
+	}
+	return false
 }
 
 func buildComponentProblem(problem types.AllocationProblem, component solverComponent) types.AllocationProblem {

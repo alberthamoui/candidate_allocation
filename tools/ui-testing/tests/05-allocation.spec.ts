@@ -8,6 +8,7 @@ test.describe('Allocation Flow UI', () => {
 
     await page.evaluate(() => {
       const app = (window as any).go.main.App;
+      const runtime = (window as any).runtime;
       app.GetWorkflowDefinition = async () => ({
         defaultAllocationParams: {
           gruposPorHorario: 1,
@@ -18,7 +19,7 @@ test.describe('Allocation Flow UI', () => {
         },
       });
       app.BuildAllocationConfigurationFromDatabase = async (params: unknown) => ({ normalized: { params, preferenceMappings: [] } });
-      app.RunAllocation = async () => ({
+      const provisionalResult = {
         status: 'Sucesso!',
         solverStatus: 'optimal',
         mesas: [{
@@ -42,13 +43,35 @@ test.describe('Allocation Flow UI', () => {
         hardViolations: [],
         metrics: { nodesVisited: 10, nodesPrunedByHard: 2, nodesPrunedByFlow: 1, branchesSkippedBySymmetry: 1 },
         debugNotes: [],
-      });
+      };
+      app.StopAllocation = async () => {
+        runtime.EventsEmit('allocation:complete', { ...provisionalResult, status: 'Solução provisória', solverStatus: 'feasible' });
+        return true;
+      };
+      app.StartAllocation = async () => {
+        window.setTimeout(() => runtime.EventsEmit('allocation:progress', {
+          percent: 25,
+          branchesResolved: '250000',
+          totalBranches: '1000000',
+          branchesPruned: '200000',
+          nodesVisited: 42,
+          prunedSubtrees: 3,
+        }), 10);
+        window.setTimeout(() => runtime.EventsEmit('allocation:solution', provisionalResult), 20);
+      };
 
       window.history.pushState({}, '', '/allocation-loading');
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
 
     await expect(page.getByTestId('allocation-result-page')).toBeVisible();
+    await expect(page.getByText('Solução válida encontrada — verificação continua')).toBeVisible();
+    await expect(page.getByTestId('result-total-possibilities')).toHaveText('1.000.000');
+    await expect(page.getByTestId('result-progress-percent')).toHaveText('25.0%');
+    await page.getByTestId('continue-search-button').click();
+    await expect(page.getByText('A verificação continuará; esta tela será atualizada quando surgir uma solução melhor.')).toBeVisible();
+    await page.getByTestId('stop-search-button').click();
+    await expect(page.getByText('Verificação interrompida')).toBeVisible();
     await expect(page.getByLabel('Pesquisar candidato')).toHaveAttribute('type', 'search');
 
     await page.getByTestId('quality-preference_rank_2').click();
@@ -75,18 +98,16 @@ test.describe('Allocation Flow UI', () => {
     expect(unallocatedTop).toBeGreaterThan(groupsTop);
   });
 
-  test('shows live branch progress and pruning jumps', async ({ page }) => {
+  test('shows a fixed total of possibilities and live analyzed percentage', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => Boolean((window as any).go?.main?.App && (window as any).runtime));
 
     await page.evaluate(() => {
       const app = (window as any).go.main.App;
       const runtime = (window as any).runtime;
-      const originalEventsOnMultiple = runtime.EventsOnMultiple.bind(runtime);
 
-      runtime.EventsOnMultiple = (eventName: string, callback: (snapshot: unknown) => void, maxCallbacks: number) => {
-        if (eventName === 'allocation:progress') {
-          window.setTimeout(() => callback({
+      app.StartAllocation = async () => {
+        window.setTimeout(() => runtime.EventsEmit('allocation:progress', {
             percent: 62.5,
             branchesResolved: '625000',
             totalBranches: '1000000',
@@ -94,9 +115,6 @@ test.describe('Allocation Flow UI', () => {
             nodesVisited: 128,
             prunedSubtrees: 7,
           }), 50);
-          return () => {};
-        }
-        return originalEventsOnMultiple(eventName, callback, maxCallbacks);
       };
 
       app.GetWorkflowDefinition = async () => ({
@@ -111,8 +129,6 @@ test.describe('Allocation Flow UI', () => {
       app.BuildAllocationConfigurationFromDatabase = async (params: unknown) => ({
         normalized: { params, preferenceMappings: [] },
       });
-      app.RunAllocation = async () => new Promise(() => {});
-
       window.history.pushState({}, '', '/allocation-loading');
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
@@ -120,9 +136,8 @@ test.describe('Allocation Flow UI', () => {
     const progressbar = page.getByRole('progressbar', { name: 'Progresso da alocação' });
     await expect(progressbar).toHaveAttribute('aria-valuenow', '62.5');
     await expect(page.getByTestId('allocation-progress-percent')).toHaveText('62.5%');
-    await expect(page.getByTestId('allocation-progress-count')).toContainText('625.000 de 1.000.000 branches');
-    await expect(page.getByTestId('allocation-pruned-branches')).toHaveText('600.000');
-    await expect(page.getByText('Analisando e descartando branches sem solução...')).toBeVisible();
+    await expect(page.getByTestId('allocation-total-possibilities')).toHaveText('1.000.000');
+    await expect(page.getByText('Branches eliminadas por poda')).toHaveCount(0);
   });
 
   test('should config, load and display results', async ({ page }) => {

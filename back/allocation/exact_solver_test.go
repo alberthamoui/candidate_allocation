@@ -1,6 +1,7 @@
 package allocation
 
 import (
+	"context"
 	"math/big"
 	"reflect"
 	"testing"
@@ -38,6 +39,64 @@ func TestEstimateLowerBoundIsOptimistic(t *testing.T) {
 	}
 	if lowerBound != fullScore.TotalPenalty {
 		t.Fatalf("expected capacitated lower bound to reach the forced completion score %d, got %d", fullScore.TotalPenalty, lowerBound)
+	}
+}
+
+func TestCriterionLowerBoundsReachCompleteScoresForAllSoftCriteria(t *testing.T) {
+	tests := []types.SoftCriterion{
+		{Type: types.SoftCriterionMinValue, ColumnKey: "curso", SelectedValues: []string{"adm"}, Threshold: 2},
+		{Type: types.SoftCriterionAtLeastOneEach, ColumnKey: "curso", SelectedValues: []string{"adm", "eco"}},
+		{Type: types.SoftCriterionBalancedDistribution, ColumnKey: "curso", SelectedValues: []string{"adm", "eco"}},
+	}
+	complete := types.PartialAllocationState{Assignments: map[int]int{1: 1, 2: 2, 3: 1}}
+	for _, criterion := range tests {
+		problem := mustBuildFixtureProblem(t)
+		problem.SoftRules.Criteria = []types.SoftCriterion{criterion}
+		got := EstimateLowerBound(problem, complete)
+		want := ScoreAllocation(problem, complete).TotalPenalty
+		if got != want {
+			t.Fatalf("criterion %s: complete lower bound=%d score=%d", criterion.Type, got, want)
+		}
+	}
+}
+
+func TestInitialSolutionLocalSearchImprovesSoftScore(t *testing.T) {
+	problem := makeSoftCriteriaBenchmarkProblem(18, 3)
+	view := buildSolverProblemView(problem)
+	state := newSolverState(view)
+	initial, feasible := initialMinCostAssignment(view, &state)
+	if !feasible {
+		t.Fatal("expected min-cost initial assignment")
+	}
+	improved := improveInitialAssignment(view, initial)
+	initialScore := ScoreAllocation(problem, types.PartialAllocationState{Assignments: initial}).TotalPenalty
+	improvedScore := ScoreAllocation(problem, types.PartialAllocationState{Assignments: improved}).TotalPenalty
+	if improvedScore >= initialScore {
+		t.Fatalf("expected local search improvement, initial=%d improved=%d", initialScore, improvedScore)
+	}
+	if viable, violations := IsStateViable(problem, types.PartialAllocationState{Assignments: improved}); !viable {
+		t.Fatalf("improved assignment violates hard constraints: %#v", violations)
+	}
+}
+
+func TestSolveAllocationCancellationReturnsPublishedIncumbent(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var incumbents []types.SolverResult
+	var snapshots []SolverProgress
+	result := SolveAllocation(makeSoftCriteriaBenchmarkProblem(18, 3), SolverOptions{
+		Context:   ctx,
+		Incumbent: func(solution types.SolverResult) { incumbents = append(incumbents, solution) },
+		Progress:  func(snapshot SolverProgress) { snapshots = append(snapshots, snapshot) },
+	})
+	if result.Status != "feasible" || len(result.Assignments) != 18 {
+		t.Fatalf("expected preserved feasible incumbent, got %#v", result)
+	}
+	if len(incumbents) == 0 || incumbents[0].Status != "feasible" {
+		t.Fatalf("expected feasible incumbent callback, got %#v", incumbents)
+	}
+	if snapshots[len(snapshots)-1].Percent == 100 {
+		t.Fatalf("cancelled progress must not pretend the proof completed: %#v", snapshots)
 	}
 }
 
@@ -97,8 +156,8 @@ func TestSolveAllocationPrunesByBound(t *testing.T) {
 	if result.Metrics.NodesPrunedByBound == 0 {
 		t.Fatalf("expected bound pruning, got %#v", result.Metrics)
 	}
-	if result.Metrics.CompleteStates != 1 {
-		t.Fatalf("expected only one complete state after bound pruning, got %#v", result.Metrics)
+	if result.Metrics.CompleteStates > 1 {
+		t.Fatalf("expected the initial incumbent to avoid extra complete states, got %#v", result.Metrics)
 	}
 }
 
@@ -122,6 +181,11 @@ func TestSolveAllocationReportsResolvedAndPrunedBranches(t *testing.T) {
 	}
 	first := snapshots[0]
 	last := snapshots[len(snapshots)-1]
+	for _, snapshot := range snapshots {
+		if snapshot.TotalBranches != first.TotalBranches {
+			t.Fatalf("total possibilities must remain fixed: first=%s snapshot=%#v", first.TotalBranches, snapshot)
+		}
+	}
 	if first.Percent != 0 {
 		t.Fatalf("expected progress to start at zero, got %#v", first)
 	}

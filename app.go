@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"candidate_alocator/back/allocation"
 	dbpkg "candidate_alocator/back/db"
@@ -18,15 +19,24 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const allocationProgressEvent = "allocation:progress"
+const (
+	allocationProgressEvent = "allocation:progress"
+	allocationSolutionEvent = "allocation:solution"
+	allocationCompleteEvent = "allocation:complete"
+	allocationErrorEvent    = "allocation:error"
+)
 
 type UsuariosResponse = logic.UsuariosResponse
 
 // App struct
 type App struct {
-	ctx       context.Context
-	excelData []byte
-	nOpcoes   int
+	ctx               context.Context
+	excelData         []byte
+	nOpcoes           int
+	allocationMu      sync.Mutex
+	allocationCancel  context.CancelFunc
+	allocationRunning bool
+	allocationRunID   uint64
 }
 
 // NewApp creates a new App application struct
@@ -319,6 +329,90 @@ func (a *App) RunAllocation(config types.AllocationConfiguration) (UIAllocationR
 	if err != nil {
 		return UIAllocationResult{}, err
 	}
+	return buildUIAllocationResult(run), nil
+}
+
+// StartAllocation starts a background exact search. Improving feasible
+// solutions are emitted while the final RunAllocation API remains available to
+// synchronous callers.
+func (a *App) StartAllocation(config types.AllocationConfiguration) error {
+	a.allocationMu.Lock()
+	if a.allocationRunning {
+		a.allocationMu.Unlock()
+		return fmt.Errorf("uma alocacao ja esta em execucao")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.allocationRunID++
+	runID := a.allocationRunID
+	a.allocationCancel = cancel
+	a.allocationRunning = true
+	eventContext := a.ctx
+	a.allocationMu.Unlock()
+
+	go func() {
+		db, err := dbpkg.OpenDefault()
+		if err != nil {
+			if eventContext != nil {
+				runtime.EventsEmit(eventContext, allocationErrorEvent, err.Error())
+			}
+			a.finishAllocationRun(runID)
+			return
+		}
+		defer func() { _ = db.Close() }()
+
+		callbacks := allocation.ConfiguredAllocationCallbacks{
+			Progress: func(snapshot allocation.SolverProgress) {
+				if eventContext != nil {
+					runtime.EventsEmit(eventContext, allocationProgressEvent, snapshot)
+				}
+			},
+			Solution: func(snapshot allocation.ConfiguredAllocationResult) {
+				if eventContext != nil {
+					runtime.EventsEmit(eventContext, allocationSolutionEvent, buildUIAllocationResult(snapshot))
+				}
+			},
+		}
+		run, runErr := allocation.RunConfiguredAllocationStreaming(ctx, db, config, callbacks)
+		if runErr != nil {
+			if eventContext != nil {
+				runtime.EventsEmit(eventContext, allocationErrorEvent, runErr.Error())
+			}
+			a.finishAllocationRun(runID)
+			return
+		}
+		if eventContext != nil {
+			runtime.EventsEmit(eventContext, allocationCompleteEvent, buildUIAllocationResult(run))
+		}
+		a.finishAllocationRun(runID)
+	}()
+	return nil
+}
+
+// StopAllocation cancels the proof search and keeps the best feasible solution
+// already published to the UI.
+func (a *App) StopAllocation() bool {
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	if !a.allocationRunning || a.allocationCancel == nil {
+		return false
+	}
+	cancel := a.allocationCancel
+	a.allocationCancel = nil
+	cancel()
+	return true
+}
+
+func (a *App) finishAllocationRun(runID uint64) {
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	if a.allocationRunID != runID {
+		return
+	}
+	a.allocationRunning = false
+	a.allocationCancel = nil
+}
+
+func buildUIAllocationResult(run allocation.ConfiguredAllocationResult) UIAllocationResult {
 
 	evaluatorMap := buildUIEvaluatorMap(run.Avaliadores, run.Problem.Candidates)
 	candMap := buildUICandidateMap(run.Candidatos, run.Problem.Candidates, evaluatorMap)
@@ -359,8 +453,13 @@ func (a *App) RunAllocation(config types.AllocationConfiguration) (UIAllocationR
 	if len(naoAlocados) > 0 {
 		status = "Alocação Parcial"
 	}
-	if run.Result.Status == "infeasible" {
+	switch run.Result.Status {
+	case "infeasible":
 		status = "Impossível (Infeasible)"
+	case "feasible":
+		status = "Solução provisória"
+	case "cancelled":
+		status = "Execução interrompida"
 	}
 
 	return UIAllocationResult{
@@ -374,7 +473,7 @@ func (a *App) RunAllocation(config types.AllocationConfiguration) (UIAllocationR
 		RejectionReason: run.Result.RejectionReason,
 		Metrics:         run.Result.Metrics,
 		DebugNotes:      run.Result.DebugNotes,
-	}, nil
+	}
 }
 
 func buildUICandidateMap(candidatos []types.Candidato, solverCandidates []types.SolverCandidate, evaluators map[int]UIAvaliador) map[int]UICandidate {
@@ -507,6 +606,13 @@ func removeWailsSmokeSentinel() {
 }
 
 func (a *App) clearTransientState() {
+	a.allocationMu.Lock()
+	if a.allocationCancel != nil {
+		a.allocationCancel()
+	}
+	a.allocationCancel = nil
+	a.allocationRunning = false
+	a.allocationMu.Unlock()
 	a.ctx = nil
 	a.excelData = nil
 	a.nOpcoes = 0

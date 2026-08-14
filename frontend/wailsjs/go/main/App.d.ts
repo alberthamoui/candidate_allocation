@@ -52,6 +52,10 @@ export function SaveRestricoesFromMaps(arg1:Array<Record<string, any>>):Promise<
 
 export function SaveUsuariosFromMaps(arg1:Array<Record<string, any>>):Promise<void>;
 
+export function StartAllocation(arg1:types.AllocationConfiguration):Promise<void>;
+
+export function StopAllocation():Promise<boolean>;
+
 export function SuggestMapping(arg1:Array<number>,arg2:number):Promise<Array<types.MappingItem>>;
 
 export function SuggestMappingAvaliador():Promise<Array<types.MappingItem>>;

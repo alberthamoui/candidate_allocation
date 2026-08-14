@@ -30,6 +30,38 @@ func TestExactSolverMatchesExhaustiveOracleOnSmallProblems(t *testing.T) {
 	}
 }
 
+func TestExactSolverWithAllNewBoundsMatchesExhaustiveOracle(t *testing.T) {
+	// #nosec G404 - deterministic pseudo-random fixtures are intentional in tests.
+	rng := rand.New(rand.NewSource(20260814))
+	for iteration := 0; iteration < 60; iteration++ {
+		problem := randomOracleProblem(rng)
+		for candidateIndex := range problem.Candidates {
+			value := "a"
+			if rng.Intn(2) == 1 {
+				value = "b"
+			}
+			problem.Candidates[candidateIndex].Attributes = map[string]string{"segment": value}
+		}
+		problem.SoftRules.Criteria = []types.SoftCriterion{
+			{Type: types.SoftCriterionMinValue, ColumnKey: "segment", SelectedValues: []string{"a"}, Threshold: 2},
+			{Type: types.SoftCriterionAtLeastOneEach, ColumnKey: "segment", SelectedValues: []string{"a", "b"}},
+			{Type: types.SoftCriterionBalancedDistribution, ColumnKey: "segment", SelectedValues: []string{"a", "b"}},
+		}
+
+		got := SolveAllocation(problem, SolverOptions{WorkerCount: 3, ParallelDepth: 1})
+		want, feasible := exhaustiveOptimalScore(problem)
+		if !feasible {
+			if got.Status != "infeasible" {
+				t.Fatalf("iteration %d: expected infeasible, got %#v", iteration, got)
+			}
+			continue
+		}
+		if got.Status != "optimal" || got.Score.TotalPenalty != want {
+			t.Fatalf("iteration %d: got status=%s score=%d want=%d problem=%#v", iteration, got.Status, got.Score.TotalPenalty, want, problem)
+		}
+	}
+}
+
 func randomOracleProblem(rng *rand.Rand) types.AllocationProblem {
 	candidateCount := 3 + rng.Intn(4)
 	groupCount := 2 + rng.Intn(2)
@@ -105,6 +137,38 @@ func BenchmarkSolveAllocationMediumExact(b *testing.B) {
 			b.Fatalf("unexpected result: %#v", result)
 		}
 	}
+}
+
+func BenchmarkSolveAllocationThreeSoftCriteria(b *testing.B) {
+	problem := makeSoftCriteriaBenchmarkProblem(18, 3)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for iteration := 0; iteration < b.N; iteration++ {
+		result := SolveAllocation(problem, SolverOptions{WorkerCount: 1})
+		if result.Status != "optimal" {
+			b.Fatalf("unexpected result: %#v", result)
+		}
+	}
+}
+
+func makeSoftCriteriaBenchmarkProblem(candidateCount, groupCount int) types.AllocationProblem {
+	problem := makeOracleBenchmarkProblem(candidateCount, groupCount)
+	for index := range problem.Groups {
+		problem.Groups[index].EvaluatorIDs = []int{index + 1}
+	}
+	for index := range problem.Candidates {
+		value := "a"
+		if index >= len(problem.Candidates)/2 {
+			value = "b"
+		}
+		problem.Candidates[index].Attributes = map[string]string{"segment": value}
+	}
+	problem.SoftRules.Criteria = []types.SoftCriterion{
+		{Type: types.SoftCriterionBalancedDistribution, ColumnKey: "segment", SelectedValues: []string{"a", "b"}},
+		{Type: types.SoftCriterionAtLeastOneEach, ColumnKey: "segment", SelectedValues: []string{"a", "b"}},
+		{Type: types.SoftCriterionMinValue, ColumnKey: "segment", SelectedValues: []string{"a"}, Threshold: 2},
+	}
+	return problem
 }
 
 func TestSolveAllocationDecomposesIndependentCandidateGroupGraphs(t *testing.T) {

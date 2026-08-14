@@ -82,13 +82,15 @@ func (tracker *solverProgressTracker) resolve(weight *big.Int, pruned bool) {
 	tracker.reportLocked(false)
 }
 
-func (tracker *solverProgressTracker) finish() {
+func (tracker *solverProgressTracker) finish(completed bool) {
 	if tracker == nil || tracker.callback == nil {
 		return
 	}
 	tracker.mu.Lock()
 	defer tracker.mu.Unlock()
-	tracker.resolved.Set(tracker.total)
+	if completed {
+		tracker.resolved.Set(tracker.total)
+	}
 	tracker.reportLocked(true)
 }
 
