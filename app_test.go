@@ -126,12 +126,17 @@ func TestAppLifecycleHooksClearTransientStateAndRemoveSmokeFile(t *testing.T) {
 	app.ctx = context.Background()
 	app.excelData = []byte("payload")
 	app.nOpcoes = 3
+	unsubscribed := false
+	app.allocationProgressUnsubscribe = func() { unsubscribed = true }
 
 	if prevent := app.beforeClose(context.Background()); prevent {
 		t.Fatal("expected beforeClose to allow shutdown")
 	}
 	if app.ctx != nil || app.excelData != nil || app.nOpcoes != 0 {
 		t.Fatalf("expected transient state to be cleared, got ctx=%v excelData=%v nOpcoes=%d", app.ctx, app.excelData, app.nOpcoes)
+	}
+	if !unsubscribed {
+		t.Fatal("expected allocation progress listener to be removed")
 	}
 
 	tempDir := t.TempDir()
@@ -231,6 +236,52 @@ func TestFinishAllocationRunOnlyClearsMatchingRun(t *testing.T) {
 	app.finishAllocationRun(2)
 	if app.allocationRunning || app.allocationCancel != nil {
 		t.Fatal("matching run should clear execution state")
+	}
+}
+
+func TestAllocationRunStateTracksProgressSolutionAndCompletion(t *testing.T) {
+	app := NewApp()
+	app.allocationRunning = true
+	app.allocationRunID = 7
+	progress := allocation.SolverProgress{Percent: 99.9, TotalBranches: "100000000"}
+	provisional := UIAllocationResult{Status: "Solução provisória", SolverStatus: "feasible"}
+	optimal := UIAllocationResult{Status: "Sucesso!", SolverStatus: "optimal"}
+
+	if !app.updateAllocationProgress(7, progress) || !app.updateAllocationSolution(7, provisional) {
+		t.Fatal("expected matching active run updates to be accepted")
+	}
+	if lightweight := app.GetAllocationRunState(false); lightweight.Result != nil || !lightweight.HasResult {
+		t.Fatalf("lightweight polling state must report result availability without its payload: %#v", lightweight)
+	}
+	state := app.GetAllocationRunState(true)
+	if !state.Running || !state.HasResult || state.Progress.Percent != 99.9 || state.Result == nil || state.Result.SolverStatus != "feasible" {
+		t.Fatalf("unexpected active run state: %#v", state)
+	}
+	if !app.completeAllocationRun(7, optimal) {
+		t.Fatal("expected matching run to complete")
+	}
+	state = app.GetAllocationRunState(true)
+	if state.Running || !state.HasResult || state.Result == nil || state.Result.SolverStatus != "optimal" || state.Error != "" {
+		t.Fatalf("unexpected completed run state: %#v", state)
+	}
+	if app.updateAllocationProgress(7, allocation.SolverProgress{Percent: 50}) || app.completeAllocationRun(6, optimal) {
+		t.Fatal("completed or stale runs must not mutate the authoritative state")
+	}
+}
+
+func TestAllocationRunStateTracksFailure(t *testing.T) {
+	app := NewApp()
+	app.allocationRunning = true
+	app.allocationRunID = 3
+	if !app.failAllocationRun(3, "falha de teste") {
+		t.Fatal("expected matching active run failure to be accepted")
+	}
+	state := app.GetAllocationRunState(false)
+	if state.Running || state.Error != "falha de teste" || state.HasResult {
+		t.Fatalf("unexpected failed run state: %#v", state)
+	}
+	if app.failAllocationRun(2, "stale") {
+		t.Fatal("stale failure must be ignored")
 	}
 }
 

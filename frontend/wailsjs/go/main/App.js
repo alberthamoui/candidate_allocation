@@ -42,6 +42,10 @@ export function DetectUniquePreferenceValues(arg1) {
   return window['go']['main']['App']['DetectUniquePreferenceValues'](arg1);
 }
 
+export function GetAllocationRunState(arg1) {
+  return window['go']['main']['App']['GetAllocationRunState'](arg1);
+}
+
 export function GetAvaliadorMappingFieldInfos() {
   return window['go']['main']['App']['GetAvaliadorMappingFieldInfos']();
 }

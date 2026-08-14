@@ -4,14 +4,7 @@ import { BuildAllocationConfigurationFromDatabase, GetWorkflowDefinition } from 
 import { MetricPill, SectionCard, StatusBadge } from "./workflowShell";
 import { waitForWailsBindings } from "./wailsReady";
 import { useAllocationRun } from "./AllocationRunContext";
-
-function formatPossibilityCount(value: string) {
-	try {
-		return BigInt(value).toLocaleString("pt-BR");
-	} catch {
-		return value;
-	}
-}
+import { clampProgressPercent, formatPossibilityCount, formatRemainingPossibilityCount } from "./allocationProgress";
 
 export default function AllocationLoadingPage() {
 	const navigate = useNavigate();
@@ -49,7 +42,8 @@ export default function AllocationLoadingPage() {
 		if (started.current && result) navigate("/allocation-result");
 	}, [navigate, result]);
 
-	const percentage = Math.min(100, Math.max(0, progress.percent));
+	const percentage = clampProgressPercent(progress.percent);
+	const remainingPossibilities = formatRemainingPossibilityCount(progress.totalBranches, progress.branchesResolved);
 	const displayedStatus = error ? "Erro na alocação: " + error : status;
 
 	return (
@@ -71,12 +65,15 @@ export default function AllocationLoadingPage() {
 					<div className="mx-auto h-16 w-16 animate-spin rounded-full border-4 border-[rgba(178,122,68,0.18)] border-t-[var(--accent-strong)]" />
 					<h2 className="mt-6 text-2xl text-[var(--text)]">{displayedStatus}</h2>
 					<div className="mt-8" data-testid="allocation-progress">
-						<div className="mb-3 flex items-end justify-between gap-4">
-							<div className="text-left">
+						<div className="mb-3 flex min-w-0 items-end justify-between gap-4 overflow-hidden">
+							<div className="min-w-0 text-left">
 								<div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Possibilidades totais</div>
-								<div className="mt-1 text-lg font-semibold" data-testid="allocation-total-possibilities">{formatPossibilityCount(progress.totalBranches)}</div>
+								<div className="mt-1 truncate text-lg font-semibold tabular-nums" data-testid="allocation-total-possibilities">{formatPossibilityCount(progress.totalBranches)}</div>
 							</div>
-							<div className="text-3xl font-semibold tabular-nums text-[var(--accent)]" data-testid="allocation-progress-percent">{percentage.toFixed(1)}%</div>
+							<div className="shrink-0 text-right">
+								<div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Possibilidades restantes</div>
+								<div className="mt-1 text-3xl font-semibold tabular-nums text-[var(--accent)]" data-testid="allocation-remaining-possibilities">{remainingPossibilities}</div>
+							</div>
 						</div>
 						<div
 							className="h-4 overflow-hidden rounded-full border border-[rgba(94,106,210,0.2)] bg-white shadow-inner"
@@ -85,6 +82,7 @@ export default function AllocationLoadingPage() {
 							aria-valuemin={0}
 							aria-valuemax={100}
 							aria-valuenow={percentage}
+							aria-valuetext={`${remainingPossibilities} possibilidades restantes`}
 						>
 							<div className="h-full rounded-full bg-[linear-gradient(90deg,var(--accent),#8b94ed)] transition-[width] duration-300" style={{ width: `${percentage}%` }} />
 						</div>

@@ -30,13 +30,18 @@ type UsuariosResponse = logic.UsuariosResponse
 
 // App struct
 type App struct {
-	ctx               context.Context
-	excelData         []byte
-	nOpcoes           int
-	allocationMu      sync.Mutex
-	allocationCancel  context.CancelFunc
-	allocationRunning bool
-	allocationRunID   uint64
+	ctx                           context.Context
+	excelData                     []byte
+	nOpcoes                       int
+	allocationMu                  sync.Mutex
+	allocationCancel              context.CancelFunc
+	allocationRunning             bool
+	allocationRunID               uint64
+	allocationProgress            allocation.SolverProgress
+	allocationResult              UIAllocationResult
+	allocationHasResult           bool
+	allocationError               string
+	allocationProgressUnsubscribe func()
 }
 
 // NewApp creates a new App application struct
@@ -47,6 +52,7 @@ func NewApp() *App {
 // startup is called at application startup
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.allocationProgressUnsubscribe = runtime.EventsOn(ctx, allocationProgressEvent, func(_ ...interface{}) {})
 	if err := dbpkg.EnsureDefaultDatabase(); err != nil {
 		fmt.Println("Erro ao preparar banco:", err)
 		panic(err)
@@ -246,6 +252,33 @@ type UIAllocationResult struct {
 	DebugNotes      []string                        `json:"debugNotes"`
 }
 
+// UIAllocationRunState is the authoritative snapshot used by the frontend to
+// recover if a Wails event is missed or the page is reloaded during a search.
+type UIAllocationRunState struct {
+	RunID     uint64                    `json:"runId"`
+	Running   bool                      `json:"running"`
+	HasResult bool                      `json:"hasResult"`
+	Progress  allocation.SolverProgress `json:"progress"`
+	Result    *UIAllocationResult       `json:"result,omitempty"`
+	Error     string                    `json:"error"`
+}
+
+// GetAllocationRunState returns the latest backend-owned execution snapshot.
+func (a *App) GetAllocationRunState(includeResult bool) UIAllocationRunState {
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	state := UIAllocationRunState{
+		RunID: a.allocationRunID, Running: a.allocationRunning,
+		HasResult: a.allocationHasResult, Progress: a.allocationProgress,
+		Error: a.allocationError,
+	}
+	if includeResult && a.allocationHasResult {
+		result := a.allocationResult
+		state.Result = &result
+	}
+	return state
+}
+
 func (a *App) GetCriteriaOptions() (map[string][]string, error) {
 	db, err := dbpkg.OpenDefault()
 	if err != nil {
@@ -346,44 +379,47 @@ func (a *App) StartAllocation(config types.AllocationConfiguration) error {
 	runID := a.allocationRunID
 	a.allocationCancel = cancel
 	a.allocationRunning = true
+	a.allocationProgress = allocation.SolverProgress{}
+	a.allocationResult = UIAllocationResult{}
+	a.allocationHasResult = false
+	a.allocationError = ""
 	eventContext := a.ctx
 	a.allocationMu.Unlock()
 
 	go func() {
 		db, err := dbpkg.OpenDefault()
 		if err != nil {
-			if eventContext != nil {
+			if a.failAllocationRun(runID, err.Error()) && eventContext != nil {
 				runtime.EventsEmit(eventContext, allocationErrorEvent, err.Error())
 			}
-			a.finishAllocationRun(runID)
 			return
 		}
 		defer func() { _ = db.Close() }()
 
 		callbacks := allocation.ConfiguredAllocationCallbacks{
 			Progress: func(snapshot allocation.SolverProgress) {
-				if eventContext != nil {
+				if a.updateAllocationProgress(runID, snapshot) && eventContext != nil {
 					runtime.EventsEmit(eventContext, allocationProgressEvent, snapshot)
 				}
 			},
 			Solution: func(snapshot allocation.ConfiguredAllocationResult) {
-				if eventContext != nil {
-					runtime.EventsEmit(eventContext, allocationSolutionEvent, buildUIAllocationResult(snapshot))
+				uiResult := buildUIAllocationResult(snapshot)
+				if a.updateAllocationSolution(runID, uiResult) && eventContext != nil {
+					runtime.EventsEmit(eventContext, allocationSolutionEvent, uiResult)
 				}
 			},
 		}
 		run, runErr := allocation.RunConfiguredAllocationStreaming(ctx, db, config, callbacks)
 		if runErr != nil {
-			if eventContext != nil {
+			if a.failAllocationRun(runID, runErr.Error()) && eventContext != nil {
 				runtime.EventsEmit(eventContext, allocationErrorEvent, runErr.Error())
 			}
-			a.finishAllocationRun(runID)
 			return
 		}
-		if eventContext != nil {
-			runtime.EventsEmit(eventContext, allocationCompleteEvent, buildUIAllocationResult(run))
+		uiResult := buildUIAllocationResult(run)
+		if a.completeAllocationRun(runID, uiResult) && eventContext != nil {
+			runtime.EventsEmit(eventContext, allocationCompleteEvent, uiResult)
 		}
-		a.finishAllocationRun(runID)
 	}()
 	return nil
 }
@@ -410,6 +446,53 @@ func (a *App) finishAllocationRun(runID uint64) {
 	}
 	a.allocationRunning = false
 	a.allocationCancel = nil
+}
+
+func (a *App) updateAllocationProgress(runID uint64, progress allocation.SolverProgress) bool {
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	if a.allocationRunID != runID || !a.allocationRunning {
+		return false
+	}
+	a.allocationProgress = progress
+	return true
+}
+
+func (a *App) updateAllocationSolution(runID uint64, result UIAllocationResult) bool {
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	if a.allocationRunID != runID || !a.allocationRunning {
+		return false
+	}
+	a.allocationResult = result
+	a.allocationHasResult = true
+	return true
+}
+
+func (a *App) completeAllocationRun(runID uint64, result UIAllocationResult) bool {
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	if a.allocationRunID != runID || !a.allocationRunning {
+		return false
+	}
+	a.allocationRunning = false
+	a.allocationCancel = nil
+	a.allocationResult = result
+	a.allocationHasResult = true
+	a.allocationError = ""
+	return true
+}
+
+func (a *App) failAllocationRun(runID uint64, message string) bool {
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	if a.allocationRunID != runID || !a.allocationRunning {
+		return false
+	}
+	a.allocationRunning = false
+	a.allocationCancel = nil
+	a.allocationError = message
+	return true
 }
 
 func buildUIAllocationResult(run allocation.ConfiguredAllocationResult) UIAllocationResult {
@@ -612,7 +695,12 @@ func (a *App) clearTransientState() {
 	}
 	a.allocationCancel = nil
 	a.allocationRunning = false
+	unsubscribe := a.allocationProgressUnsubscribe
+	a.allocationProgressUnsubscribe = nil
 	a.allocationMu.Unlock()
+	if unsubscribe != nil {
+		unsubscribe()
+	}
 	a.ctx = nil
 	a.excelData = nil
 	a.nOpcoes = 0

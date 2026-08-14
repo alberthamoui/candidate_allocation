@@ -1,5 +1,5 @@
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { StartAllocation, StopAllocation } from "../wailsjs/go/main/App";
+import { GetAllocationRunState, StartAllocation, StopAllocation } from "../wailsjs/go/main/App";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 
 export type SolverProgress = {
@@ -9,6 +9,15 @@ export type SolverProgress = {
 	branchesPruned: string;
 	nodesVisited: number;
 	prunedSubtrees: number;
+};
+
+type BackendAllocationRunState = {
+	runId: number;
+	running: boolean;
+	hasResult: boolean;
+	progress: SolverProgress;
+	result?: any;
+	error: string;
 };
 
 export const initialSolverProgress: SolverProgress = {
@@ -58,6 +67,41 @@ export function AllocationRunProvider({ children }: { children: ReactNode }) {
 			stopError();
 		};
 	}, []);
+
+	useEffect(() => {
+		let active = true;
+		let requestInFlight = false;
+		const synchronize = async (onlyIfBackendIsRunning: boolean) => {
+			if (requestInFlight) return;
+			requestInFlight = true;
+			try {
+				let snapshot = await GetAllocationRunState(false) as BackendAllocationRunState;
+				if (!active || !snapshot || (onlyIfBackendIsRunning && !snapshot.running)) return;
+				if (snapshot.hasResult) {
+					const detailedSnapshot = await GetAllocationRunState(true) as BackendAllocationRunState;
+					if (!active) return;
+					snapshot = detailedSnapshot;
+				}
+				setProgress(snapshot.progress || initialSolverProgress);
+				setRunning(Boolean(snapshot.running));
+				setError(snapshot.error || "");
+				if (snapshot.hasResult && snapshot.result) setResult(snapshot.result);
+			} catch {
+				// Event streaming remains the primary path. The query is only a
+				// recovery mechanism for a missed final event or a page reload.
+			} finally {
+				requestInFlight = false;
+			}
+		};
+
+		void synchronize(true);
+		if (!running) return () => { active = false; };
+		const interval = window.setInterval(() => void synchronize(false), 500);
+		return () => {
+			active = false;
+			window.clearInterval(interval);
+		};
+	}, [running]);
 
 	const start = useCallback(async (config: any) => {
 		setResult(null);

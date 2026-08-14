@@ -10,6 +10,7 @@ import {
 	StatusBadge,
 } from "./workflowShell";
 import { useAllocationRun } from "./AllocationRunContext";
+import { clampProgressPercent, formatPossibilityCount, formatRemainingPossibilityCount } from "./allocationProgress";
 
 type PersonSelection =
 	| { kind: "candidate"; person: any }
@@ -18,14 +19,6 @@ type PersonSelection =
 
 const normalizeFilterValue = (value: unknown) =>
 	String(value ?? "").trim().toLocaleLowerCase("pt-BR");
-
-const formatLargeCount = (value: string) => {
-	try {
-		return BigInt(value).toLocaleString("pt-BR");
-	} catch {
-		return value;
-	}
-};
 
 const uniqueDisplayValues = (values: unknown[]) => {
 	const byNormalizedValue = new Map<string, string>();
@@ -152,6 +145,12 @@ export default function AllocationResultPage() {
 	const qualityCharacteristics = result?.quality?.characteristics || [];
 	const activeQuality = qualityCharacteristics.find((characteristic: any) => characteristic.code === activeQualityCode);
 	const activeQualityCandidateIDs = new Set<number>(activeQuality?.candidateIds || []);
+	const activeQualityPenalizedCandidateIDs = new Set<number>(activeQuality?.penalizedCandidateIds || (activeQuality?.penalty > 0 ? activeQuality?.candidateIds : []) || []);
+	const activeQualityNonPenalizedCandidateIDs = new Set<number>(activeQuality?.nonPenalizedCandidateIds || (activeQuality?.penalty > 0 ? [] : activeQuality?.candidateIds) || []);
+	const activeQualityPenalizedGroupIDs = new Set<number>(activeQuality?.penalizedGroupIds || []);
+	const activeQualityNonPenalizedGroupIDs = new Set<number>(activeQuality?.nonPenalizedGroupIds || []);
+	const progressPercentage = clampProgressPercent(allocationRun.progress.percent);
+	const remainingPossibilities = formatRemainingPossibilityCount(allocationRun.progress.totalBranches, allocationRun.progress.branchesResolved);
 
 	if (!result) {
 		return (
@@ -176,8 +175,15 @@ export default function AllocationResultPage() {
 	};
 	const getCandidateClassName = (candidate: any) => {
 		if (activeQualityCode) {
-			return activeQualityCandidateIDs.has(Number(candidate.id))
-				? "border-violet-400 bg-violet-100 text-violet-950 ring-2 ring-violet-300 shadow-sm"
+			const candidateID = Number(candidate.id);
+			if (activeQualityPenalizedCandidateIDs.has(candidateID)) {
+				return "border-rose-500 bg-rose-100 text-rose-950 ring-2 ring-rose-300 shadow-sm";
+			}
+			if (activeQualityNonPenalizedCandidateIDs.has(candidateID)) {
+				return "border-emerald-500 bg-emerald-100 text-emerald-950 ring-2 ring-emerald-300 shadow-sm";
+			}
+			return activeQualityCandidateIDs.has(candidateID)
+				? "border-amber-400 bg-amber-50 text-amber-950 ring-2 ring-amber-200"
 				: "border-slate-100 bg-white text-slate-400 opacity-45";
 		}
 		if (searchTerm.trim()) {
@@ -215,29 +221,44 @@ export default function AllocationResultPage() {
 				aside={<StatusBadge tone="accent">Verificando alternativas</StatusBadge>}
 				className="border-indigo-200 ring-1 ring-indigo-100"
 			>
-				<div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
-					<div>
-						<div className="mb-3 flex items-end justify-between gap-4">
-							<div>
+				<div className="space-y-4 overflow-hidden">
+					<div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+						<div className="flex min-w-0 items-end justify-between gap-4 overflow-hidden sm:max-w-xl sm:gap-8">
+							<div className="min-w-0">
 								<div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Possibilidades totais</div>
-								<div className="mt-1 font-semibold" data-testid="result-total-possibilities">{formatLargeCount(allocationRun.progress.totalBranches)}</div>
+								<div className="mt-1 truncate font-semibold tabular-nums" data-testid="result-total-possibilities">{formatPossibilityCount(allocationRun.progress.totalBranches)}</div>
 							</div>
-							<div className="text-2xl font-semibold text-[var(--accent)]" data-testid="result-progress-percent">{Math.min(100, Math.max(0, allocationRun.progress.percent)).toFixed(1)}%</div>
+							<div className="shrink-0 text-right">
+								<div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Possibilidades restantes</div>
+								<div className="mt-1 text-2xl font-semibold tabular-nums text-[var(--accent)]" data-testid="result-remaining-possibilities">{remainingPossibilities}</div>
+							</div>
 						</div>
-						<div className="h-3 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Verificação de outras soluções" aria-valuemin={0} aria-valuemax={100} aria-valuenow={allocationRun.progress.percent}>
-							<div className="h-full rounded-full bg-[linear-gradient(90deg,var(--accent),#8b94ed)] transition-[width] duration-300" style={{ width: `${Math.min(100, Math.max(0, allocationRun.progress.percent))}%` }} />
+						<div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap" data-testid="search-controls">
+							<PrimaryButton className="w-full justify-center whitespace-nowrap sm:w-auto" type="button" data-testid="continue-search-button" onClick={() => setContinueConfirmed(true)}>Continuar verificando</PrimaryButton>
+							<SecondaryButton className="w-full justify-center sm:w-auto" type="button" data-testid="stop-search-button" onClick={() => allocationRun.stop()}>Parar e ficar com esta solução</SecondaryButton>
 						</div>
-						{continueConfirmed ? <p className="mt-3 text-sm font-medium text-indigo-800">A verificação continuará; esta tela será atualizada quando surgir uma solução melhor.</p> : null}
 					</div>
-					<div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-						<PrimaryButton type="button" data-testid="continue-search-button" onClick={() => setContinueConfirmed(true)}>Continuar verificando</PrimaryButton>
-						<SecondaryButton type="button" data-testid="stop-search-button" onClick={() => allocationRun.stop()}>Parar e ficar com esta solução</SecondaryButton>
+					<div className="h-3 w-full max-w-full overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Verificação de outras soluções" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercentage} aria-valuetext={`${remainingPossibilities} possibilidades restantes`}>
+						<div className="h-full max-w-full rounded-full bg-[linear-gradient(90deg,var(--accent),#8b94ed)] transition-[width] duration-300" style={{ width: `${progressPercentage}%` }} />
 					</div>
+					{progressPercentage >= 99.9 ? (
+						<p className="text-sm font-medium text-indigo-800" data-testid="search-final-phase-message">Etapa final em andamento: ainda existem possibilidades para analisar. A busca termina quando não restar nenhuma ou quando você clicar em parar.</p>
+					) : continueConfirmed ? (
+						<p className="text-sm font-medium text-indigo-800">A verificação continuará; esta tela será atualizada quando surgir uma solução melhor.</p>
+					) : null}
 				</div>
 			</SectionCard>
 		) : result.solverStatus === "feasible" ? (
 			<SectionCard title="Verificação interrompida" description="A melhor solução encontrada foi preservada, mas a optimalidade não foi comprovada." aside={<StatusBadge tone="success">Solução mantida</StatusBadge>}>
 				<p className="text-sm text-[var(--muted)]">Você pode usar esta alocação normalmente ou iniciar uma nova execução para continuar refinando.</p>
+			</SectionCard>
+		) : result.solverStatus === "optimal" ? (
+			<SectionCard title="Verificação concluída" description="Todas as possibilidades foram analisadas, incluindo as descartadas por podas matematicamente seguras." aside={<StatusBadge tone="success">Melhor solução comprovada</StatusBadge>} className="border-emerald-200 ring-1 ring-emerald-100">
+				<p className="text-sm text-[var(--muted)]" data-testid="search-complete-message">Não restam possibilidades para analisar. Esta é a melhor solução possível para os critérios configurados.</p>
+			</SectionCard>
+		) : result.solverStatus === "infeasible" ? (
+			<SectionCard title="Verificação concluída" description="Todas as possibilidades foram analisadas e nenhuma alocação válida atende às restrições configuradas." aside={<StatusBadge tone="danger">Sem solução viável</StatusBadge>}>
+				<p className="text-sm text-[var(--muted)]" data-testid="search-complete-message">Não restam possibilidades para analisar; a busca terminou normalmente.</p>
 			</SectionCard>
 		) : null}
 			<SectionCard
@@ -282,8 +303,14 @@ export default function AllocationResultPage() {
 					})}
 				</div>
 				{activeQuality ? (
-					<div className="mt-4 flex items-center justify-between rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
-						<span><b>Destaque ativo:</b> {activeQuality.label} ({activeQuality.candidateIds?.length || 0} candidato(s))</span>
+					<div className="mt-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-950 sm:flex-row sm:items-center sm:justify-between">
+						<div>
+							<div><b>Destaque ativo:</b> {activeQuality.label}</div>
+							<div className="mt-2 flex flex-wrap gap-2" data-testid="quality-highlight-legend">
+								<span className="rounded-full border border-rose-300 bg-rose-100 px-2.5 py-1 font-semibold text-rose-900">Vermelho: gerou penalidade ({activeQualityPenalizedCandidateIDs.size} candidato(s), {activeQualityPenalizedGroupIDs.size} grupo(s))</span>
+								<span className="rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-1 font-semibold text-emerald-900">Verde: relacionado sem penalidade ({activeQualityNonPenalizedCandidateIDs.size} candidato(s), {activeQualityNonPenalizedGroupIDs.size} grupo(s))</span>
+							</div>
+						</div>
 						<button type="button" onClick={resetQualityHighlight} className="font-semibold underline underline-offset-2">Limpar</button>
 					</div>
 				) : null}
@@ -334,13 +361,18 @@ export default function AllocationResultPage() {
 				<SectionCard key={horario} title={`Horário: ${horario}`} description="Clique em qualquer pessoa para consultar informações e preferências.">
 					<div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
 						{groupedByHorario[horario].map((mesa: any) => (
-							<div key={mesa.id} data-group-id={mesa.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+							<div
+								key={mesa.id}
+								data-group-id={mesa.id}
+								data-quality-impact={activeQualityPenalizedGroupIDs.has(Number(mesa.id)) ? "penalized" : activeQualityNonPenalizedGroupIDs.has(Number(mesa.id)) ? "non-penalized" : "unrelated"}
+								className={`rounded-2xl border bg-white shadow-sm ${activeQualityPenalizedGroupIDs.has(Number(mesa.id)) ? "border-rose-400 ring-2 ring-rose-200" : activeQualityNonPenalizedGroupIDs.has(Number(mesa.id)) ? "border-emerald-400 ring-2 ring-emerald-200" : "border-slate-200"}`}
+							>
 								<div className="rounded-t-2xl border-b border-slate-100 bg-slate-50 px-5 py-4"><h3 className="text-base font-semibold text-slate-950">{mesa.descricao}</h3></div>
 								<div className="p-4">
 									<div className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">Candidatos</div>
 									<ul className="mt-3 space-y-2">
 										{mesa.candidatos?.map((candidate: any) => (
-											<li key={candidate.id} data-candidate-id={candidate.id} data-course={normalizeFilterValue(candidate.curso)} className={`rounded-xl border text-sm transition-all ${getCandidateClassName(candidate)}`}>
+											<li key={candidate.id} data-candidate-id={candidate.id} data-course={normalizeFilterValue(candidate.curso)} data-quality-impact={activeQualityPenalizedCandidateIDs.has(Number(candidate.id)) ? "penalized" : activeQualityNonPenalizedCandidateIDs.has(Number(candidate.id)) ? "non-penalized" : "unrelated"} className={`rounded-xl border text-sm transition-all ${getCandidateClassName(candidate)}`}>
 												<button type="button" onClick={() => setPersonSelection({ kind: "candidate", person: candidate })} className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left">
 													<span className="font-semibold">{candidate.nome}</span><span className="text-xs opacity-75">{candidate.curso} · {candidate.semestre}º</span>
 												</button>

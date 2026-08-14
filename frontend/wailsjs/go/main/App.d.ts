@@ -24,6 +24,8 @@ export function DetectUniqueCandidateColumnValues(arg1:Array<types.Candidato>,ar
 
 export function DetectUniquePreferenceValues(arg1:Array<types.Candidato>):Promise<Array<types.UniqueValueDetection>>;
 
+export function GetAllocationRunState(arg1:boolean):Promise<main.UIAllocationRunState>;
+
 export function GetAvaliadorMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
 
 export function GetCandidateMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
