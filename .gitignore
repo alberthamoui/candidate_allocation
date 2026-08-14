@@ -1,5 +1,8 @@
 anotacoes.txt
 
+node_modules/
+/build/bin/
+
 *.db
 *.db-journal
 *.db3
