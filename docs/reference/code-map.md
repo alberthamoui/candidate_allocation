@@ -81,6 +81,8 @@ status: active
 | `tools/ui-testing/tests` | testes end-to-end |
 | `tools/ui-testing/agent_inspect.js` | DOM, acessibilidade e screenshot opcional |
 | `tools/unexported/main.go` | analisador de APIs públicas não consumidas |
-| `scripts` | instalação Wails e builds multiplataforma |
+| `scripts/update-docs` | orquestrador Jujutsu → Codex da documentação |
+| `scripts/update-docs.test.sh` | testes isolados do atualizador documental |
+| demais arquivos em `scripts` | instalação Wails e builds multiplataforma |
 
 Para roteamento automático mais preciso, use [`docs/manifest.yaml`](../manifest.yaml).

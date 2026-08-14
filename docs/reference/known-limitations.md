@@ -53,9 +53,9 @@ Partes relevantes de `main.tsx`, revisão e resultado usam `any`, reduzindo dete
 
 O input aceita `.xls` e `.csv`, mas a implementação abre dados com `excelize` e a suíte cobre principalmente `.xlsx`.
 
-## Artefatos e dependências versionados
+## Frontend compilado ainda versionado
 
-O repositório contém `frontend/dist` e partes de `tools/ui-testing/node_modules`. Isso pode gerar diffs grandes, instalações parciais e confusão entre fonte e artefato. O runner agora repara Playwright incompleto com `npm ci`.
+`node_modules` e `build/bin` foram retirados do rastreamento e estão no `.gitignore`. `frontend/dist` ainda é versionado, portanto builds locais podem gerar diffs em artefatos compilados. O runner de UI repara Playwright incompleto com `npm ci`.
 
 ## Resíduos de template/utilitários
 

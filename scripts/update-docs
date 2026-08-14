@@ -1,0 +1,263 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPOSITORY_ROOT="${DOCS_UPDATE_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+STATE_FILE="${DOCS_UPDATE_STATE:-$REPOSITORY_ROOT/docs/documentation-state.yaml}"
+PROMPT_FILE="${DOCS_UPDATE_PROMPT:-$REPOSITORY_ROOT/docs/prompts/documentation-updater.md}"
+JJ_BIN="${JJ_BIN:-jj}"
+CODEX_BIN="${CODEX_BIN:-codex}"
+
+DRY_RUN=false
+FORCE=false
+
+usage() {
+  cat <<'EOF'
+Uso: scripts/update-docs [--dry-run] [--force]
+
+Analisa mudanças ainda não cobertas pela documentação, abre um change filho no
+Jujutsu quando necessário e executa uma instância efêmera do Codex para atualizar
+os documentos afetados.
+
+Opções:
+  --dry-run  Mostra o intervalo, commits e arquivos sem executar o Codex.
+  --force    Executa mesmo quando o intervalo contém somente documentação.
+  -h, --help Exibe esta ajuda.
+EOF
+}
+
+fail() {
+  printf 'update-docs: %s\n' "$*" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || fail "comando obrigatório não encontrado: $1"
+}
+
+read_state_value() {
+  local key="$1"
+  awk -v key="$key" '$1 == key ":" { print $2; exit }' "$STATE_FILE"
+}
+
+validate_identifier() {
+  local label="$1"
+  local value="$2"
+  local pattern="$3"
+
+  [[ -n "$value" ]] || fail "$label ausente em $STATE_FILE"
+  [[ "$value" =~ $pattern ]] || fail "$label inválido em $STATE_FILE: $value"
+}
+
+is_documentation_or_generated_path() {
+  local path="$1"
+
+  case "$path" in
+    docs/*|README.md|Docs.md|build/*|frontend/dist/*|node_modules/*|*/node_modules/*|test-results/*|*/test-results/*|tools/bin/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+is_allowed_codex_output() {
+  local path="$1"
+
+  case "$path" in
+    docs/*|README.md|Docs.md|AGENTS.md)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+filter_relevant_paths() {
+  local path
+
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    if ! is_documentation_or_generated_path "$path"; then
+      printf '%s\n' "$path"
+    fi
+  done
+}
+
+filter_disallowed_outputs() {
+  local path
+
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    if ! is_allowed_codex_output "$path"; then
+      printf '%s\n' "$path"
+    fi
+  done
+}
+
+write_state() {
+  local change_id="$1"
+  local commit_id="$2"
+  local temporary_file
+  local recorded_at
+
+  temporary_file="$(mktemp "$STATE_FILE.tmp.XXXXXX")"
+  [[ "$temporary_file" == "$STATE_FILE.tmp."* ]] || fail "arquivo temporário inesperado: $temporary_file"
+  recorded_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  {
+    printf 'version: 1\n'
+    printf 'last_documented:\n'
+    printf '  change_id: %s\n' "$change_id"
+    printf '  commit_id: %s\n' "$commit_id"
+    printf '  recorded_at: "%s"\n' "$recorded_at"
+    printf '  meaning: ultimo estado de codigo analisado pela ferramenta; a documentacao fica no change filho\n'
+  } >"$temporary_file"
+
+  mv -- "$temporary_file" "$STATE_FILE"
+}
+
+parse_arguments() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run)
+        DRY_RUN=true
+        ;;
+      --force)
+        FORCE=true
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        fail "opção desconhecida: $1"
+        ;;
+    esac
+    shift
+  done
+}
+
+main() {
+  local base_change_id
+  local recorded_commit_id
+  local current_empty
+  local current_paths
+  local non_documentation_current_paths
+  local target_revision
+  local needs_new_change
+  local target_change_id
+  local target_commit_id
+  local base_is_ancestor
+  local changed_files
+  local relevant_files
+  local commits
+  local documentation_change_id
+  local current_change_id
+  local codex_outputs
+  local disallowed_outputs
+
+  parse_arguments "$@"
+  require_command "$JJ_BIN"
+  [[ -f "$STATE_FILE" ]] || fail "estado não encontrado: $STATE_FILE"
+  [[ -f "$PROMPT_FILE" ]] || fail "prompt não encontrado: $PROMPT_FILE"
+
+  if [[ "$DRY_RUN" != true ]]; then
+    require_command "$CODEX_BIN"
+  fi
+
+  cd "$REPOSITORY_ROOT"
+
+  base_change_id="$(read_state_value change_id)"
+  recorded_commit_id="$(read_state_value commit_id)"
+  validate_identifier "change_id" "$base_change_id" '^[a-z]+$'
+  validate_identifier "commit_id" "$recorded_commit_id" '^[0-9a-f]+$'
+
+  current_empty="$("$JJ_BIN" log -r @ --no-graph -T 'empty ++ "\n"')"
+  if [[ "$current_empty" == true ]]; then
+    target_revision='@-'
+    needs_new_change=false
+  else
+    current_paths="$("$JJ_BIN" diff -r @ --name-only)"
+    non_documentation_current_paths="$(printf '%s\n' "$current_paths" | filter_disallowed_outputs)"
+    if [[ -z "$non_documentation_current_paths" ]]; then
+      target_revision='@-'
+      needs_new_change=false
+    else
+      target_revision='@'
+      needs_new_change=true
+    fi
+  fi
+
+  target_change_id="$("$JJ_BIN" log -r "$target_revision" --no-graph -T 'change_id ++ "\n"')"
+  target_commit_id="$("$JJ_BIN" log -r "$target_revision" --no-graph -T 'commit_id ++ "\n"')"
+  validate_identifier "change_id alvo" "$target_change_id" '^[a-z]+$'
+  validate_identifier "commit_id alvo" "$target_commit_id" '^[0-9a-f]+$'
+
+  base_is_ancestor="$("$JJ_BIN" log -r "$base_change_id & ancestors($target_commit_id)" --no-graph -T 'commit_id ++ "\n"')"
+  [[ -n "$base_is_ancestor" ]] || fail "o marcador $base_change_id não é ancestral do alvo $target_commit_id; revise $STATE_FILE"
+
+  changed_files="$("$JJ_BIN" diff --from "$base_change_id" --to "$target_commit_id" --name-only)"
+  relevant_files="$(printf '%s\n' "$changed_files" | filter_relevant_paths)"
+  commits="$("$JJ_BIN" log -r "$base_change_id::$target_commit_id ~ $base_change_id" --no-graph -T 'commit_id.short() ++ " " ++ change_id.short() ++ " " ++ description.first_line() ++ "\n"')"
+
+  printf 'Base documentada: %s (%s)\n' "$base_change_id" "$recorded_commit_id"
+  printf 'Alvo de código:   %s (%s)\n' "$target_change_id" "$target_commit_id"
+  printf '\nCommits ainda não analisados:\n%s\n' "${commits:-<nenhum>}"
+  printf '\nArquivos relevantes:\n%s\n' "${relevant_files:-<nenhum>}"
+
+  if [[ -z "$relevant_files" && "$FORCE" != true ]]; then
+    printf '\nNenhuma mudança de código ou operação exige atualização documental.\n'
+    exit 0
+  fi
+
+  if [[ "$DRY_RUN" == true ]]; then
+    printf '\nDry-run concluído; o Codex não foi executado e nenhum change foi criado.\n'
+    exit 0
+  fi
+
+  if [[ "$needs_new_change" == true ]]; then
+    printf '\nCriando change filho para a documentação...\n'
+    "$JJ_BIN" new "$target_commit_id"
+  fi
+
+  documentation_change_id="$("$JJ_BIN" log -r @ --no-graph -T 'change_id ++ "\n"')"
+
+  printf '\nExecutando Codex para revisar e atualizar a documentação...\n\n'
+  {
+    printf '# Contexto calculado pela ferramenta\n\n'
+    printf -- '- Repositório: `%s`\n' "$REPOSITORY_ROOT"
+    printf -- '- Base já documentada (change): `%s`\n' "$base_change_id"
+    printf -- '- Hash registrado na execução anterior: `%s`\n' "$recorded_commit_id"
+    printf -- '- Change de código alvo: `%s`\n' "$target_change_id"
+    printf -- '- Hash exato do código a analisar: `%s`\n' "$target_commit_id"
+    printf -- '- Change reservado para a documentação: `%s`\n' "$documentation_change_id"
+    printf '\n## Commits no intervalo\n\n```text\n%s\n```\n' "${commits:-<nenhum>}"
+    printf '\n## Arquivos relevantes detectados\n\n```text\n%s\n```\n\n' "${relevant_files:-<nenhum>}"
+    cat "$PROMPT_FILE"
+  } | "$CODEX_BIN" exec --ephemeral --sandbox workspace-write --color never -C "$REPOSITORY_ROOT" -
+
+  current_change_id="$("$JJ_BIN" log -r @ --no-graph -T 'change_id ++ "\n"')"
+  [[ "$current_change_id" == "$documentation_change_id" ]] || fail "o Codex trocou o change atual; o estado não foi avançado"
+
+  codex_outputs="$("$JJ_BIN" diff -r @ --name-only)"
+  disallowed_outputs="$(printf '%s\n' "$codex_outputs" | filter_disallowed_outputs)"
+  if [[ -n "$disallowed_outputs" ]]; then
+    printf 'Arquivos fora do escopo documental alterados pelo Codex:\n%s\n' "$disallowed_outputs" >&2
+    fail "o estado não foi avançado; revise o change atual"
+  fi
+
+  write_state "$target_change_id" "$target_commit_id"
+  "$JJ_BIN" describe -m "docs: update through ${target_commit_id:0:12}"
+
+  printf '\nDocumentação atualizada com sucesso.\n'
+  printf 'Marcador avançado para %s (%s).\n' "$target_change_id" "$target_commit_id"
+  printf 'Change documental: %s.\n' "$documentation_change_id"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

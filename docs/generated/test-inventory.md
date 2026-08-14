@@ -5,6 +5,7 @@ summary: Mapa mecânico dos arquivos de teste e responsabilidades cobertas.
 status: generated
 sources:
   - '**/*_test.go'
+  - scripts/*.test.sh
   - tools/ui-testing/tests/
   - tools/ui-testing/agent_inspect.test.js
 ---
@@ -12,6 +13,12 @@ sources:
 # Inventário de testes
 
 Este inventário orienta seleção de testes. Os próprios testes são a fonte dos casos exatos.
+
+## Automação documental
+
+| Arquivo | Cobertura |
+|---|---|
+| `scripts/update-docs.test.sh` | dry-run, intervalo somente documental, criação/reutilização do change filho, avanço do marcador, falha do Codex e bloqueio de outputs fora da documentação |
 
 ## Raiz
 

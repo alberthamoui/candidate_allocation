@@ -44,6 +44,7 @@ Esta documentação descreve o comportamento existente. Código e testes continu
 - [Estratégia e comandos de teste](operations/testing.md)
 - [Troubleshooting](operations/troubleshooting.md)
 - [Atualização automática da documentação](operations/documentation-update.md)
+- [Prompt do atualizador](prompts/documentation-updater.md)
 
 ## Decisões e referência
 
@@ -57,3 +58,5 @@ Esta documentação descreve o comportamento existente. Código e testes continu
 ## Roteamento para LLMs
 
 Uma LLM deve ler primeiro este índice e depois consultar [`manifest.yaml`](manifest.yaml). O manifesto relaciona arquivos alterados aos documentos que precisam ser revisados; ele não contém regras de negócio.
+
+O marcador em [`documentation-state.yaml`](documentation-state.yaml) registra o último estado de código coberto pelo atualizador automático.

@@ -30,6 +30,14 @@ cd frontend
 npm run build
 ```
 
+Para validar a ferramenta de documentação sem chamar Codex ou alterar o repositório:
+
+```bash
+make test-docs-update
+```
+
+A suíte usa executáveis falsos de `jj` e `codex` e cobre dry-run, intervalo somente documental, change atual vazio, criação e reutilização do child documental, falha sem avanço do marcador e bloqueio de alterações fora da documentação.
+
 ## Cobertura Go por camada
 
 - `back/type`: JSON nullable e invariantes de metadata;

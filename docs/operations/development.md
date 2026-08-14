@@ -77,4 +77,14 @@ Os scripts em `scripts/` fazem builds limpos para plataforma atual, Windows amd6
 - `build`: pacotes Wails;
 - `tools/ui-testing/test-results` e `/tmp/candidate-allocation-playwright`: testes de UI.
 
-Não edite artefatos gerados como fonte primária.
+`node_modules` e `build/bin` são ignorados e não devem voltar ao controle de versão. Não edite artefatos gerados como fonte primária.
+
+## Atualização da documentação
+
+Depois de um change de código, execute:
+
+```bash
+make docs-update
+```
+
+O comando exige `jj`, `codex` autenticado e um repositório com o marcador `docs/documentation-state.yaml`. Use `make docs-update-dry-run` para inspecionar o intervalo sem criar change nem iniciar o Codex.

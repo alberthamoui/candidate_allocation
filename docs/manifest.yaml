@@ -90,11 +90,11 @@ documents:
 
   - id: development
     path: docs/operations/development.md
-    sources: [go.mod, go.sum, wails.json, Makefile, package.json, package-lock.json, frontend/package.json*, frontend/package-lock.json, frontend/index.html, frontend/*.config.*, frontend/tsconfig*.json, scripts/**, opencode.json]
+    sources: [.gitignore, go.mod, go.sum, wails.json, Makefile, package.json, package-lock.json, frontend/package.json*, frontend/package-lock.json, frontend/index.html, frontend/*.config.*, frontend/tsconfig*.json, scripts/**, opencode.json]
 
   - id: testing
     path: docs/operations/testing.md
-    sources: [Makefile, tools/unexported/**, tools/ui-testing/**, '**/*_test.go', Execelteste/**]
+    sources: [Makefile, scripts/*.test.sh, tools/unexported/**, tools/ui-testing/**, '**/*_test.go', Execelteste/**]
 
   - id: troubleshooting
     path: docs/operations/troubleshooting.md
@@ -102,7 +102,15 @@ documents:
 
   - id: documentation-update
     path: docs/operations/documentation-update.md
-    sources: [AGENTS.md, docs/manifest.yaml, docs/**]
+    sources: [AGENTS.md, Makefile, scripts/update-docs, scripts/update-docs.test.sh, docs/manifest.yaml, docs/documentation-state.yaml, docs/prompts/documentation-updater.md, docs/**]
+    tests: [scripts/update-docs.test.sh]
+    related: [documentation-updater-prompt, development, testing]
+
+  - id: documentation-updater-prompt
+    path: docs/prompts/documentation-updater.md
+    sources: [scripts/update-docs, docs/manifest.yaml, docs/documentation-state.yaml, AGENTS.md]
+    tests: [scripts/update-docs.test.sh]
+    related: [documentation-update]
 
   - id: decisions-index
     path: docs/decisions/README.md

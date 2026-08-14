@@ -50,3 +50,11 @@ cd tools/ui-testing
 - [Limitações conhecidas](docs/reference/known-limitations.md)
 
 Para atualizar a documentação depois de mudanças no código, comece por [`docs/manifest.yaml`](docs/manifest.yaml) e siga [`docs/operations/documentation-update.md`](docs/operations/documentation-update.md).
+
+Depois de concluir um change de código no Jujutsu, execute uma única vez:
+
+```bash
+make docs-update
+```
+
+O comando encontra todos os changes posteriores ao marcador versionado e inicia `codex exec` para revisar e corrigir somente a documentação afetada.
