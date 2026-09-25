@@ -129,12 +129,15 @@ candidate_allocation/
 └── frontend/       -- app React/TypeScript (Vite + Tailwind)
     └── src/
         ├── main.tsx            -- roteamento e estado global
-        ├── App.tsx             -- tela inicial e upload
-        ├── MappingPage.tsx     -- mapeamento de colunas (reutilizado nas 3 etapas)
-        ├── VerifyUsers.tsx     -- revisão de candidatos
-        ├── UploadAvaliador.tsx
-        ├── UploadRestricao.tsx
-        └── Resultado.tsx       -- resultado da alocação e exportação
+        ├── api.ts              -- cliente HTTP/SSE e gestão do sessionId
+        ├── components/         -- UserCard, EditableCell
+        └── pages/
+            ├── Home.tsx            -- tela inicial e upload
+            ├── MappingPage.tsx     -- mapeamento de colunas (reutilizado nas 3 etapas)
+            ├── VerifyUsers.tsx     -- revisão de candidatos
+            ├── UploadAvaliador.tsx
+            ├── UploadRestricao.tsx
+            └── Resultado.tsx       -- resultado da alocação e exportação
 ```
 
 ## API
