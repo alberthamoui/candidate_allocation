@@ -22,11 +22,7 @@ function formatEta(ms: number): string {
 	return rem > 0 ? `~${m}min ${rem}s restantes` : `~${m}min restantes`;
 }
 
-interface ResultadoProps {
-	setAlocacaoResult: (data: AlocacaoResponse | null) => void;
-}
-
-export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
+export default function Resultado() {
 	const navigate = useNavigate();
 	const [result, setResult] = useState<AlocacaoResponse | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -64,7 +60,6 @@ export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
 				setProgressPct(100);
 				setProgressStep("Concluído!");
 				setResult(result);
-				setAlocacaoResult(result);
 				setTimeout(() => setLoading(false), 400);
 			},
 			(msg) => {
@@ -92,7 +87,6 @@ export default function Resultado({ setAlocacaoResult }: ResultadoProps) {
 		setResetting(true);
 		try {
 			await resetSession();
-			setAlocacaoResult(null);
 			navigate("/");
 		} catch (err: any) {
 			setError("Erro ao reiniciar: " + err.message);

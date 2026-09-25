@@ -25,8 +25,6 @@ function Root() {
   const [mappingAvaliador, setMappingAvaliador] = useState<any>(null);
   const [mappingRestricao, setMappingRestricao] = useState<any>(null);
 
-  const [alocacaoResult, setAlocacaoResult] = useState<any>(null);
-
   return (
     <React.StrictMode>
       <BrowserRouter>
@@ -101,7 +99,7 @@ function Root() {
 
           <Route
             path="/resultado"
-            element={<Resultado setAlocacaoResult={setAlocacaoResult} />}
+            element={<Resultado />}
           />
         </Routes>
       </BrowserRouter>

@@ -190,26 +190,6 @@ func getHorarios(data []Candidato) []string {
 
 	return horariosUnicos
 }
-func FilterUniqueUsers(resp UsuariosResponse) []Candidato {
-	// marca todos os índices duplicados, exceto o primeiro de cada grupo
-	skip := make(map[int]struct{})
-	for _, grp := range resp.Duplicates {
-		for i, idx := range grp {
-			if i > 0 {
-				skip[idx] = struct{}{}
-			}
-		}
-	}
-	// coleta os usuários mantendo a ordem arbitrária do map
-	var out []Candidato
-	for idx, vr := range resp.Usuarios {
-		if _, isDup := skip[idx]; isDup {
-			continue
-		}
-		out = append(out, vr.Usuario)
-	}
-	return out
-}
 
 func normalizaOpcao(op string) string {
 	return strings.TrimSpace(strings.ToLower(op))

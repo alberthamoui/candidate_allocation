@@ -1,7 +1,5 @@
 package main
 
-// go run example_cli.go app.go models.go mapping.go export.go alocate.go processa.go setup.go -file ./Execelteste/base_exemplo.xlsx
-
 // ==================================================
 // ============== IMPORTS E CONSTANTES ==============
 // ==================================================
@@ -15,7 +13,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -565,46 +562,4 @@ func imprimirMesasPreenchidas(mesas []*Mesa, aloc map[int]int, total int) {
 		fmt.Printf("%s (%d candidatos) - %v | Avaliadores: %v\n",
 			m.Descricao, len(m.Candidatos), m.Candidatos, m.Avaliadores)
 	}
-}
-
-// ==================================================
-// ===================== MAIN =======================
-// ==================================================
-
-func Alocar(db *sql.DB) {
-	fmt.Println("---- INICIANDO ALOCAÇÃO ----")
-	// --- carrega dados do banco --------------------------------------------
-	avals := carregarAvaliadores(db)
-	hard, soft := carregarRestricoes(db)
-	horarios := carregarHorarios(db)
-	prefs := carregarDisponibilidades(db, horarios)
-
-	fmt.Println("---- DADOS CARREGADOS ----")
-
-	// --- busca a melhor alocação em NUM_TENTATIVAS tentativas ---------------
-	fmt.Printf("\n---- BUSCANDO MELHOR ALOCAÇÃO (%d tentativas) || (%d nota minima) ----\n", NUM_TENTATIVAS, NOTA_MINIMA)
-	start := time.Now()
-	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft, nil)
-
-	fmt.Println("\n---- MESAS GERADAS (melhor resultado) ----")
-	for _, m := range mesas {
-		fmt.Printf("Mesa %d → %s | Avaliadores: %v\n",
-			m.ID, m.Descricao, m.Avaliadores)
-	}
-	fmt.Println(strings.Repeat("-", 60))
-
-	// índice mesaID -> *Mesa  (facilita buscas na impressão)
-	mapMesa := make(map[int]*Mesa, len(mesas))
-	for _, m := range mesas {
-		mapMesa[m.ID] = m
-	}
-
-	// --- impressão de resultados -------------------------------------------
-	total := imprimirAlocacaoMesas(res.Alocacao, mapMesa, prefs)
-	imprimirMesasPreenchidas(mesas, res.Alocacao, total)
-
-	pontuacao, MAP_PENALIDADES, _ := pontuarResultado(res, mesas, prefs, hard, soft)
-	fmt.Printf("\nPontuação da melhor alocação: %d\n", pontuacao)
-	fmt.Printf("Tempo total de execução: %v\n", time.Since(start))
-	fmt.Printf("Penalidades detalhadas: %v\n", MAP_PENALIDADES)
 }

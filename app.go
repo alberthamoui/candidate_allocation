@@ -39,19 +39,6 @@ func (s *Session) SaveRestricoes(data []Restricao) error {
 	return nil
 }
 
-// Reset recria o banco em memória e limpa o estado.
-func (s *Session) Reset() {
-	s.db.Close()
-	db, _ := sql.Open("sqlite3", ":memory:")
-	db.SetMaxOpenConns(1)
-	setupConn(db)
-	s.db = db
-	s.excelData = nil
-	s.lastResult = nil
-	s.nOpcoes = 0
-	s.emailDomain = ""
-}
-
 // ==================================================
 // =================== SESSION STORE ================
 // ==================================================
