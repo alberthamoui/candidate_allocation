@@ -14,7 +14,9 @@ import (
 func setupSession() *Session {
 	db, _ := sql.Open("sqlite3", ":memory:")
 	db.SetMaxOpenConns(1)
-	setupConn(db)
+	if err := setupConn(db); err != nil {
+		panic(err)
+	}
 	return &Session{db: db, emailDomain: "@al.insper.edu.br"}
 }
 

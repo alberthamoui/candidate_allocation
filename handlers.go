@@ -70,7 +70,12 @@ func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) 
 		emailDomain = "@al.insper.edu.br"
 	}
 
-	id, sess := store.Create()
+	id, sess, err := store.Create()
+	if err != nil {
+		log.Printf("[ERRO] criando sessão: %v", err)
+		writeError(w, 500, "erro ao criar a sessão: "+err.Error())
+		return
+	}
 	mapping, err := sess.SuggestMapping(data, nOpcoes, emailDomain)
 	if err != nil {
 		store.Delete(id)
@@ -314,7 +319,13 @@ func (store *SessionStore) handleCapacidade(w http.ResponseWriter, r *http.Reque
 		writeError(w, 400, err.Error())
 		return
 	}
-	writeJSON(w, 200, sess.PreviaCapacidade(param))
+	previa, err := sess.PreviaCapacidade(param)
+	if err != nil {
+		log.Printf("[ERRO] prévia de capacidade: %v", err)
+		writeError(w, 500, "erro ao calcular a prévia: "+err.Error())
+		return
+	}
+	writeJSON(w, 200, previa)
 }
 
 // GET /api/export?sessionId=xxx — download do arquivo Excel.
