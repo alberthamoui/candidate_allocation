@@ -43,29 +43,21 @@ type UsuariosResponse struct {
 	Duplicates [][]int                  `json:"duplicates"`
 }
 
-// MesaResult é a forma serializável de uma Mesa com nomes legíveis.
+// MesaResult é uma mesa do resultado, com os dados das pessoas (resultado.go).
 type MesaResult struct {
-	ID          int      `json:"id"`
-	DiaID       int      `json:"dia_id"`
-	DiaNome     string   `json:"dia_nome"`
-	Descricao   string   `json:"descricao"`
-	Candidatos  []string `json:"candidatos"`
-	Avaliadores []string `json:"avaliadores"`
-}
-
-// PessoaInfo carrega os campos exibidos para candidatos não alocados.
-type PessoaInfo struct {
-	ID          int    `json:"id"`
-	Nome        string `json:"nome"`
-	EmailInsper string `json:"email_insper"`
-	Curso       string `json:"curso"`
-	Semestre    int    `json:"semestre"`
+	ID          int                  `json:"id"`
+	DiaID       int                  `json:"dia_id"`
+	DiaNome     string               `json:"dia_nome"`
+	Descricao   string               `json:"descricao"`
+	Candidatos  []CandidatoResultado `json:"candidatos"`
+	Avaliadores []AvaliadorResultado `json:"avaliadores"`
 }
 
 // AlocacaoResponse é o que RunAlocacao retorna ao frontend.
 type AlocacaoResponse struct {
-	Mesas           []MesaResult `json:"mesas"`
-	TotalAlocados   int          `json:"total_alocados"`
-	NaoAlocadosInfo []PessoaInfo `json:"nao_alocados_info"`
-	Pontuacao       int          `json:"pontuacao"`
+	Mesas           []MesaResult         `json:"mesas"`
+	TotalAlocados   int                  `json:"total_alocados"`
+	NaoAlocadosInfo []CandidatoResultado `json:"nao_alocados_info"`
+	Pontuacao       int                  `json:"pontuacao"`
+	Qualidade       []ItemQualidade      `json:"qualidade"`
 }

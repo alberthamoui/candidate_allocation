@@ -99,6 +99,7 @@ type Avaliador struct {
 	ID    int    `json:"id"`
 	Nome  string `json:"nome"`
 	Email string `json:"email"`
+	Sigla string `json:"sigla"`
 }
 
 type Horario struct {
@@ -185,7 +186,7 @@ func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) (map[int][]
 }
 
 func carregarAvaliadores(db *sql.DB) ([]*Avaliador, error) {
-	rows, err := db.Query(`SELECT id, nome, email FROM avaliador`)
+	rows, err := db.Query(`SELECT id, nome, email, sigla FROM avaliador`)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +195,7 @@ func carregarAvaliadores(db *sql.DB) ([]*Avaliador, error) {
 	var avals []*Avaliador
 	for rows.Next() {
 		var a Avaliador
-		if err := rows.Scan(&a.ID, &a.Nome, &a.Email); err != nil {
+		if err := rows.Scan(&a.ID, &a.Nome, &a.Email, &a.Sigla); err != nil {
 			return nil, err
 		}
 		avals = append(avals, &a)

@@ -47,6 +47,11 @@ export async function usarSessao(page: Page, sessionId: string) {
 	await page.addInitScript((id) => sessionStorage.setItem("allocation_session_id", id), sessionId);
 }
 
+/** Faz a tela de resultado usar estes parâmetros (como se viessem da tela de parâmetros). */
+export async function usarParametros(page: Page, params: Record<string, number>) {
+	await page.addInitScript((p) => sessionStorage.setItem("allocation_params", p), JSON.stringify(params));
+}
+
 /** Linha da tabela de mapeamento de uma variável (ex.: "nome", "opcao 1"). */
 export function linhaMapeamento(page: Page, variavel: string) {
 	return page.getByRole("row").filter({ has: page.getByRole("cell", { name: variavel, exact: true }) });

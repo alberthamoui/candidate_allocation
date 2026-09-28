@@ -16,7 +16,14 @@ O sistema guia o usuário em 5 etapas:
 4. **Restrições** — mapeamento e confirmação da aba de restrições
 5. **Parâmetros** — mesas por horário, avaliadores por mesa e mínimo/máximo de candidatos por mesa, com uma prévia da capacidade (mesas que cabem com os avaliadores, vagas, quantos candidatos cabem pelos horários que escolheram e avisos)
 
-Ao confirmar os parâmetros, o algoritmo de alocação é executado. O resultado mostra as mesas formadas e os candidatos não alocados. É possível voltar e ajustar os parâmetros, exportar o resultado para `.xlsx` ou reiniciar do zero.
+Ao confirmar os parâmetros, o algoritmo de alocação é executado. A tela de resultado mostra:
+
+- **resumo** (mesas, horários, alocados, pontuação) e **relatório de qualidade**: quantos ficaram em cada opção de horário, quantos têm avaliador "prefiro não" na mesa e quantos ficaram sem mesa — clicar num item destaca esses candidatos;
+- **busca** por candidato (nome, email, curso) ou avaliador (nome, sigla) e **filtros** por horário, curso e semestre;
+- as **mesas agrupadas por horário** e a lista de quem ficou sem mesa, com os horários que escolheu;
+- **detalhes** de qualquer pessoa ao clicar nela: horários escolhidos (e em qual ficou), restrições e, para avaliadores, as mesas em que está.
+
+É possível voltar e ajustar os parâmetros, exportar o resultado para `.xlsx` ou reiniciar do zero.
 
 ### Algoritmo de alocação
 
@@ -169,7 +176,8 @@ candidate_allocation/
 ├── processa.go     -- parsing do arquivo Excel
 ├── mapping.go      -- lógica de mapeamento de colunas
 ├── sugestao_mapping.go -- sugestão de mapeamento pelo nome das colunas
-├── export.go       -- geração do Excel de resultado
+├── export.go       -- execução da alocação e geração do Excel de resultado
+├── resultado.go    -- resultado para a tela: dados das pessoas e relatório de qualidade
 ├── models.go       -- structs de dados
 ├── setup.go        -- inicialização do banco SQLite
 ├── db/             -- funções auxiliares de banco
@@ -183,7 +191,7 @@ candidate_allocation/
     └── src/
         ├── main.tsx            -- roteamento e estado global
         ├── api.ts              -- cliente HTTP/SSE e gestão do sessionId
-        ├── components/         -- UserCard, EditableCell
+        ├── components/         -- UserCard, EditableCell, PainelResultado (conteúdo da tela de resultado)
         └── pages/
             ├── Home.tsx            -- tela inicial e upload
             ├── MappingPage.tsx     -- mapeamento de colunas (reutilizado nas 3 etapas)

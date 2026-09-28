@@ -4,14 +4,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
 	CheckCircleIcon,
 	ExclamationTriangleIcon,
-	UserGroupIcon,
-	TableCellsIcon,
 	ArrowDownTrayIcon,
 	ArrowPathIcon,
 	ArrowLeftIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { startAlocacao, downloadExcel, resetSession, getParametrosSalvos, AlocacaoResponse } from "../api";
+import PainelResultado from "../components/PainelResultado";
 
 function formatEta(ms: number): string {
 	if (ms <= 0) return "";
@@ -284,120 +283,8 @@ export default function Resultado() {
 				</div>
 			</div>
 
-			<div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-
-				{/* ── Mesa list ─────────────────────────────────────────────── */}
-				{mesas.length === 0 ? (
-					<div className="bg-white rounded-2xl shadow p-10 text-center text-gray-500">
-						Nenhuma mesa foi preenchida. Verifique se os dados foram salvos corretamente.
-					</div>
-				) : (
-					<div className="space-y-5">
-						{mesas.map((mesa, idx) => (
-							<motion.div
-								key={mesa.id}
-								initial={{ opacity: 0, y: 16 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ delay: idx * 0.04 }}
-								className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
-							>
-								<div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 flex items-center justify-between">
-									<div className="flex items-center space-x-3">
-										<TableCellsIcon className="w-5 h-5" />
-										<span className="font-bold text-lg capitalize">{mesa.descricao}</span>
-									</div>
-									<span className="bg-white/20 px-3 py-1 rounded-full text-sm font-semibold">
-										{mesa.candidatos.length} candidato{mesa.candidatos.length !== 1 ? "s" : ""}
-									</span>
-								</div>
-
-								<div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-									<div>
-										<div className="flex items-center space-x-2 mb-3">
-											<UserGroupIcon className="w-4 h-4 text-blue-500" />
-											<span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Candidatos</span>
-										</div>
-										<ul className="space-y-1.5">
-											{mesa.candidatos.map((nome, i) => (
-												<li key={i} className="text-sm text-gray-700 flex items-center space-x-2">
-													<span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-														{i + 1}
-													</span>
-													<span>{nome}</span>
-												</li>
-											))}
-										</ul>
-									</div>
-
-									<div>
-										<div className="flex items-center space-x-2 mb-3">
-											<CheckCircleIcon className="w-4 h-4 text-green-500" />
-											<span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Avaliadores</span>
-										</div>
-										<ul className="space-y-1.5">
-											{mesa.avaliadores.length === 0 ? (
-												<li className="text-sm text-gray-400 italic">Nenhum avaliador atribuído</li>
-											) : (
-												mesa.avaliadores.map((nome, i) => (
-													<li key={i} className="text-sm text-gray-700 flex items-center space-x-2">
-														<span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-															{i + 1}
-														</span>
-														<span>{nome}</span>
-													</li>
-												))
-											)}
-										</ul>
-									</div>
-								</div>
-							</motion.div>
-						))}
-					</div>
-				)}
-
-				{/* ── Não alocados ──────────────────────────────────────────── */}
-				{naoAlocados.length > 0 && (
-					<motion.div
-						initial={{ opacity: 0, y: 16 }}
-						animate={{ opacity: 1, y: 0 }}
-						className="bg-white rounded-2xl shadow-lg border border-red-200 overflow-hidden"
-					>
-						<div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-4 flex items-center justify-between">
-							<div className="flex items-center space-x-3">
-								<ExclamationTriangleIcon className="w-5 h-5" />
-								<span className="font-bold text-lg">Candidatos Não Alocados</span>
-							</div>
-							<span className="bg-white/20 px-3 py-1 rounded-full text-sm font-semibold">
-								{naoAlocados.length} candidato{naoAlocados.length !== 1 ? "s" : ""}
-							</span>
-						</div>
-
-						<div className="overflow-x-auto">
-							<table className="w-full text-sm">
-								<thead className="bg-red-50 text-red-800">
-									<tr>
-										<th className="text-left px-6 py-3 font-semibold">#</th>
-										<th className="text-left px-6 py-3 font-semibold">Nome</th>
-										<th className="text-left px-6 py-3 font-semibold">Email Institucional</th>
-										<th className="text-left px-6 py-3 font-semibold">Curso</th>
-										<th className="text-left px-6 py-3 font-semibold">Semestre</th>
-									</tr>
-								</thead>
-								<tbody className="divide-y divide-red-100">
-									{naoAlocados.map((p, i) => (
-										<tr key={p.id} className="hover:bg-red-50 transition-colors">
-											<td className="px-6 py-3 text-gray-400 font-mono">{i + 1}</td>
-											<td className="px-6 py-3 font-medium text-gray-900">{p.nome}</td>
-											<td className="px-6 py-3 text-gray-600">{p.email_insper}</td>
-											<td className="px-6 py-3 text-gray-600">{p.curso}</td>
-											<td className="px-6 py-3 text-gray-600">{p.semestre}º</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
-					</motion.div>
-				)}
+			<div className="max-w-7xl mx-auto px-6 py-8">
+				<PainelResultado result={result} />
 			</div>
 		</div>
 	);
