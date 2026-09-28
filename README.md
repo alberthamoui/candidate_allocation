@@ -174,6 +174,22 @@ docker build -t candidate-allocation .
 docker run -p 8080:8080 candidate-allocation
 ```
 
+### Produção (Render)
+
+O app está publicado no Render, com deploy da branch `main` pelo `Dockerfile` — um merge `main ← dev` publica a versão. O servidor lê quanta CPU o container tem (cota do cgroup) e se ajusta: no plano gratuito (0,1 CPU) cada alocação roda **uma** busca e só **uma** alocação roda por vez; as outras esperam na fila ("Aguardando outra alocação terminar..."). Se o usuário fecha a página, a alocação dele para. No plano gratuito o serviço dorme depois de ~15 min sem uso e as sessões (em memória) se perdem; a tela avisa que a sessão expirou e pede para recomeçar.
+
+Variáveis de ambiente opcionais (no painel do Render):
+
+| Variável | Padrão | O que faz |
+|---|---|---|
+| `ALOCACAO_EXECUCOES` | uma por CPU, até 8 | buscas em paralelo por alocação |
+| `ALOCACAO_ITERACOES` | 200000 | movimentos por busca (menos = mais rápido, pode piorar um pouco o resultado) |
+| `ALOCACOES_SIMULTANEAS` | CPUs ÷ buscas (mínimo 1) | alocações ao mesmo tempo |
+| `MAX_SESSOES` | 200 | sessões abertas ao mesmo tempo |
+| `MAX_UPLOAD_MB` | 10 | tamanho máximo da planilha |
+
+Referência medida com 1 núcleo: a planilha oficial (98 candidatos) leva ~0,5 s de CPU por busca — cerca de 6 s com 0,1 CPU — e chega ao mesmo resultado com 1 busca ou com 8. Com 300 candidatos, uma busca leva ~35 s com 0,1 CPU. O selo no canto da tela mostra branch e commit (no Render, via `RENDER_GIT_BRANCH`/`RENDER_GIT_COMMIT`).
+
 ---
 
 ## Estrutura do projeto
@@ -186,6 +202,7 @@ candidate_allocation/
 ├── alocate.go      -- algoritmo de alocação
 ├── capacidade.go   -- prévia de capacidade para os parâmetros da alocação
 ├── criterios.go    -- critérios adicionais (curso/semestre) usados na alocação
+├── recursos.go     -- limites do servidor conforme a CPU disponível (produção)
 ├── versao.go       -- branch e commit exibidos no canto da tela
 ├── processa.go     -- parsing do arquivo Excel
 ├── mapping.go      -- lógica de mapeamento de colunas

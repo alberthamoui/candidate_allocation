@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"net/url"
@@ -139,7 +140,7 @@ func TestAlocacaoTesteOficial(t *testing.T) {
 	avals, hard, soft, horarios, prefs := d.avals, d.hard, d.soft, d.horarios, d.prefs
 
 	param := parametrosAlocacaoPadrao()
-	res, mesas := fazerMelhorAlocacaoMesas(param, horarios, avals, prefs, hard, soft, nil, nil)
+	res, mesas := fazerMelhorAlocacaoMesas(context.Background(), param, horarios, avals, prefs, hard, soft, nil, nil)
 	validarAlocacao(t, param, res, mesas, prefs, hard)
 
 	score, pen, _ := pontuarResultado(res, mesas, prefs, hard, soft)
@@ -157,7 +158,7 @@ func TestAlocacaoSemAvaliadoresSuficientes(t *testing.T) {
 	// base_exemplo tem 3 avaliadores: não dá para formar mesa de 5
 	s := carregarSessaoXLSX(t, "Excels/base_exemplo.xlsx", 5)
 	d := dadosDaSessao(t, s)
-	res, mesas := fazerMelhorAlocacaoMesas(parametrosAlocacaoPadrao(), d.horarios, d.avals, d.prefs, d.hard, d.soft, nil, nil)
+	res, mesas := fazerMelhorAlocacaoMesas(context.Background(), parametrosAlocacaoPadrao(), d.horarios, d.avals, d.prefs, d.hard, d.soft, nil, nil)
 	if len(mesas) != 0 || res.Alocados != 0 {
 		t.Errorf("esperado nenhuma mesa, obteve %d mesas e %d alocados", len(mesas), res.Alocados)
 	}
@@ -175,7 +176,7 @@ func TestAlocacaoParametrosEditaveis(t *testing.T) {
 		{MesasPorHorario: 10, MinPessoasPorMesa: 1, MaxPessoasPorMesa: 2, AvaliadoresPorMesa: 1},
 	}
 	for _, param := range casos {
-		res, mesas := fazerMelhorAlocacaoMesas(param, horarios, avals, prefs, hard, soft, nil, nil)
+		res, mesas := fazerMelhorAlocacaoMesas(context.Background(), param, horarios, avals, prefs, hard, soft, nil, nil)
 		validarAlocacao(t, param, res, mesas, prefs, hard)
 		score, _, _ := pontuarResultado(res, mesas, prefs, hard, soft)
 		if score != res.Pontuacao {

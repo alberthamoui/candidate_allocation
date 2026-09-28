@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/url"
 	"reflect"
 	"strings"
@@ -122,7 +123,7 @@ func TestCriteriosMudamAAlocacao(t *testing.T) {
 	rodar := func(criterios ...CriterioAlocacao) (ResultadoAlocacao, []*Mesa) {
 		param := parametrosAlocacaoPadrao()
 		param.Criterios = criterios
-		return fazerMelhorAlocacaoMesas(param, d.horarios, d.avals, d.prefs, d.hard, d.soft, d.atributos, nil)
+		return fazerMelhorAlocacaoMesas(context.Background(), param, d.horarios, d.avals, d.prefs, d.hard, d.soft, d.atributos, nil)
 	}
 
 	_, base := rodar()

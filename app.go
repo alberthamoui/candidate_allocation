@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"log"
 	"net/http"
 	"sync"
@@ -44,10 +45,18 @@ func (s *Session) SaveRestricoes(data []Restricao) error {
 type SessionStore struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session
+	// vagasAlocacao limita quantas alocações rodam ao mesmo tempo
+	vagasAlocacao chan struct{}
 }
 
+// errServidorCheio: já há recursos.MaxSessoes sessões abertas.
+var errServidorCheio = errors.New("o servidor está com muitas sessões abertas; tente de novo em alguns minutos")
+
 func NewSessionStore() *SessionStore {
-	s := &SessionStore{sessions: make(map[string]*Session)}
+	s := &SessionStore{
+		sessions:      make(map[string]*Session),
+		vagasAlocacao: make(chan struct{}, recursos.AlocacoesSimultaneas),
+	}
 	go s.cleanup()
 	return s
 }
@@ -62,6 +71,12 @@ func newSessionID() string {
 
 // Create abre um banco :memory: exclusivo para a sessão e inicializa o schema.
 func (s *SessionStore) Create() (string, *Session, error) {
+	s.mu.RLock()
+	cheio := len(s.sessions) >= recursos.MaxSessoes
+	s.mu.RUnlock()
+	if cheio {
+		return "", nil, errServidorCheio
+	}
 	db, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
 		return "", nil, err

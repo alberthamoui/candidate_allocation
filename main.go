@@ -26,6 +26,11 @@ func main() {
 	}
 
 	versaoAtual = carregarVersao()
+	r, err := configurarRecursos(os.Getenv, cotaCPU())
+	if err != nil {
+		log.Fatal(err)
+	}
+	aplicarRecursos(r)
 	store := NewSessionStore()
 	mux := buildRouter(store, distFS)
 

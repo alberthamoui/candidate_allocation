@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"sort"
@@ -106,7 +107,7 @@ func TestResultadoParaATela(t *testing.T) {
 	s := carregarSessaoXLSX(t, "Excels/teste_oficial.xlsx", 5)
 
 	// padrão: todos alocados, 96 na 1ª opção e 2 na 2ª
-	r, err := s.RunAlocacao(parametrosAlocacaoPadrao(), func(any) {})
+	r, err := s.RunAlocacao(context.Background(), parametrosAlocacaoPadrao(), func(any) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +120,7 @@ func TestResultadoParaATela(t *testing.T) {
 	}
 
 	// capacidade curta: há candidatos sem mesa, com suas opções preenchidas
-	r, err = s.RunAlocacao(ParametrosAlocacao{MesasPorHorario: 1, MinPessoasPorMesa: 5, MaxPessoasPorMesa: 5, AvaliadoresPorMesa: 5}, func(any) {})
+	r, err = s.RunAlocacao(context.Background(), ParametrosAlocacao{MesasPorHorario: 1, MinPessoasPorMesa: 5, MaxPessoasPorMesa: 5, AvaliadoresPorMesa: 5}, func(any) {})
 	if err != nil {
 		t.Fatal(err)
 	}

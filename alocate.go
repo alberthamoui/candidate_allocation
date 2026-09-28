@@ -5,6 +5,7 @@ package main
 // ==================================================
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -1068,14 +1069,17 @@ func (p *problema) montarMesas(sol solucao) (map[int]int, []*Mesa) {
 	return aloc, mesas
 }
 
-// fazerMelhorAlocacaoMesas roda SA_EXECUCOES buscas em paralelo e devolve a
+// fazerMelhorAlocacaoMesas roda recursos.Execucoes buscas em paralelo e devolve a
 // melhor alocação. Os parâmetros já devem ter sido validados. onProgress
 // recebe (iteraçõesFeitas, totalIterações, melhorScore) algumas vezes por
 // segundo.
 //
 // atributos[pessoa_id][coluna] são os valores de curso/semestre usados pelos
 // critérios adicionais (pode ser nil se não houver critérios).
-func fazerMelhorAlocacaoMesas(param ParametrosAlocacao, horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool, atributos map[int]map[string]string, onProgress func(int, int, int)) (ResultadoAlocacao, []*Mesa) {
+//
+// Se ctx for cancelado (ex.: o usuário fechou a página), as buscas param e
+// fica a melhor solução vista até ali.
+func fazerMelhorAlocacaoMesas(ctx context.Context, param ParametrosAlocacao, horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool, atributos map[int]map[string]string, onProgress func(int, int, int)) (ResultadoAlocacao, []*Mesa) {
 	p := montarProblema(param, horarios, avals, prefs, hard, soft)
 	p.aplicarCriterios(param.Criterios, atributos)
 	if p.nMesas == 0 {
@@ -1087,26 +1091,34 @@ func fazerMelhorAlocacaoMesas(param ParametrosAlocacao, horarios map[int]*Horari
 	}
 
 	inicio := time.Now()
+	execucoes, iteracoes := recursos.Execucoes, recursos.Iteracoes
 	alvo := p.limiteInferior()
 	fmt.Printf("INICIANDO ALOCAÇÃO: %d candidatos, %d avaliadores, %d horários × %d mesas (%d a %d candidatos, %d avaliadores cada) | %d execuções × %d iterações | limite inferior do custo: %d\n",
-		p.nCand, p.nAval, p.nSlot, p.nMesas, p.minPessoas, p.maxPessoas, p.avPorMesa, SA_EXECUCOES, SA_ITERACOES, alvo)
+		p.nCand, p.nAval, p.nSlot, p.nMesas, p.minPessoas, p.maxPessoas, p.avPorMesa, execucoes, iteracoes, alvo)
 
 	var feitas, melhorGlobal atomic.Int64
 	var parar atomic.Bool
 	melhorGlobal.Store(math.MaxInt64)
-	total := SA_EXECUCOES * SA_ITERACOES
+	total := execucoes * iteracoes
 
-	resultados := make([]solucao, SA_EXECUCOES)
+	resultados := make([]solucao, execucoes)
 	var wg sync.WaitGroup
-	for r := range SA_EXECUCOES {
+	for r := range execucoes {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resultados[r] = p.otimizar(SA_SEMENTE+int64(r), SA_ITERACOES, alvo, &feitas, &melhorGlobal, &parar)
+			resultados[r] = p.otimizar(SA_SEMENTE+int64(r), iteracoes, alvo, &feitas, &melhorGlobal, &parar)
 		}()
 	}
 	fim := make(chan struct{})
 	go func() { wg.Wait(); close(fim) }()
+	go func() {
+		select {
+		case <-ctx.Done():
+			parar.Store(true)
+		case <-fim:
+		}
+	}()
 
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()

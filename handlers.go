@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ==================================================
@@ -39,7 +41,13 @@ func decodeJSON(r *http.Request, dst any) error {
 // POST /api/upload — recebe o arquivo Excel e cria uma sessão.
 // Retorna { sessionId, mapping }.
 func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, int64(recursos.MaxUploadMB)<<20)
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		var grande *http.MaxBytesError
+		if errors.As(err, &grande) {
+			writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("a planilha passa do limite de %d MB", recursos.MaxUploadMB))
+			return
+		}
 		writeError(w, 400, "erro ao parsear form: "+err.Error())
 		return
 	}
@@ -71,7 +79,10 @@ func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	id, sess, err := store.Create()
-	if err != nil {
+	if errors.Is(err, errServidorCheio) {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	} else if err != nil {
 		log.Printf("[ERRO] criando sessão: %v", err)
 		writeError(w, 500, "erro ao criar a sessão: "+err.Error())
 		return
@@ -238,13 +249,6 @@ func (store *SessionStore) handleSaveRestricoes(w http.ResponseWriter, r *http.R
 
 // GET /api/alocar?sessionId=xxx — Server-Sent Events com progresso + resultado final.
 func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) {
-	sessionId := r.URL.Query().Get("sessionId")
-	sess := store.Get(sessionId)
-	if sess == nil {
-		http.Error(w, "sessão não encontrada", http.StatusNotFound)
-		return
-	}
-
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming não suportado", http.StatusInternalServerError)
@@ -263,12 +267,46 @@ func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) 
 		flusher.Flush()
 	}
 
+	// sem sessão (ex.: o servidor reiniciou): avisa pelo próprio stream, que o
+	// navegador só consegue ler se a resposta for um evento
+	sess := store.Get(r.URL.Query().Get("sessionId"))
+	if sess == nil {
+		emit(map[string]string{"error": msgSessaoExpirada})
+		return
+	}
 	param, err := lerParametros(r.URL.Query())
 	if err != nil {
 		emit(map[string]string{"error": err.Error()})
 		return
 	}
-	result, err := sess.RunAlocacao(param, emit)
+
+	// fila: com pouca CPU, uma alocação por vez; as outras esperam a vez
+	ctx := r.Context()
+	select {
+	case store.vagasAlocacao <- struct{}{}:
+	default:
+		aguardando := progressEvent{Step: "Aguardando outra alocação terminar...", Pct: 5}
+		emit(aguardando)
+		lembrete := time.NewTicker(5 * time.Second) // mantém a conexão viva
+		defer lembrete.Stop()
+	esperar:
+		for {
+			select {
+			case store.vagasAlocacao <- struct{}{}:
+				break esperar
+			case <-lembrete.C:
+				emit(aguardando)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+	defer func() { <-store.vagasAlocacao }()
+
+	result, err := sess.RunAlocacao(ctx, param, emit)
+	if ctx.Err() != nil {
+		return // o usuário saiu da página
+	}
 	if err != nil {
 		emit(map[string]string{"error": err.Error()})
 		return
@@ -310,6 +348,10 @@ func lerParametros(q url.Values) (ParametrosAlocacao, error) {
 	}
 	return pa, pa.validar()
 }
+
+// msgSessaoExpirada explica o erro mais comum em produção: no plano gratuito
+// o servidor dorme sem uso e as sessões (em memória) se perdem.
+const msgSessaoExpirada = "sua sessão expirou (o servidor reinicia depois de um tempo sem uso); recomece enviando a planilha"
 
 // GET /api/capacidade?mesas_por_horario=...&min_pessoas_por_mesa=...
 // Prévia do que cabe com os parâmetros; sem parâmetros, usa os padrões.
