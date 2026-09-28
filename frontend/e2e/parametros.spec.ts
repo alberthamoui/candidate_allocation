@@ -73,12 +73,12 @@ test("alocação usa os parâmetros escolhidos e Voltar os mantém", async ({ pa
 
 	await expect(page.getByText("98 alocados")).toBeVisible({ timeout: 30_000 });
 	// cada mesa com 3 avaliadores e 4 a 8 candidatos
-	const mesas = page.locator("div.rounded-2xl.shadow-lg").filter({ hasText: "Avaliadores" });
+	const mesas = page.getByTestId("mesa");
 	const n = await mesas.count();
 	expect(n).toBeGreaterThan(0);
 	for (let i = 0; i < n; i++) {
 		const mesa = mesas.nth(i);
-		const [candidatos, avaliadores] = [mesa.locator("ul").nth(0).locator("li"), mesa.locator("ul").nth(1).locator("li")];
+		const [candidatos, avaliadores] = [mesa.getByTestId("candidatos").locator("li"), mesa.getByTestId("avaliadores").locator("li")];
 		await expect(avaliadores).toHaveCount(3);
 		const c = await candidatos.count();
 		expect(c).toBeGreaterThanOrEqual(4);

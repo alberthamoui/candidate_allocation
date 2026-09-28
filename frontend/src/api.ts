@@ -53,23 +53,49 @@ export interface ProgressEvent {
 export interface AlocacaoResponse {
   mesas: MesaResult[];
   total_alocados: number;
-  nao_alocados_info: PessoaInfo[];
+  nao_alocados_info: CandidatoResultado[];
   pontuacao: number;
+  qualidade: ItemQualidade[];
 }
 
 export interface MesaResult {
   id: number;
+  dia_id: number;
+  dia_nome: string; // horário
   descricao: string;
-  candidatos: string[];
-  avaliadores: string[];
+  candidatos: CandidatoResultado[];
+  avaliadores: AvaliadorResultado[];
 }
 
-export interface PessoaInfo {
+export interface CandidatoResultado {
   id: number;
   nome: string;
   email_insper: string;
   curso: string;
   semestre: number;
+  opcoes: string[]; // horários na ordem de preferência
+  opcao: number; // em qual opção ficou (1 = 1ª); 0 se não alocado
+  nao_posso: string[]; // avaliadores
+  prefiro_nao: string[];
+  conflitos: string[]; // avaliadores "prefiro não" que ficaram na mesa dele
+}
+
+export interface AvaliadorResultado {
+  id: number;
+  nome: string;
+  email: string;
+  sigla: string;
+  nao_posso: string[]; // candidatos
+  prefiro_nao: string[];
+}
+
+export interface ItemQualidade {
+  codigo: string;
+  titulo: string;
+  descricao: string;
+  valor: number;
+  tom: "bom" | "neutro" | "atencao" | "ruim";
+  candidatos: number[]; // ids destacados ao clicar
 }
 
 export interface ParametrosAlocacao {

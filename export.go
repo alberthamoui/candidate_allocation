@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
@@ -26,7 +25,7 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 	if err != nil {
 		return AlocacaoResponse{}, err
 	}
-	avals, hard, soft, horarios, prefs := d.avals, d.hard, d.soft, d.horarios, d.prefs
+	prefs := d.prefs
 
 	emit(progressEvent{Step: "Iniciando algoritmo...", Pct: 25, Total: SA_EXECUCOES * SA_ITERACOES})
 
@@ -38,7 +37,7 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 		emit(progressEvent{Step: "Otimizando alocação...", Pct: pct, Tentativa: feitas, Total: total, Score: score})
 	}
 
-	res, mesas := fazerMelhorAlocacaoMesas(param, horarios, avals, prefs, hard, soft, onProgress)
+	res, mesas := fazerMelhorAlocacaoMesas(param, d.horarios, d.avals, prefs, d.hard, d.soft, onProgress)
 	emit(progressEvent{Step: "Finalizando...", Pct: 97})
 
 	mapMesa := make(map[int]*Mesa, len(mesas))
@@ -48,82 +47,11 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 	total := imprimirAlocacaoMesas(res.Alocacao, mapMesa, prefs)
 	imprimirMesasPreenchidas(mesas, res.Alocacao, total)
 
-	avalNames := make(map[int]string, len(avals))
-	for _, av := range avals {
-		avalNames[av.ID] = av.Nome
-	}
-
-	type pessoaRow struct {
-		ID          int
-		Nome        string
-		EmailInsper string
-		Curso       string
-		Semestre    int
-	}
-	var todasPessoas []pessoaRow
-	pessoaNames := make(map[int]string)
-
-	pRows, err := s.db.Query(`SELECT id, nome, email_insper, curso, semestre FROM pessoa`)
+	cands, err := carregarCandidatos(s)
 	if err != nil {
-		return AlocacaoResponse{}, fmt.Errorf("erro ao carregar candidatos: %w", err)
+		return AlocacaoResponse{}, fmt.Errorf("carregando candidatos: %w", err)
 	}
-	for pRows.Next() {
-		var p pessoaRow
-		if scanErr := pRows.Scan(&p.ID, &p.Nome, &p.EmailInsper, &p.Curso, &p.Semestre); scanErr == nil {
-			pessoaNames[p.ID] = p.Nome
-			todasPessoas = append(todasPessoas, p)
-		}
-	}
-	pRows.Close()
-
-	diaNames := make(map[int]string, len(horarios))
-	for _, h := range horarios {
-		diaNames[h.ID] = h.Descricao
-	}
-
-	var mesaResults []MesaResult
-	for _, m := range mesas {
-		if len(m.Candidatos) == 0 {
-			continue
-		}
-		mr := MesaResult{ID: m.ID, DiaID: m.DiaID, DiaNome: diaNames[m.DiaID], Descricao: m.Descricao}
-		for _, pid := range m.Candidatos {
-			name := pessoaNames[pid]
-			if name == "" {
-				name = fmt.Sprintf("ID %d", pid)
-			}
-			mr.Candidatos = append(mr.Candidatos, name)
-		}
-		for _, aid := range m.Avaliadores {
-			name := avalNames[aid]
-			if name == "" {
-				name = fmt.Sprintf("ID %d", aid)
-			}
-			mr.Avaliadores = append(mr.Avaliadores, name)
-		}
-		mesaResults = append(mesaResults, mr)
-	}
-	sort.Slice(mesaResults, func(i, j int) bool {
-		return mesaResults[i].ID < mesaResults[j].ID
-	})
-
-	alocadosSet := make(map[int]bool, len(res.Alocacao))
-	for pid := range res.Alocacao {
-		alocadosSet[pid] = true
-	}
-	var naoAlocados []PessoaInfo
-	for _, p := range todasPessoas {
-		if !alocadosSet[p.ID] {
-			naoAlocados = append(naoAlocados, PessoaInfo(p))
-		}
-	}
-
-	result := AlocacaoResponse{
-		Mesas:           mesaResults,
-		TotalAlocados:   res.Alocados,
-		NaoAlocadosInfo: naoAlocados,
-		Pontuacao:       res.Pontuacao,
-	}
+	result := montarResultado(d, cands, res, mesas)
 	s.lastResult = &result
 	return result, nil
 }
@@ -160,10 +88,14 @@ func (s *Session) ExportResultado() ([]byte, error) {
 	}
 	row := 2
 	for _, mesa := range s.lastResult.Mesas {
-		avStr := strings.Join(mesa.Avaliadores, ", ")
+		var nomesAv []string
+		for _, av := range mesa.Avaliadores {
+			nomesAv = append(nomesAv, av.Nome)
+		}
+		avStr := strings.Join(nomesAv, ", ")
 		for _, cand := range mesa.Candidatos {
 			celula(lista, 1, row, mesa.Descricao)
-			celula(lista, 2, row, cand)
+			celula(lista, 2, row, cand.Nome)
 			celula(lista, 3, row, avStr)
 			row++
 		}
