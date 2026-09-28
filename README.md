@@ -40,7 +40,7 @@ O arquivo `.xlsx` deve ter exatamente **3 abas**, nesta ordem. Um arquivo de exe
 
 ### Aba 1 — Candidatos
 
-Uma linha por candidato. Os nomes de coluna não precisam ser exatos — o app sugere mapeamento automático por posição, ajustável na interface.
+Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos — o app sugere o mapeamento pelo nome de cada coluna (ignorando maiúsculas, acentos e pontuação, e entendendo variações como "Primeira Opção" ou "E-mail institucional"), ajustável na interface. Campos sem correspondência pelo nome recebem as colunas que sobraram, na ordem da planilha.
 
 | Campo | Descrição | Validação |
 |---|---|---|
@@ -135,6 +135,7 @@ candidate_allocation/
 ├── alocate.go      -- algoritmo de alocação
 ├── processa.go     -- parsing do arquivo Excel
 ├── mapping.go      -- lógica de mapeamento de colunas
+├── sugestao_mapping.go -- sugestão de mapeamento pelo nome das colunas
 ├── export.go       -- geração do Excel de resultado
 ├── models.go       -- structs de dados
 ├── setup.go        -- inicialização do banco SQLite
