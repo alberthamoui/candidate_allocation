@@ -21,12 +21,18 @@ import (
 )
 
 const (
-	// CONFIGURAÇÕES DE ALOCAÇÃO
+	// CONFIGURAÇÕES DE ALOCAÇÃO: valores padrão, editáveis na tela
+	// (ParametrosAlocacao)
 	MESAS_POR_HORARIO    = 5
 	MIN_PESSOAS_POR_MESA = 5
 	MAX_PESSOAS_POR_MESA = 8
 	AVALIADORES_POR_MESA = 5
 	SCORE_BASE           = 100
+
+	// Limites aceitos para os parâmetros editáveis
+	LIMITE_MESAS_POR_HORARIO    = 10
+	LIMITE_PESSOAS_POR_MESA     = 20
+	LIMITE_AVALIADORES_POR_MESA = 10
 
 	// CONFIGURAÇÕES DO OTIMIZADOR (simulated annealing)
 	SA_EXECUCOES    = 8       // execuções independentes em paralelo; fica a melhor
@@ -200,9 +206,9 @@ func carregarRestricoes(db *sql.DB) (hard map[int]map[int]bool, soft map[int]map
 // ==================================================
 //
 // Cada candidato vai para uma mesa de um dos horários que escolheu, ou fica
-// sem mesa. Cada horário tem até nMesas mesas, cada uma com
-// AVALIADORES_POR_MESA avaliadores distintos, e uma mesa só é formada com
-// MIN_PESSOAS_POR_MESA..MAX_PESSOAS_POR_MESA candidatos. O custo minimizado é
+// sem mesa. Cada horário tem até nMesas mesas, cada uma com avPorMesa
+// avaliadores distintos, e uma mesa só é formada com minPessoas..maxPessoas
+// candidatos (valores de ParametrosAlocacao). O custo minimizado é
 // exatamente -(pontuação) de pontuarResultado; "não posso" é proibido.
 //
 // A busca é um simulated annealing sobre a divisão dos candidatos em mesas,
@@ -227,9 +233,45 @@ const (
 	custoProibido   = 1_000_000 // "não posso" no custo real: nunca é a melhor solução
 )
 
+// ParametrosAlocacao são as regras de formação das mesas, editáveis na tela.
+type ParametrosAlocacao struct {
+	MesasPorHorario    int `json:"mesas_por_horario"`
+	MinPessoasPorMesa  int `json:"min_pessoas_por_mesa"`
+	MaxPessoasPorMesa  int `json:"max_pessoas_por_mesa"`
+	AvaliadoresPorMesa int `json:"avaliadores_por_mesa"`
+}
+
+func parametrosAlocacaoPadrao() ParametrosAlocacao {
+	return ParametrosAlocacao{
+		MesasPorHorario:    MESAS_POR_HORARIO,
+		MinPessoasPorMesa:  MIN_PESSOAS_POR_MESA,
+		MaxPessoasPorMesa:  MAX_PESSOAS_POR_MESA,
+		AvaliadoresPorMesa: AVALIADORES_POR_MESA,
+	}
+}
+
+// validar confere se os parâmetros fazem sentido e estão dentro dos limites.
+func (pa ParametrosAlocacao) validar() error {
+	switch {
+	case pa.MesasPorHorario < 1 || pa.MesasPorHorario > LIMITE_MESAS_POR_HORARIO:
+		return fmt.Errorf("mesas por horário deve estar entre 1 e %d", LIMITE_MESAS_POR_HORARIO)
+	case pa.MinPessoasPorMesa < 1 || pa.MinPessoasPorMesa > LIMITE_PESSOAS_POR_MESA:
+		return fmt.Errorf("mínimo de candidatos por mesa deve estar entre 1 e %d", LIMITE_PESSOAS_POR_MESA)
+	case pa.MaxPessoasPorMesa < 1 || pa.MaxPessoasPorMesa > LIMITE_PESSOAS_POR_MESA:
+		return fmt.Errorf("máximo de candidatos por mesa deve estar entre 1 e %d", LIMITE_PESSOAS_POR_MESA)
+	case pa.MinPessoasPorMesa > pa.MaxPessoasPorMesa:
+		return fmt.Errorf("o mínimo de candidatos por mesa (%d) não pode ser maior que o máximo (%d)", pa.MinPessoasPorMesa, pa.MaxPessoasPorMesa)
+	case pa.AvaliadoresPorMesa < 1 || pa.AvaliadoresPorMesa > LIMITE_AVALIADORES_POR_MESA:
+		return fmt.Errorf("avaliadores por mesa deve estar entre 1 e %d", LIMITE_AVALIADORES_POR_MESA)
+	}
+	return nil
+}
+
 // problema é a instância com tudo indexado de 0..n-1, para a busca ser rápida.
 type problema struct {
-	nCand, nAval, nSlot, nMesas int // nMesas = mesas por horário
+	nCand, nAval, nSlot, nMesas int // nMesas = mesas por horário que dá para formar
+	minPessoas, maxPessoas      int // candidatos por mesa
+	avPorMesa                   int
 	candID, avalID, slotID      []int
 	slotDesc                    []string
 	prefs                       [][]int // candidato → horários em ordem de preferência
@@ -256,8 +298,14 @@ var parametrosPadrao = parametrosSA{
 	pctMover:    SA_PCT_MOVER,
 }
 
-func montarProblema(horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool) *problema {
-	p := &problema{par: parametrosPadrao}
+// montarProblema indexa a instância. Os parâmetros já devem ter sido validados.
+func montarProblema(param ParametrosAlocacao, horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool) *problema {
+	p := &problema{
+		par:        parametrosPadrao,
+		minPessoas: param.MinPessoasPorMesa,
+		maxPessoas: param.MaxPessoasPorMesa,
+		avPorMesa:  param.AvaliadoresPorMesa,
+	}
 
 	// ids ordenados: a ordem de iteração de maps em Go é aleatória
 	for id := range horarios {
@@ -279,7 +327,8 @@ func montarProblema(horarios map[int]*Horario, avals []*Avaliador, prefs map[int
 	sort.Ints(p.avalID)
 
 	p.nCand, p.nAval, p.nSlot = len(p.candID), len(p.avalID), len(p.slotID)
-	p.nMesas = min(MESAS_POR_HORARIO, p.nAval/AVALIADORES_POR_MESA)
+	// cada avaliador só pode estar em uma mesa por horário
+	p.nMesas = min(param.MesasPorHorario, p.nAval/p.avPorMesa)
 
 	p.prefs = make([][]int, p.nCand)
 	p.custoPref = make([]int, p.nCand*p.nSlot)
@@ -406,9 +455,11 @@ type estado struct {
 	realSlot             []int
 	busca, real          int
 	pesoFalta, pesoProib int
-	top5                 []int // candidato → soma dos 5 maiores conflitos dele (pesos atuais)
+	topConf              []int // candidato → soma dos avPorMesa maiores conflitos dele (pesos atuais)
 	hung                 hungaro
 	tmp                  [2][][]int // avaliadores calculados, ainda não aceitos
+	mesaDaLinha          []int      // buffer de calcSlot: linha do húngaro → mesa
+	maiores              []int      // buffer de definirPesos
 }
 
 type solucao struct {
@@ -427,8 +478,8 @@ func (e *estado) baseDoSlot(s int) int {
 		for _, c := range membros {
 			base += p.custoPref[c*p.nSlot+s]
 		}
-		if n := len(membros); n > 0 && n < MIN_PESSOAS_POR_MESA {
-			base += (MIN_PESSOAS_POR_MESA - n) * e.pesoFalta
+		if n := len(membros); n > 0 && n < p.minPessoas {
+			base += (p.minPessoas - n) * e.pesoFalta
 		}
 	}
 	return base
@@ -436,13 +487,13 @@ func (e *estado) baseDoSlot(s int) int {
 
 // calcSlot escolhe os melhores avaliadores para as mesas do horário s
 // (gravando-os em dst[k]) e devolve o custo de conflitos da busca e o custo
-// real do horário. No custo real, mesa com menos de MIN_PESSOAS_POR_MESA será
+// real do horário. No custo real, mesa com menos de minPessoas será
 // desfeita, então seus membros contam como não alocados. Se o custo de
 // conflitos passar de corte, desiste no meio e devolve ok = false.
 func (e *estado) calcSlot(s int, dst [][]int, corte int) (conf, real int, ok bool) {
 	p := e.p
 	A := p.nAval
-	var mesaDaLinha [MESAS_POR_HORARIO * AVALIADORES_POR_MESA]int
+	mesaDaLinha := e.mesaDaLinha
 	linhas := 0
 	for k := 0; k < p.nMesas; k++ {
 		m := s*p.nMesas + k
@@ -456,11 +507,11 @@ func (e *estado) calcSlot(s int, dst [][]int, corte int) (conf, real int, ok boo
 			linha[a] = e.somaSoft[m*A+a] + e.pesoProib*e.somaProib[m*A+a]
 		}
 		mesaDaLinha[linhas] = k
-		for r := 1; r < AVALIADORES_POR_MESA; r++ {
+		for r := 1; r < p.avPorMesa; r++ {
 			copy(e.hung.custo[(linhas+r)*A:(linhas+r+1)*A], linha)
 			mesaDaLinha[linhas+r] = k
 		}
-		linhas += AVALIADORES_POR_MESA
+		linhas += p.avPorMesa
 	}
 	if linhas == 0 {
 		return 0, 0, true
@@ -481,7 +532,7 @@ func (e *estado) calcSlot(s int, dst [][]int, corte int) (conf, real int, ok boo
 		n := len(e.membros[m])
 		switch {
 		case n == 0:
-		case n < MIN_PESSOAS_POR_MESA:
+		case n < p.minPessoas:
 			real += n * custoNaoAlocado
 		default:
 			for _, c := range e.membros[m] {
@@ -512,9 +563,9 @@ func (e *estado) definirPesos(progresso float64) {
 	e.pesoProib = rampa(par.proibIni, par.proibFim)
 
 	A := e.p.nAval
-	var maiores [AVALIADORES_POR_MESA]int
-	for c := range e.top5 {
-		clear(maiores[:])
+	maiores := e.maiores
+	for c := range e.topConf {
+		clear(maiores)
 		for a := 0; a < A; a++ {
 			w := e.p.softDe[c*A+a] + e.pesoProib*e.p.proibDe[c*A+a]
 			for i := range maiores { // insere mantendo em ordem decrescente
@@ -525,9 +576,9 @@ func (e *estado) definirPesos(progresso float64) {
 				}
 			}
 		}
-		e.top5[c] = 0
+		e.topConf[c] = 0
 		for _, w := range maiores {
-			e.top5[c] += w
+			e.topConf[c] += w
 		}
 	}
 
@@ -585,7 +636,7 @@ func (e *estado) mover(c, de, para int) {
 // O sorteio vem antes do cálculo, e o húngaro só roda enquanto o movimento
 // ainda pode passar. Para isso cada horário tem um limite inferior do novo
 // custo de conflitos: pôr alguém numa mesa nunca o reduz, e tirar alguém
-// reduz no máximo a soma dos 5 maiores conflitos dele (top5). Se uma mesa
+// reduz no máximo a soma dos avPorMesa maiores conflitos dele (topConf). Se uma mesa
 // ficou vazia, ela perde suas linhas no húngaro e o limite cai para 0.
 func (e *estado) aceitar(m1, m2, sai1, sai2, deltaFora int, temp float64) bool {
 	limiar := math.MaxInt / 4
@@ -608,7 +659,7 @@ func (e *estado) aceitar(m1, m2, sai1, sai2, deltaFora int, temp float64) bool {
 		confLB[i] = e.confSlot[s]
 		for _, x := range [2][2]int{{m1, sai1}, {m2, sai2}} {
 			if m, c := x[0], x[1]; m >= 0 && c >= 0 && m/e.p.nMesas == s {
-				confLB[i] -= e.top5[c]
+				confLB[i] -= e.topConf[c]
 				if len(e.membros[m]) == 0 {
 					confLB[i] = math.MinInt / 4
 				}
@@ -660,7 +711,7 @@ func (e *estado) passo(temp float64) {
 			s := p.prefs[c1][rng.Intn(len(p.prefs[c1]))]
 			dest = s*p.nMesas + rng.Intn(p.nMesas)
 		}
-		if dest == m1 || (dest >= 0 && len(e.membros[dest]) >= MAX_PESSOAS_POR_MESA) {
+		if dest == m1 || (dest >= 0 && len(e.membros[dest]) >= p.maxPessoas) {
 			return
 		}
 		fora := 0
@@ -710,17 +761,20 @@ func (p *problema) novoEstado(semente int64) *estado {
 		baseSlot:  make([]int, p.nSlot),
 		confSlot:  make([]int, p.nSlot),
 		realSlot:  make([]int, p.nSlot),
-		top5:      make([]int, p.nCand),
-		hung:      novoHungaro(p.nMesas*AVALIADORES_POR_MESA, p.nAval),
+		topConf:   make([]int, p.nCand),
+		hung:      novoHungaro(p.nMesas*p.avPorMesa, p.nAval),
+
+		mesaDaLinha: make([]int, p.nMesas*p.avPorMesa),
+		maiores:     make([]int, p.avPorMesa),
 	}
 	for m := range e.membros {
-		e.membros[m] = make([]int, 0, MAX_PESSOAS_POR_MESA+1)
-		e.avs[m] = make([]int, 0, AVALIADORES_POR_MESA)
+		e.membros[m] = make([]int, 0, p.maxPessoas+1)
+		e.avs[m] = make([]int, 0, p.avPorMesa)
 	}
 	for i := range e.tmp {
 		e.tmp[i] = make([][]int, p.nMesas)
 		for k := range e.tmp[i] {
-			e.tmp[i][k] = make([]int, 0, AVALIADORES_POR_MESA)
+			e.tmp[i][k] = make([]int, 0, p.avPorMesa)
 		}
 	}
 
@@ -733,7 +787,7 @@ func (p *problema) novoEstado(semente int64) *estado {
 	busca:
 		for _, s := range p.prefs[c] {
 			for k := 0; k < p.nMesas; k++ {
-				if m := s*p.nMesas + k; len(e.membros[m]) < MAX_PESSOAS_POR_MESA {
+				if m := s*p.nMesas + k; len(e.membros[m]) < p.maxPessoas {
 					e.mover(c, -1, m)
 					break busca
 				}
@@ -800,11 +854,24 @@ func atualizarMinimo(v *atomic.Int64, x int64) {
 	}
 }
 
-// limiteInferior resolve exatamente só a escolha de horários (fluxo de custo
-// mínimo com capacidade nMesas*MAX_PESSOAS_POR_MESA por horário), ignorando
+// limiteInferior resolve exatamente só a escolha de horários, ignorando
 // avaliadores e o mínimo por mesa. Nenhuma alocação tem custo menor que isso;
 // se a busca chega nesse valor, a solução é comprovadamente ótima.
 func (p *problema) limiteInferior() int {
+	return p.fluxoHorarios(func(c, s int) int { return p.custoPref[c*p.nSlot+s] }, custoNaoAlocado)
+}
+
+// maxAlocaveis é quantos candidatos, no máximo, cabem nos horários que
+// escolheram (mesmas simplificações de limiteInferior).
+func (p *problema) maxAlocaveis() int {
+	return p.nCand - p.fluxoHorarios(func(c, s int) int { return 0 }, 1)
+}
+
+// fluxoHorarios resolve por fluxo de custo mínimo a escolha de horários: cada
+// candidato vai para um horário que escolheu (custo custoOpcao) ou fica sem
+// mesa (custo custoSem), com até nMesas*maxPessoas candidatos por horário.
+// Devolve o custo mínimo.
+func (p *problema) fluxoHorarios(custoOpcao func(c, s int) int, custoSem int) int {
 	type aresta struct{ para, cap, custo, rev int }
 	origem, destino := 0, p.nCand+p.nSlot+1
 	g := make([][]aresta, destino+1)
@@ -814,13 +881,13 @@ func (p *problema) limiteInferior() int {
 	}
 	for c := 0; c < p.nCand; c++ {
 		ligar(origem, 1+c, 1, 0)
-		ligar(1+c, destino, 1, custoNaoAlocado)
+		ligar(1+c, destino, 1, custoSem)
 		for _, s := range p.prefs[c] {
-			ligar(1+c, 1+p.nCand+s, 1, p.custoPref[c*p.nSlot+s])
+			ligar(1+c, 1+p.nCand+s, 1, custoOpcao(c, s))
 		}
 	}
 	for s := 0; s < p.nSlot; s++ {
-		ligar(1+p.nCand+s, destino, p.nMesas*MAX_PESSOAS_POR_MESA, 0)
+		ligar(1+p.nCand+s, destino, p.nMesas*p.maxPessoas, 0)
 	}
 
 	// caminhos mínimos sucessivos (Bellman-Ford), uma unidade por vez
@@ -872,7 +939,7 @@ func (p *problema) montarMesas(sol solucao) (map[int]int, []*Mesa) {
 		num := 0
 		for k := 0; k < p.nMesas; k++ {
 			m := s*p.nMesas + k
-			if len(membros[m]) < MIN_PESSOAS_POR_MESA {
+			if len(membros[m]) < p.minPessoas {
 				continue
 			}
 			mesa := &Mesa{
@@ -895,12 +962,13 @@ func (p *problema) montarMesas(sol solucao) (map[int]int, []*Mesa) {
 }
 
 // fazerMelhorAlocacaoMesas roda SA_EXECUCOES buscas em paralelo e devolve a
-// melhor alocação. onProgress recebe (iteraçõesFeitas, totalIterações,
-// melhorScore) algumas vezes por segundo.
-func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool, onProgress func(int, int, int)) (ResultadoAlocacao, []*Mesa) {
-	p := montarProblema(horarios, avals, prefs, hard, soft)
+// melhor alocação. Os parâmetros já devem ter sido validados. onProgress
+// recebe (iteraçõesFeitas, totalIterações, melhorScore) algumas vezes por
+// segundo.
+func fazerMelhorAlocacaoMesas(param ParametrosAlocacao, horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool, onProgress func(int, int, int)) (ResultadoAlocacao, []*Mesa) {
+	p := montarProblema(param, horarios, avals, prefs, hard, soft)
 	if p.nMesas == 0 {
-		log.Printf("[WARN] Avaliadores insuficientes para formar qualquer mesa (necessário mínimo: %d)", AVALIADORES_POR_MESA)
+		log.Printf("[WARN] Avaliadores insuficientes para formar qualquer mesa (necessário mínimo: %d)", p.avPorMesa)
 		return ResultadoAlocacao{Alocacao: map[int]int{}, Pontuacao: SCORE_BASE - p.nCand*custoNaoAlocado}, nil
 	}
 	if p.nCand == 0 {
@@ -909,8 +977,8 @@ func fazerMelhorAlocacaoMesas(horarios map[int]*Horario, avals []*Avaliador, pre
 
 	inicio := time.Now()
 	alvo := p.limiteInferior()
-	fmt.Printf("INICIANDO ALOCAÇÃO: %d candidatos, %d avaliadores, %d horários × %d mesas | %d execuções × %d iterações | limite inferior do custo: %d\n",
-		p.nCand, p.nAval, p.nSlot, p.nMesas, SA_EXECUCOES, SA_ITERACOES, alvo)
+	fmt.Printf("INICIANDO ALOCAÇÃO: %d candidatos, %d avaliadores, %d horários × %d mesas (%d a %d candidatos, %d avaliadores cada) | %d execuções × %d iterações | limite inferior do custo: %d\n",
+		p.nCand, p.nAval, p.nSlot, p.nMesas, p.minPessoas, p.maxPessoas, p.avPorMesa, SA_EXECUCOES, SA_ITERACOES, alvo)
 
 	var feitas, melhorGlobal atomic.Int64
 	var parar atomic.Bool

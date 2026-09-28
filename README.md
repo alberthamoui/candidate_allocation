@@ -8,18 +8,19 @@ Sistema web para alocação de candidatos em mesas de entrevista, desenvolvido e
 
 ## Como funciona
 
-O sistema guia o usuário em 4 etapas:
+O sistema guia o usuário em 5 etapas:
 
 1. **Upload** — envia o arquivo `.xlsx` com candidatos, avaliadores e restrições e configura parâmetros iniciais
 2. **Candidatos** — mapeamento de colunas, revisão e correção dos dados (duplicatas, campos inválidos)
 3. **Avaliadores** — mapeamento e confirmação da aba de avaliadores
 4. **Restrições** — mapeamento e confirmação da aba de restrições
+5. **Parâmetros** — mesas por horário, avaliadores por mesa e mínimo/máximo de candidatos por mesa, com uma prévia da capacidade (mesas que cabem com os avaliadores, vagas, quantos candidatos cabem pelos horários que escolheram e avisos)
 
-Após as 4 etapas, o algoritmo de alocação é executado automaticamente. O resultado mostra as mesas formadas e os candidatos não alocados. É possível exportar o resultado para `.xlsx` ou reiniciar do zero.
+Ao confirmar os parâmetros, o algoritmo de alocação é executado. O resultado mostra as mesas formadas e os candidatos não alocados. É possível voltar e ajustar os parâmetros, exportar o resultado para `.xlsx` ou reiniciar do zero.
 
 ### Algoritmo de alocação
 
-Cada candidato vai para uma mesa de um dos horários que escolheu. Cada horário tem até 5 mesas (limitado por `avaliadores / 5`), cada mesa tem 5 avaliadores distintos e só é formada com 5 a 8 candidatos. A pontuação (em [alocate.go](alocate.go)) penaliza:
+Cada candidato vai para uma mesa de um dos horários que escolheu. Por padrão, cada horário tem até 5 mesas (limitado por `avaliadores / avaliadores por mesa`, pois cada avaliador fica em uma mesa por horário), cada mesa tem 5 avaliadores distintos e só é formada com 5 a 8 candidatos. Esses quatro valores são editáveis na etapa de parâmetros. A pontuação (em [alocate.go](alocate.go)) penaliza:
 
 | Situação | Pontos |
 |---|---|
@@ -133,6 +134,8 @@ candidate_allocation/
 ├── handlers.go     -- handlers das rotas HTTP e router
 ├── app.go          -- SessionStore e lógica de sessão
 ├── alocate.go      -- algoritmo de alocação
+├── capacidade.go   -- prévia de capacidade para os parâmetros da alocação
+├── versao.go       -- branch e commit exibidos no canto da tela
 ├── processa.go     -- parsing do arquivo Excel
 ├── mapping.go      -- lógica de mapeamento de colunas
 ├── sugestao_mapping.go -- sugestão de mapeamento pelo nome das colunas
@@ -153,6 +156,7 @@ candidate_allocation/
             ├── VerifyUsers.tsx     -- revisão de candidatos
             ├── UploadAvaliador.tsx
             ├── UploadRestricao.tsx
+            ├── Parametros.tsx      -- parâmetros da alocação e prévia de capacidade
             └── Resultado.tsx       -- resultado da alocação e exportação
 ```
 
@@ -169,7 +173,8 @@ candidate_allocation/
 | `POST` | `/api/suggest-restricao` | Sugere mapeamento para a aba de restrições |
 | `POST` | `/api/build-restricoes` | Aplica mapeamento e retorna restrições parseadas |
 | `POST` | `/api/save-restricoes` | Salva restrições na sessão |
-| `GET` | `/api/alocar?sessionId=` | Executa alocação via Server-Sent Events (streaming de progresso) |
+| `GET` | `/api/capacidade` | Prévia de capacidade para os parâmetros (query opcional: `mesas_por_horario`, `avaliadores_por_mesa`, `min_pessoas_por_mesa`, `max_pessoas_por_mesa`; sem eles, usa os padrões) |
+| `GET` | `/api/alocar?sessionId=` | Executa alocação via Server-Sent Events (streaming de progresso); aceita os mesmos parâmetros de `/api/capacidade` |
 | `GET` | `/api/export?sessionId=` | Download do resultado em `.xlsx` |
 | `GET` | `/api/exemplo` | Download do arquivo de exemplo |
 | `GET` | `/api/versao` | Branch e commit que o servidor está rodando (exibidos no canto da tela) |

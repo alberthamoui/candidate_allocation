@@ -6,6 +6,8 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -245,7 +247,12 @@ func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) 
 		flusher.Flush()
 	}
 
-	result, err := sess.RunAlocacao(emit)
+	param, err := lerParametros(r.URL.Query())
+	if err != nil {
+		emit(map[string]string{"error": err.Error()})
+		return
+	}
+	result, err := sess.RunAlocacao(param, emit)
 	if err != nil {
 		emit(map[string]string{"error": err.Error()})
 		return
@@ -256,6 +263,47 @@ func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) 
 		Result AlocacaoResponse `json:"result"`
 	}
 	emit(doneMsg{Done: true, Result: result})
+}
+
+// lerParametros lê os parâmetros da alocação da query string; os que faltarem
+// ficam com o valor padrão.
+func lerParametros(q url.Values) (ParametrosAlocacao, error) {
+	pa := parametrosAlocacaoPadrao()
+	campos := []struct {
+		nome string
+		dst  *int
+	}{
+		{"mesas_por_horario", &pa.MesasPorHorario},
+		{"min_pessoas_por_mesa", &pa.MinPessoasPorMesa},
+		{"max_pessoas_por_mesa", &pa.MaxPessoasPorMesa},
+		{"avaliadores_por_mesa", &pa.AvaliadoresPorMesa},
+	}
+	for _, c := range campos {
+		if v := q.Get(c.nome); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return pa, fmt.Errorf("parâmetro %s inválido: %q", c.nome, v)
+			}
+			*c.dst = n
+		}
+	}
+	return pa, pa.validar()
+}
+
+// GET /api/capacidade?mesas_por_horario=...&min_pessoas_por_mesa=...
+// Prévia do que cabe com os parâmetros; sem parâmetros, usa os padrões.
+func (store *SessionStore) handleCapacidade(w http.ResponseWriter, r *http.Request) {
+	sess := store.sessionFromRequest(r)
+	if sess == nil {
+		writeError(w, 401, "sessão não encontrada")
+		return
+	}
+	param, err := lerParametros(r.URL.Query())
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, sess.PreviaCapacidade(param))
 }
 
 // GET /api/export?sessionId=xxx — download do arquivo Excel.
@@ -311,6 +359,7 @@ func buildRouter(store *SessionStore, distFS fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/suggest-restricao", store.handleSuggestRestricao)
 	mux.HandleFunc("POST /api/build-restricoes", store.handleBuildRestricoes)
 	mux.HandleFunc("POST /api/save-restricoes", store.handleSaveRestricoes)
+	mux.HandleFunc("GET /api/capacidade", store.handleCapacidade)
 	mux.HandleFunc("GET /api/alocar", store.handleAlocar)
 	mux.HandleFunc("GET /api/export", store.handleExport)
 	mux.HandleFunc("GET /api/exemplo", handleExemplo)

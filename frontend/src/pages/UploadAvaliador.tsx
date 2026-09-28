@@ -52,6 +52,10 @@ export default function UploadAvaliador({
           <span className="bg-gray-100 text-gray-400 font-semibold px-3 py-1 rounded-full">
             Passo 3
           </span>
+          <span className="text-gray-300">→</span>
+          <span className="bg-gray-100 text-gray-400 font-semibold px-3 py-1 rounded-full">
+            Passo 4
+          </span>
         </div>
 
         <UserGroupIcon className="w-20 h-20 text-blue-500" />

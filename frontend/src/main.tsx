@@ -6,6 +6,7 @@ import MappingPage from "./pages/MappingPage";
 import UploadAvaliador from "./pages/UploadAvaliador";
 import UploadRestricao from "./pages/UploadRestricao";
 import Resultado from "./pages/Resultado";
+import Parametros from "./pages/Parametros";
 import "./index.css";
 import VerifyUserPage from "./pages/VerifyUsers";
 import { BranchBadge } from "./components/BranchBadge";
@@ -93,10 +94,13 @@ function Root() {
                 onSuccess={async (result) => {
                   await saveRestricoes(result);
                 }}
-                nextRoute="/resultado"
+                nextRoute="/parametros"
               />
             }
           />
+
+          {/* Step 4 — parâmetros da alocação */}
+          <Route path="/parametros" element={<Parametros />} />
 
           <Route
             path="/resultado"

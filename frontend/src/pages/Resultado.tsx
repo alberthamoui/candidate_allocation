@@ -11,7 +11,7 @@ import {
 	ArrowLeftIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { startAlocacao, downloadExcel, resetSession, AlocacaoResponse } from "../api";
+import { startAlocacao, downloadExcel, resetSession, getParametrosSalvos, AlocacaoResponse } from "../api";
 
 function formatEta(ms: number): string {
 	if (ms <= 0) return "";
@@ -39,6 +39,7 @@ export default function Resultado() {
 
 	useEffect(() => {
 		const es = startAlocacao(
+			getParametrosSalvos(),
 			(ev) => {
 				if (ev.pct !== undefined && ev.pct > progressRef.current) {
 					progressRef.current = ev.pct;

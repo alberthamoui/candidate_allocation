@@ -17,9 +17,9 @@ type progressEvent struct {
 	Score     int    `json:"score"`
 }
 
-// RunAlocacao executa o algoritmo na sessão e retorna o resultado.
-// emit é chamado com eventos progressEvent e, ao final, com o resultado completo.
-func (s *Session) RunAlocacao(emit func(any)) (AlocacaoResponse, error) {
+// RunAlocacao executa o algoritmo na sessão com os parâmetros dados (já
+// validados) e retorna o resultado. emit é chamado com eventos progressEvent.
+func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (AlocacaoResponse, error) {
 	emit(progressEvent{Step: "Carregando dados...", Pct: 15})
 
 	avals := carregarAvaliadores(s.db)
@@ -37,7 +37,7 @@ func (s *Session) RunAlocacao(emit func(any)) (AlocacaoResponse, error) {
 		emit(progressEvent{Step: "Otimizando alocação...", Pct: pct, Tentativa: feitas, Total: total, Score: score})
 	}
 
-	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft, onProgress)
+	res, mesas := fazerMelhorAlocacaoMesas(param, horarios, avals, prefs, hard, soft, onProgress)
 	emit(progressEvent{Step: "Finalizando...", Pct: 97})
 
 	mapMesa := make(map[int]*Mesa, len(mesas))

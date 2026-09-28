@@ -72,6 +72,55 @@ export interface PessoaInfo {
   semestre: number;
 }
 
+export interface ParametrosAlocacao {
+  mesas_por_horario: number;
+  min_pessoas_por_mesa: number;
+  max_pessoas_por_mesa: number;
+  avaliadores_por_mesa: number;
+}
+
+export interface HorarioCapacidade {
+  descricao: string;
+  interessados: number;
+  primeira_opcao: number;
+}
+
+export interface CapacidadeResponse {
+  parametros: ParametrosAlocacao;
+  candidatos: number;
+  avaliadores: number;
+  mesas_por_horario: number;
+  capacidade_por_horario: number;
+  capacidade_total: number;
+  max_alocaveis: number;
+  horarios: HorarioCapacidade[];
+  avisos: string[];
+}
+
+// Parâmetros escolhidos na tela de parâmetros; ficam no sessionStorage para
+// a tela de resultado usar (e sobreviver a um recarregamento).
+const PARAMS_KEY = 'allocation_params';
+
+export function getParametrosSalvos(): ParametrosAlocacao | null {
+  try {
+    const raw = sessionStorage.getItem(PARAMS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function salvarParametros(p: ParametrosAlocacao): void {
+  sessionStorage.setItem(PARAMS_KEY, JSON.stringify(p));
+}
+
+function paramsQuery(p: ParametrosAlocacao | null): string {
+  if (!p) return '';
+  return new URLSearchParams(
+    Object.entries(p).map(([k, v]) => [k, String(v)])
+  ).toString();
+}
+
 // ==================================================
 // =================== ENDPOINTS ====================
 // ==================================================
@@ -160,15 +209,23 @@ export async function saveRestricoes(data: any[]): Promise<void> {
   await checkOk(res);
 }
 
-// Etapa 4 — alocação via SSE
+// Etapa 4 — prévia do que cabe com os parâmetros (sem parâmetros: padrões)
+export async function getCapacidade(p: ParametrosAlocacao | null): Promise<CapacidadeResponse> {
+  const q = paramsQuery(p);
+  return checkOk(await apiFetch('/api/capacidade' + (q ? '?' + q : '')));
+}
+
+// Etapa 5 — alocação via SSE
 // Retorna um EventSource. O caller ouve eventos até receber { done: true }.
 export function startAlocacao(
+  params: ParametrosAlocacao | null,
   onProgress: (e: ProgressEvent) => void,
   onDone: (result: AlocacaoResponse) => void,
   onError: (msg: string) => void
 ): EventSource {
   const id = getSessionId();
-  const url = `/api/alocar?sessionId=${encodeURIComponent(id ?? '')}`;
+  const q = paramsQuery(params);
+  const url = `/api/alocar?sessionId=${encodeURIComponent(id ?? '')}` + (q ? '&' + q : '');
   const es = new EventSource(url);
 
   es.onmessage = (ev) => {
@@ -194,7 +251,7 @@ export function startAlocacao(
   return es;
 }
 
-// Etapa 5 — download do Excel
+// Etapa 6 — download do Excel
 export function downloadExcel(): void {
   const id = getSessionId();
   const url = `/api/export?sessionId=${encodeURIComponent(id ?? '')}`;
