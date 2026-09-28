@@ -17,6 +17,21 @@ O sistema guia o usuário em 4 etapas:
 
 Após as 4 etapas, o algoritmo de alocação é executado automaticamente. O resultado mostra as mesas formadas e os candidatos não alocados. É possível exportar o resultado para `.xlsx` ou reiniciar do zero.
 
+### Algoritmo de alocação
+
+Cada candidato vai para uma mesa de um dos horários que escolheu. Cada horário tem até 5 mesas (limitado por `avaliadores / 5`), cada mesa tem 5 avaliadores distintos e só é formada com 5 a 8 candidatos. A pontuação (em [alocate.go](alocate.go)) penaliza:
+
+| Situação | Pontos |
+|---|---|
+| Alocado na 1ª / 2ª / 3ª / 4ª / 5ª opção | 0 / −1 / −3 / −5 / −7 (−2 a cada opção seguinte) |
+| Avaliador "prefiro não" na mesa | −5 por avaliador |
+| Candidato sem mesa | −1000 |
+| Avaliador "não posso" na mesa | proibido |
+
+A busca é um **simulated annealing** sobre a divisão dos candidatos em mesas (mover um candidato de mesa ou trocar dois candidatos). Os avaliadores não são sorteados: para cada divisão, a melhor escolha de avaliadores de um horário é um problema de atribuição, resolvido de forma exata pelo **algoritmo húngaro** a cada movimento. Mesas incompletas e conflitos "não posso" recebem penalidades que começam brandas e endurecem ao longo da busca, para que ela consiga montar mesas aos poucos. Rodam 8 buscas independentes em paralelo (sementes fixas, então a mesma planilha gera o mesmo resultado) e fica a melhor.
+
+Um limite inferior exato (fluxo de custo mínimo sobre a escolha de horários) encerra a busca antes quando a solução é comprovadamente ótima.
+
 ---
 
 ## Formatação do arquivo Excel

@@ -27,18 +27,14 @@ func (s *Session) RunAlocacao(emit func(any)) (AlocacaoResponse, error) {
 	horarios := carregarHorarios(s.db)
 	prefs := carregarDisponibilidades(s.db, horarios)
 
-	emit(progressEvent{Step: "Iniciando algoritmo...", Pct: 25, Total: NUM_TENTATIVAS * MAX_RESTARTS})
+	emit(progressEvent{Step: "Iniciando algoritmo...", Pct: 25, Total: SA_EXECUCOES * SA_ITERACOES})
 
-	onProgress := func(globalTentativa, total, score, restart int) {
-		if globalTentativa%PRINT_QUANTIDADE != 0 {
-			return
-		}
-		pct := 25 + (globalTentativa*70)/total
+	onProgress := func(feitas, total, score int) {
+		pct := 25 + (feitas*70)/total
 		if pct > 95 {
 			pct = 95
 		}
-		step := fmt.Sprintf("Calculando... (rodada %d/%d)", restart, MAX_RESTARTS)
-		emit(progressEvent{Step: step, Pct: pct, Tentativa: globalTentativa, Total: total, Score: score})
+		emit(progressEvent{Step: "Otimizando alocação...", Pct: pct, Tentativa: feitas, Total: total, Score: score})
 	}
 
 	res, mesas := fazerMelhorAlocacaoMesas(horarios, avals, prefs, hard, soft, onProgress)
