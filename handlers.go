@@ -2,11 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // ==================================================
@@ -16,7 +21,9 @@ import (
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("[WARN] erro ao escrever resposta JSON: %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
@@ -34,7 +41,13 @@ func decodeJSON(r *http.Request, dst any) error {
 // POST /api/upload — recebe o arquivo Excel e cria uma sessão.
 // Retorna { sessionId, mapping }.
 func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, int64(recursos.MaxUploadMB)<<20)
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		var grande *http.MaxBytesError
+		if errors.As(err, &grande) {
+			writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("a planilha passa do limite de %d MB", recursos.MaxUploadMB))
+			return
+		}
 		writeError(w, 400, "erro ao parsear form: "+err.Error())
 		return
 	}
@@ -52,13 +65,28 @@ func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	nOpcoes := 5
-	fmt.Sscan(r.FormValue("nOpcoes"), &nOpcoes)
+	if v := r.FormValue("nOpcoes"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 10 {
+			writeError(w, 400, fmt.Sprintf("número de opções inválido: %q (esperado de 1 a 10)", v))
+			return
+		}
+		nOpcoes = n
+	}
 	emailDomain := r.FormValue("emailDomain")
 	if emailDomain == "" {
 		emailDomain = "@al.insper.edu.br"
 	}
 
-	id, sess := store.Create()
+	id, sess, err := store.Create()
+	if errors.Is(err, errServidorCheio) {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	} else if err != nil {
+		log.Printf("[ERRO] criando sessão: %v", err)
+		writeError(w, 500, "erro ao criar a sessão: "+err.Error())
+		return
+	}
 	mapping, err := sess.SuggestMapping(data, nOpcoes, emailDomain)
 	if err != nil {
 		store.Delete(id)
@@ -221,16 +249,9 @@ func (store *SessionStore) handleSaveRestricoes(w http.ResponseWriter, r *http.R
 
 // GET /api/alocar?sessionId=xxx — Server-Sent Events com progresso + resultado final.
 func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) {
-	sessionId := r.URL.Query().Get("sessionId")
-	sess := store.Get(sessionId)
-	if sess == nil {
-		http.Error(w, "sessão não encontrada", 404)
-		return
-	}
-
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "streaming não suportado", 500)
+		http.Error(w, "streaming não suportado", http.StatusInternalServerError)
 		return
 	}
 
@@ -241,11 +262,51 @@ func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) 
 
 	emit := func(v any) {
 		b, _ := json.Marshal(v)
-		fmt.Fprintf(w, "data: %s\n\n", b)
+		// se o cliente desconectou, não há a quem avisar
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", b)
 		flusher.Flush()
 	}
 
-	result, err := sess.RunAlocacao(emit)
+	// sem sessão (ex.: o servidor reiniciou): avisa pelo próprio stream, que o
+	// navegador só consegue ler se a resposta for um evento
+	sess := store.Get(r.URL.Query().Get("sessionId"))
+	if sess == nil {
+		emit(map[string]string{"error": msgSessaoExpirada})
+		return
+	}
+	param, err := lerParametros(r.URL.Query())
+	if err != nil {
+		emit(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// fila: com pouca CPU, uma alocação por vez; as outras esperam a vez
+	ctx := r.Context()
+	select {
+	case store.vagasAlocacao <- struct{}{}:
+	default:
+		aguardando := progressEvent{Step: "Aguardando outra alocação terminar...", Pct: 5}
+		emit(aguardando)
+		lembrete := time.NewTicker(5 * time.Second) // mantém a conexão viva
+		defer lembrete.Stop()
+	esperar:
+		for {
+			select {
+			case store.vagasAlocacao <- struct{}{}:
+				break esperar
+			case <-lembrete.C:
+				emit(aguardando)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+	defer func() { <-store.vagasAlocacao }()
+
+	result, err := sess.RunAlocacao(ctx, param, emit)
+	if ctx.Err() != nil {
+		return // o usuário saiu da página
+	}
 	if err != nil {
 		emit(map[string]string{"error": err.Error()})
 		return
@@ -258,6 +319,62 @@ func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) 
 	emit(doneMsg{Done: true, Result: result})
 }
 
+// lerParametros lê os parâmetros da alocação da query string; os que faltarem
+// ficam com o valor padrão. Os critérios vêm como JSON em "criterios".
+func lerParametros(q url.Values) (ParametrosAlocacao, error) {
+	pa := parametrosAlocacaoPadrao()
+	campos := []struct {
+		nome string
+		dst  *int
+	}{
+		{"mesas_por_horario", &pa.MesasPorHorario},
+		{"min_pessoas_por_mesa", &pa.MinPessoasPorMesa},
+		{"max_pessoas_por_mesa", &pa.MaxPessoasPorMesa},
+		{"avaliadores_por_mesa", &pa.AvaliadoresPorMesa},
+	}
+	for _, c := range campos {
+		if v := q.Get(c.nome); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return pa, fmt.Errorf("parâmetro %s inválido: %q", c.nome, v)
+			}
+			*c.dst = n
+		}
+	}
+	if v := q.Get("criterios"); v != "" {
+		if err := json.Unmarshal([]byte(v), &pa.Criterios); err != nil {
+			return pa, fmt.Errorf("critérios inválidos: %w", err)
+		}
+	}
+	return pa, pa.validar()
+}
+
+// msgSessaoExpirada explica o erro mais comum em produção: no plano gratuito
+// o servidor dorme sem uso e as sessões (em memória) se perdem.
+const msgSessaoExpirada = "sua sessão expirou (o servidor reinicia depois de um tempo sem uso); recomece enviando a planilha"
+
+// GET /api/capacidade?mesas_por_horario=...&min_pessoas_por_mesa=...
+// Prévia do que cabe com os parâmetros; sem parâmetros, usa os padrões.
+func (store *SessionStore) handleCapacidade(w http.ResponseWriter, r *http.Request) {
+	sess := store.sessionFromRequest(r)
+	if sess == nil {
+		writeError(w, 401, "sessão não encontrada")
+		return
+	}
+	param, err := lerParametros(r.URL.Query())
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	previa, err := sess.PreviaCapacidade(param)
+	if err != nil {
+		log.Printf("[ERRO] prévia de capacidade: %v", err)
+		writeError(w, 500, "erro ao calcular a prévia: "+err.Error())
+		return
+	}
+	writeJSON(w, 200, previa)
+}
+
 // GET /api/export?sessionId=xxx — download do arquivo Excel.
 func (store *SessionStore) handleExport(w http.ResponseWriter, r *http.Request) {
 	sessionId := r.URL.Query().Get("sessionId")
@@ -266,12 +383,12 @@ func (store *SessionStore) handleExport(w http.ResponseWriter, r *http.Request) 
 	}
 	sess := store.Get(sessionId)
 	if sess == nil {
-		http.Error(w, "sessão não encontrada", 404)
+		http.Error(w, "sessão não encontrada", http.StatusNotFound)
 		return
 	}
 	data, err := sess.ExportResultado()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -311,9 +428,11 @@ func buildRouter(store *SessionStore, distFS fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/suggest-restricao", store.handleSuggestRestricao)
 	mux.HandleFunc("POST /api/build-restricoes", store.handleBuildRestricoes)
 	mux.HandleFunc("POST /api/save-restricoes", store.handleSaveRestricoes)
+	mux.HandleFunc("GET /api/capacidade", store.handleCapacidade)
 	mux.HandleFunc("GET /api/alocar", store.handleAlocar)
 	mux.HandleFunc("GET /api/export", store.handleExport)
 	mux.HandleFunc("GET /api/exemplo", handleExemplo)
+	mux.HandleFunc("GET /api/versao", handleVersao)
 	mux.HandleFunc("DELETE /api/session", store.handleReset)
 
 	// SPA: serve index.html para rotas do React Router, static assets direto do FS

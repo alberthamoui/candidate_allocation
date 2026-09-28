@@ -34,6 +34,8 @@ yarn-error.log*
 /package-lock.json
 /package.json.md5
 frontend/package.json.md5
+frontend/playwright-report/
+frontend/test-results/
 
 # Python
 __pycache__/
@@ -74,3 +76,4 @@ teste.ipynb
 alocacao.xlsx
 graveyard.ipynb
 server.exe
+Excels/

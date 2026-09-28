@@ -3,7 +3,9 @@ package main
 import (
 	dbpkg "candidate_alocator/db"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -195,96 +197,124 @@ func normalizaOpcao(op string) string {
 	return strings.TrimSpace(strings.ToLower(op))
 }
 
-func fillDb(db *sql.DB, data interface{}) {
+// fillDb grava candidatos, avaliadores ou restrições numa transação: se um
+// registro falhar, nada é gravado e o erro volta para quem chamou.
+// Restrições que citam candidato ou sigla inexistentes são ignoradas (com
+// log), como antes; erros do banco não.
+func fillDb(db *sql.DB, data interface{}) (err error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback() // o erro que importa é o que causou o rollback
+			return
+		}
+		err = tx.Commit()
+	}()
+
 	switch v := data.(type) {
 	case []Candidato:
-		// HORARIOS
-		idHorarios := map[string]int64{}
-		horarios := getHorarios(v)
-		for _, horario := range horarios {
-			opcao := normalizaOpcao(horario)
-			if opcao == "" {
-				continue // não grava lixo
-			}
-			idHorario, _ := dbpkg.AddHorario(db, opcao)
-			idHorarios[opcao] = idHorario
-		}
-
-		fmt.Println("Horários inseridos no banco de dados.")
-
-		// CANDIDATOS & DISPONIBILIDADES
-		for _, usuario := range v {
-			semestreInt, _ := strconv.Atoi(usuario.Semestre)
-			id, _ := dbpkg.AddPessoa(db, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
-			fmt.Printf("Adicionando usuário: %s (ID: %d)\n", usuario.Nome, id)
-			count := 0
-			for _, opcao := range usuario.Opcoes {
-				norm := normalizaOpcao(opcao)
-				if norm == "" {
-					continue
-				}
-				count++
-				fmt.Printf("Adicionando disponibilidade para usuário %s (ID: %d) - Horário: %s (ID HORARIO: %d)\n", usuario.Nome, id, norm, idHorarios[norm])
-				dbpkg.AddDisponibilidade(db, id, idHorarios[norm], int64(count))
-			}
-		}
+		return gravarCandidatos(tx, v)
 	case []AvaliadorInfo:
-		for _, a := range v {
-			id, err := dbpkg.AddAvaliador(db, a.Nome, a.Email, a.Sigla)
-			if err != nil {
-				fmt.Printf("Erro ao adicionar avaliador %s: %v\n", a.Nome, err)
-			} else {
-				fmt.Printf("Avaliador %s adicionado com ID %d\n", a.Nome, id)
-			}
-		}
+		return gravarAvaliadores(tx, v)
 	case []Restricao:
-		for _, restricao := range v {
+		return gravarRestricoes(tx, v)
+	default:
+		return fmt.Errorf("tipo de dado não suportado em fillDb: %T", data)
+	}
+}
 
-			CandidatoId, err := dbpkg.GetPessoaIDByName(db, restricao.Candidato)
-			if err != nil {
-				fmt.Printf("Erro ao  pegar o id do candidato %s: %v\n", restricao.Candidato, err)
+func gravarCandidatos(tx *sql.Tx, candidatos []Candidato) error {
+	idHorarios := map[string]int64{}
+	for _, horario := range getHorarios(candidatos) {
+		opcao := normalizaOpcao(horario)
+		if _, visto := idHorarios[opcao]; visto || opcao == "" {
+			continue // não grava lixo nem o mesmo horário escrito de outro jeito
+		}
+		id, err := dbpkg.AddHorario(tx, opcao)
+		if err != nil {
+			return fmt.Errorf("horário %q: %w", opcao, err)
+		}
+		idHorarios[opcao] = id
+	}
+
+	for _, usuario := range candidatos {
+		// semestre inválido já aparece como erro na revisão; aqui vira 0
+		semestreInt, _ := strconv.Atoi(usuario.Semestre)
+		id, err := dbpkg.AddPessoa(tx, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
+		if err != nil {
+			return fmt.Errorf("candidato %q (CPF %q) não foi salvo: %w", usuario.Nome, usuario.CPF, err)
+		}
+		preferencia := int64(0)
+		for _, opcao := range usuario.Opcoes {
+			norm := normalizaOpcao(opcao)
+			if norm == "" {
+				continue
 			}
-			if restricao.NaoPosso != "" {
-				parts := strings.FieldsFunc(restricao.NaoPosso, func(r rune) bool {
-					return r == ',' || unicode.IsSpace(r)
-				})
-				for _, sig := range parts {
-					sigla := strings.TrimSpace(sig)
-					avalID, err := dbpkg.GetAvaliadorIDBySigla(db, sigla)
-					if err != nil {
-						fmt.Printf("Erro no GetAvaliadorID (%s): %v\n", sigla, err)
-						continue
-					}
-					id, err := dbpkg.AddRestricaoNposso(db, avalID, CandidatoId)
-					if err != nil {
-						fmt.Printf("Erro ao inserir NaoPosso [%s] p/ candidato %d: %v\n", sigla, CandidatoId, err)
-					} else {
-						fmt.Printf("NaoPosso inserido para avaliador %s c/ ID %d\n", sigla, id)
-					}
-				}
-			}
-			if restricao.PrefiroNao != "" {
-				parts := strings.FieldsFunc(restricao.PrefiroNao, func(r rune) bool {
-					return r == ',' || unicode.IsSpace(r)
-				})
-				for _, sig := range parts {
-					sigla := strings.TrimSpace(sig)
-					avalID, err := dbpkg.GetAvaliadorIDBySigla(db, sigla)
-					if err != nil {
-						fmt.Printf("Erro no GetAvaliadorID (%s): %v\n", sigla, err)
-						continue
-					}
-					id, err := dbpkg.AddRestricaoPrefiroN(db, avalID, CandidatoId)
-					if err != nil {
-						fmt.Printf("Erro ao inserir PrefiroNao [%s] p/ candidato %d: %v\n", sigla, CandidatoId, err)
-					} else {
-						fmt.Printf("PrefiroNao inserido para avaliador %s c/ ID %d\n", sigla, id)
-					}
-				}
+			preferencia++
+			if _, err := dbpkg.AddDisponibilidade(tx, id, idHorarios[norm], preferencia); err != nil {
+				return fmt.Errorf("horário %q do candidato %q: %w", norm, usuario.Nome, err)
 			}
 		}
-
-	default:
-		fmt.Println("Tipo de dado não suportado em fillDb")
 	}
+	log.Printf("%d candidatos e %d horários gravados", len(candidatos), len(idHorarios))
+	return nil
+}
+
+func gravarAvaliadores(tx *sql.Tx, avaliadores []AvaliadorInfo) error {
+	for _, a := range avaliadores {
+		if _, err := dbpkg.AddAvaliador(tx, a.Nome, a.Email, a.Sigla); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				// INSERT OR IGNORE não inseriu e não há avaliador com essa sigla:
+				// nome ou email repetem os de outro avaliador
+				return fmt.Errorf("avaliador %q (sigla %q) não foi salvo: nome ou email repetido", a.Nome, a.Sigla)
+			}
+			return fmt.Errorf("avaliador %q (sigla %q) não foi salvo: %w", a.Nome, a.Sigla, err)
+		}
+	}
+	log.Printf("%d avaliadores gravados", len(avaliadores))
+	return nil
+}
+
+func gravarRestricoes(tx *sql.Tx, restricoes []Restricao) error {
+	siglas := func(s string) []string {
+		return strings.FieldsFunc(s, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
+	}
+	gravadas := 0
+	for _, restricao := range restricoes {
+		candidatoID, err := dbpkg.GetPessoaIDByName(tx, restricao.Candidato)
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[WARN] restrição ignorada: candidato %q não encontrado", restricao.Candidato)
+			continue
+		} else if err != nil {
+			return fmt.Errorf("restrição do candidato %q: %w", restricao.Candidato, err)
+		}
+
+		tipos := []struct {
+			siglas  string
+			inserir func(dbpkg.Executor, int64, int64) (int64, error)
+		}{
+			{restricao.NaoPosso, dbpkg.AddRestricaoNposso},
+			{restricao.PrefiroNao, dbpkg.AddRestricaoPrefiroN},
+		}
+		for _, tipo := range tipos {
+			for _, sigla := range siglas(tipo.siglas) {
+				avalID, err := dbpkg.GetAvaliadorIDBySigla(tx, sigla)
+				if errors.Is(err, sql.ErrNoRows) {
+					log.Printf("[WARN] restrição ignorada: avaliador %q (candidato %q) não encontrado", sigla, restricao.Candidato)
+					continue
+				} else if err != nil {
+					return fmt.Errorf("restrição do candidato %q com %q: %w", restricao.Candidato, sigla, err)
+				}
+				if _, err := tipo.inserir(tx, avalID, candidatoID); err != nil {
+					return fmt.Errorf("restrição do candidato %q com %q: %w", restricao.Candidato, sigla, err)
+				}
+				gravadas++
+			}
+		}
+	}
+	log.Printf("%d restrições gravadas", gravadas)
+	return nil
 }

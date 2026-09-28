@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 
 interface MappingItem {
 	nomeColuna: string;
@@ -25,6 +25,7 @@ export default function MappingPage({
 }: MappingPageProps) {
 	const navigate = useNavigate();
 	const [loading, setLoading] = useState(false);
+	const [erro, setErro] = useState<string | null>(null);
 	const dragActiveRef = useRef<boolean>(false);
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 	const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -114,10 +115,13 @@ export default function MappingPage({
 	async function onConfirm() {
 		if (loading) return;
 		setLoading(true);
+		setErro(null);
 		try {
 			const result = await buildFn(items);
 			await onSuccess(result);
 			navigate(nextRoute);
+		} catch (err: any) {
+			setErro(err?.message ?? String(err));
 		} finally {
 			setLoading(false);
 		}
@@ -212,6 +216,13 @@ export default function MappingPage({
 						</tbody>
 					</table>
 				</div>
+
+				{erro && (
+					<div className="mt-6 flex items-start space-x-2 bg-red-50 border border-red-200 rounded-lg p-3">
+						<ExclamationTriangleIcon className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+						<p className="text-sm text-red-700">{erro}</p>
+					</div>
+				)}
 			</div>
 
 			<div className="flex items-center space-x-4">

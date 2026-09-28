@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,150 +9,55 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// SuggestMapping lê o cabeçalho da primeira aba do Excel e sugere
-// um mapeamento automático entre colunas e campos de Usuario.
+// lerCabecalho devolve a primeira linha da aba de índice aba do Excel da sessão.
+func (s *Session) lerCabecalho(aba int) ([]string, error) {
+	file, err := excelize.OpenReader(bytes.NewReader(s.excelData))
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	rows, err := file.GetRows(file.GetSheetName(aba))
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) < 1 {
+		return nil, fmt.Errorf("arquivo sem dados")
+	}
+	return rows[0], nil
+}
+
+// SuggestMapping guarda o Excel na sessão, lê o cabeçalho da primeira aba e
+// sugere o mapeamento entre colunas e campos de Usuario pelo nome das colunas.
 func (s *Session) SuggestMapping(data []byte, quantidade_opcoes int, emailDomain string) ([]MappingItem, error) {
 	s.excelData = data
 	s.nOpcoes = quantidade_opcoes
 	s.emailDomain = emailDomain
-	readerData := bytes.NewReader(data)
-	file, err := excelize.OpenReader(readerData)
+	header, err := s.lerCabecalho(0)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-
-	sheet := file.GetSheetName(0)
-	rows, err := file.GetRows(sheet)
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) < 1 {
-		return nil, fmt.Errorf("arquivo sem dados")
-	}
-	header := rows[0]
-
-	variaveisUsuario := getUsuarioFields(quantidade_opcoes)
-	fmt.Println("variaveis usuario: ", variaveisUsuario)
-
-	mappingList := make([]string, len(variaveisUsuario))
-	for i, usuarioVar := range variaveisUsuario {
-		if i < len(header) {
-			mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", header[i], i, usuarioVar)
-		} else {
-			mappingList[i] = fmt.Sprintf("[[null, %d], %q]", i, usuarioVar)
-		}
-	}
-	fmt.Println(mappingList)
-	return ProcessMapping(mappingList)
+	return sugerirMapeamento(header, getUsuarioFields(quantidade_opcoes)), nil
 }
 
 // SuggestMappingAvaliador lê o cabeçalho da segunda aba do Excel e sugere
-// um mapeamento automático para campos de AvaliadorInfo.
+// o mapeamento para campos de AvaliadorInfo.
 func (s *Session) SuggestMappingAvaliador() ([]MappingItem, error) {
-	readerData := bytes.NewReader(s.excelData)
-	file, err := excelize.OpenReader(readerData)
+	header, err := s.lerCabecalho(1)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-
-	sheet := file.GetSheetName(1)
-	rows, err := file.GetRows(sheet)
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) < 1 {
-		return nil, fmt.Errorf("arquivo sem dados")
-	}
-	header := rows[0]
-
-	variaveisAvaliador := getAvaliadorFields()
-	fmt.Println("variaveis avaliador : ", variaveisAvaliador)
-	mappingList := make([]string, len(variaveisAvaliador))
-	for i, v := range variaveisAvaliador {
-		if i < len(header) {
-			mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", header[i], i, v)
-		} else {
-			mappingList[i] = fmt.Sprintf("[[null, %d], %q]", i, v)
-		}
-	}
-	return ProcessMapping(mappingList)
+	return sugerirMapeamento(header, getAvaliadorFields()), nil
 }
 
 // SuggestMappingRestricao lê o cabeçalho da terceira aba do Excel e sugere
-// um mapeamento automático para campos de Restricao.
+// o mapeamento para campos de Restricao.
 func (s *Session) SuggestMappingRestricao() ([]MappingItem, error) {
-	readerData := bytes.NewReader(s.excelData)
-	file, err := excelize.OpenReader(readerData)
+	header, err := s.lerCabecalho(2)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-
-	sheet := file.GetSheetName(2)
-	rows, err := file.GetRows(sheet)
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) < 1 {
-		return nil, fmt.Errorf("arquivo sem dados")
-	}
-	header := rows[0]
-
-	variaveisRestricao := getRestricaoFields()
-	mappingList := make([]string, len(variaveisRestricao))
-	for i, v := range variaveisRestricao {
-		if i < len(header) {
-			mappingList[i] = fmt.Sprintf("[[%q, %d], %q]", header[i], i, v)
-		} else {
-			mappingList[i] = fmt.Sprintf("[[null, %d], %q]", i, v)
-		}
-	}
-	return ProcessMapping(mappingList)
-}
-
-// ProcessMapping converte cada string JSON "[[nomeColuna,indice],variavel]"
-// em um MappingItem. Retorna erro se algum item não for JSON válido.
-func ProcessMapping(items []string) ([]MappingItem, error) {
-	var result []MappingItem
-
-	for _, item := range items {
-		var arr []interface{}
-		if err := json.Unmarshal([]byte(item), &arr); err != nil {
-			return nil, fmt.Errorf("invalid JSON '%s': %w", item, err)
-		}
-		if len(arr) != 2 {
-			continue
-		}
-
-		info, ok := arr[0].([]interface{})
-		if !ok || len(info) != 2 {
-			continue
-		}
-		var nomeColuna string
-		if info[0] != nil {
-			s, ok := info[0].(string)
-			if !ok {
-				continue
-			}
-			nomeColuna = s
-		}
-
-		indiceF, ok2 := info[1].(float64)
-		variavel, ok3 := arr[1].(string)
-		if !ok2 || !ok3 {
-			continue
-		}
-
-		result = append(result, MappingItem{
-			NomeColuna: nomeColuna,
-			Indice:     int(indiceF),
-			Variavel:   variavel,
-		})
-	}
-
-	return result, nil
+	return sugerirMapeamento(header, getRestricaoFields()), nil
 }
 
 // BuildUsuariosWithMapping lê a primeira aba do Excel aplicando o mapeamento
