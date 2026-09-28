@@ -114,7 +114,7 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 				<Numero
 					valor={result.pontuacao}
 					rotulo="pontuação"
-					dica={'Começa em 100 e perde pontos: 2ª opção −1, 3ª −3, 4ª −5, 5ª −7; cada avaliador "prefiro não" na mesa −5; cada candidato sem mesa −1000.'}
+					dica={'Começa em 100 e perde pontos: 2ª opção −1, 3ª −3, 4ª −5, 5ª −7; cada avaliador "prefiro não" na mesa −5; cada candidato sem mesa −1000; critérios adicionais descontam pela importância.'}
 				/>
 			</div>
 

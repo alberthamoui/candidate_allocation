@@ -103,6 +103,23 @@ export interface ParametrosAlocacao {
   min_pessoas_por_mesa: number;
   max_pessoas_por_mesa: number;
   avaliadores_por_mesa: number;
+  criterios: CriterioAlocacao[];
+}
+
+export type TipoCriterio = 'misturar' | 'agrupar' | 'maximo' | 'minimo' | 'um_de_cada';
+
+// Regra opcional sobre curso/semestre (ver criterios.go)
+export interface CriterioAlocacao {
+  tipo: TipoCriterio;
+  coluna: 'curso' | 'semestre';
+  valores: string[];
+  limite: number; // maximo/minimo
+  peso: number; // pontos por unidade de desvio
+}
+
+export interface ValorColuna {
+  valor: string;
+  quantidade: number;
 }
 
 export interface HorarioCapacidade {
@@ -121,6 +138,7 @@ export interface CapacidadeResponse {
   max_alocaveis: number;
   horarios: HorarioCapacidade[];
   avisos: string[];
+  valores_colunas: Record<string, ValorColuna[]>;
 }
 
 // Parâmetros escolhidos na tela de parâmetros; ficam no sessionStorage para
@@ -142,8 +160,9 @@ export function salvarParametros(p: ParametrosAlocacao): void {
 
 function paramsQuery(p: ParametrosAlocacao | null): string {
   if (!p) return '';
+  // números como texto; os critérios vão como JSON
   return new URLSearchParams(
-    Object.entries(p).map(([k, v]) => [k, String(v)])
+    Object.entries(p).map(([k, v]) => [k, typeof v === 'object' ? JSON.stringify(v) : String(v)])
   ).toString();
 }
 

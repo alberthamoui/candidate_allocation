@@ -147,7 +147,7 @@ func TestRelatorioQualidadeConflito(t *testing.T) {
 		}}},
 		NaoAlocadosInfo: []CandidatoResultado{{ID: 3}},
 	}
-	q := relatorioQualidade(r)
+	q := relatorioQualidade(r, nil)
 	codigos := []string{}
 	for _, it := range q {
 		codigos = append(codigos, it.Codigo)

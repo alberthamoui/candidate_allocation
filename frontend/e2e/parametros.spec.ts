@@ -90,3 +90,46 @@ test("alocação usa os parâmetros escolhidos e Voltar os mantém", async ({ pa
 	await expect(page.getByLabel("Avaliadores por mesa")).toHaveValue("3");
 	await expect(page.getByLabel("Mínimo de candidatos por mesa")).toHaveValue("4");
 });
+
+test("critérios adicionais: validação, prévia, resultado e Voltar", async ({ page }) => {
+	const adicionar = page.getByRole("button", { name: "Adicionar critério" });
+	const criterios = page.getByTestId("criterio");
+
+	// "pelo menos um de cada" sem valores não roda
+	await adicionar.click();
+	await criterios.nth(0).getByLabel("Regra").selectOption("um_de_cada");
+	await expect(page.getByText(/escolha os valores de curso/)).toBeVisible();
+	await expect(page.getByRole("button", { name: "Rodar alocação" })).toBeDisabled();
+
+	// escolher Direito libera e a prévia avisa que não há Direito para todas as mesas
+	await criterios.nth(0).getByRole("button", { name: /^Direito/ }).click();
+	await expect(criterios.nth(0).getByRole("button", { name: /^Direito/ })).toHaveAttribute("aria-pressed", "true");
+	await expect(page.getByText(/têm curso "Direito"/)).toBeVisible();
+	await expect(page.getByRole("button", { name: "Rodar alocação" })).toBeEnabled();
+
+	// segundo critério: misturar semestre com importância alta
+	await adicionar.click();
+	await criterios.nth(1).getByLabel("Coluna").selectOption("semestre");
+	await criterios.nth(1).getByLabel("Importância").selectOption("10");
+	await expect(criterios.nth(1)).toContainText("Evita pôr na mesma mesa candidatos com o mesmo semestre");
+
+	await page.getByRole("button", { name: "Rodar alocação" }).click();
+	await expect(page.getByText("98 alocados")).toBeVisible({ timeout: 30_000 });
+	await expect(page.getByTestId("qualidade-criterio_1")).toContainText("Mesas sem todos os cursos escolhidos");
+	await expect(page.getByTestId("qualidade-criterio_2")).toContainText("Mesas com semestre repetido");
+
+	// o item de um critério destaca os candidatos dele, como os outros
+	const item = page.getByTestId("qualidade-criterio_1");
+	const n = parseInt((await item.innerText()).trim());
+	if (n > 0) {
+		await item.click();
+		await expect(page.getByTestId("contagem-filtro")).toContainText("Mesas sem todos os cursos escolhidos");
+		await expect(page.getByTestId("mesa")).toHaveCount(n);
+	}
+
+	// voltar mantém os critérios
+	await page.getByRole("button", { name: "Voltar" }).click();
+	await expect(criterios).toHaveCount(2);
+	await expect(criterios.nth(0).getByLabel("Regra")).toHaveValue("um_de_cada");
+	await expect(criterios.nth(1).getByLabel("Importância")).toHaveValue("10");
+});

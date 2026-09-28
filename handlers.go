@@ -282,7 +282,7 @@ func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) 
 }
 
 // lerParametros lê os parâmetros da alocação da query string; os que faltarem
-// ficam com o valor padrão.
+// ficam com o valor padrão. Os critérios vêm como JSON em "criterios".
 func lerParametros(q url.Values) (ParametrosAlocacao, error) {
 	pa := parametrosAlocacaoPadrao()
 	campos := []struct {
@@ -301,6 +301,11 @@ func lerParametros(q url.Values) (ParametrosAlocacao, error) {
 				return pa, fmt.Errorf("parâmetro %s inválido: %q", c.nome, v)
 			}
 			*c.dst = n
+		}
+	}
+	if v := q.Get("criterios"); v != "" {
+		if err := json.Unmarshal([]byte(v), &pa.Criterios); err != nil {
+			return pa, fmt.Errorf("critérios inválidos: %w", err)
 		}
 	}
 	return pa, pa.validar()

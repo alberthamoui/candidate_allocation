@@ -76,7 +76,7 @@ func carregarCandidatos(s *Session) ([]candidatoDB, error) {
 }
 
 // montarResultado converte a alocação no que a tela e a exportação usam.
-func montarResultado(d dadosAlocacao, cands []candidatoDB, res ResultadoAlocacao, mesas []*Mesa) AlocacaoResponse {
+func montarResultado(d dadosAlocacao, cands []candidatoDB, res ResultadoAlocacao, mesas []*Mesa, criterios []CriterioAlocacao) AlocacaoResponse {
 	avalPorID := make(map[int]*Avaliador, len(d.avals))
 	for _, a := range d.avals {
 		avalPorID[a.ID] = a
@@ -207,14 +207,14 @@ func montarResultado(d dadosAlocacao, cands []candidatoDB, res ResultadoAlocacao
 
 	resultado.TotalAlocados = res.Alocados
 	resultado.Pontuacao = res.Pontuacao
-	resultado.Qualidade = relatorioQualidade(resultado)
+	resultado.Qualidade = relatorioQualidade(resultado, criterios)
 	return resultado
 }
 
 // relatorioQualidade resume o resultado em itens clicáveis: quantos ficaram
 // em cada opção de horário, quantos têm avaliador "prefiro não" na mesa e
 // quantos ficaram sem mesa.
-func relatorioQualidade(r AlocacaoResponse) []ItemQualidade {
+func relatorioQualidade(r AlocacaoResponse, criterios []CriterioAlocacao) []ItemQualidade {
 	porOpcao := map[int][]int{}
 	var conflito []int
 	maiorOpcao := 1
@@ -272,6 +272,10 @@ func relatorioQualidade(r AlocacaoResponse) []ItemQualidade {
 	if len(semMesa) > 0 {
 		tomSemMesa = "ruim"
 	}
+	for i, c := range criterios {
+		itens = append(itens, itemCriterio(r, i, c))
+	}
+
 	itens = append(itens, ItemQualidade{
 		Codigo:     "nao_alocados",
 		Titulo:     "Sem mesa",
@@ -281,6 +285,113 @@ func relatorioQualidade(r AlocacaoResponse) []ItemQualidade {
 		Candidatos: nuncaNil(semMesa),
 	})
 	return itens
+}
+
+// itemCriterio resume quantas mesas não atendem ao critério; clicar destaca
+// os candidatos que causam o desvio.
+func itemCriterio(r AlocacaoResponse, i int, c CriterioAlocacao) ItemQualidade {
+	coluna := strings.ToLower(nomeColuna[c.Coluna])
+	valorDe := func(cand CandidatoResultado) string {
+		if c.Coluna == COLUNA_SEMESTRE {
+			if cand.Semestre == 0 {
+				return ""
+			}
+			return fmt.Sprint(cand.Semestre)
+		}
+		return chaveValor(cand.Curso)
+	}
+	alvo := map[string]bool{}
+	for _, v := range c.Valores {
+		alvo[chaveValor(v)] = true
+	}
+	conta := func(v string) bool { return len(alvo) == 0 || alvo[v] }
+	listaValores := strings.Join(c.Valores, ", ")
+	if listaValores == "" {
+		listaValores = "qualquer " + coluna
+	}
+
+	var titulo, descricao string
+	switch c.Tipo {
+	case CRITERIO_MISTURAR:
+		titulo = fmt.Sprintf("Mesas com %s repetido", coluna)
+		descricao = fmt.Sprintf("Critério \"misturar %s\": mesas com dois ou mais candidatos do mesmo %s.", coluna, coluna)
+	case CRITERIO_AGRUPAR:
+		titulo = fmt.Sprintf("Mesas com mais de um %s", coluna)
+		descricao = fmt.Sprintf("Critério \"agrupar %s\": mesas que misturam %ss diferentes.", coluna, coluna)
+	case CRITERIO_MAXIMO:
+		titulo = fmt.Sprintf("Mesas com mais de %d do mesmo %s", c.Limite, coluna)
+		descricao = fmt.Sprintf("Critério \"no máximo %d por mesa\" (%s).", c.Limite, listaValores)
+	case CRITERIO_MINIMO:
+		titulo = fmt.Sprintf("Mesas com menos de %d do mesmo %s", c.Limite, coluna)
+		descricao = fmt.Sprintf("Critério \"se aparecer, pelo menos %d por mesa\" (%s).", c.Limite, listaValores)
+	case CRITERIO_UM_DE_CADA:
+		titulo = fmt.Sprintf("Mesas sem todos os %ss escolhidos", coluna)
+		descricao = fmt.Sprintf("Critério \"pelo menos um de cada\" (%s).", listaValores)
+	}
+
+	var mesasFora int
+	var ids []int
+	for _, m := range r.Mesas {
+		porValor := map[string][]int{}
+		for _, cand := range m.Candidatos {
+			if v := valorDe(cand); v != "" {
+				porValor[v] = append(porValor[v], cand.ID)
+			}
+		}
+		var destaque []int
+		switch c.Tipo {
+		case CRITERIO_MISTURAR:
+			for _, g := range porValor {
+				if len(g) > 1 {
+					destaque = append(destaque, g...)
+				}
+			}
+		case CRITERIO_AGRUPAR:
+			if len(porValor) > 1 {
+				for _, g := range porValor {
+					destaque = append(destaque, g...)
+				}
+			}
+		case CRITERIO_MAXIMO:
+			for v, g := range porValor {
+				if conta(v) && len(g) > c.Limite {
+					destaque = append(destaque, g...)
+				}
+			}
+		case CRITERIO_MINIMO:
+			for v, g := range porValor {
+				if conta(v) && len(g) < c.Limite {
+					destaque = append(destaque, g...)
+				}
+			}
+		case CRITERIO_UM_DE_CADA:
+			for v := range alvo {
+				if len(porValor[v]) == 0 {
+					for _, cand := range m.Candidatos {
+						destaque = append(destaque, cand.ID)
+					}
+					break
+				}
+			}
+		}
+		if len(destaque) > 0 {
+			mesasFora++
+			ids = append(ids, destaque...)
+		}
+	}
+	tom := "bom"
+	if mesasFora > 0 {
+		tom = "atencao"
+	}
+	sort.Ints(ids)
+	return ItemQualidade{
+		Codigo:     fmt.Sprintf("criterio_%d", i+1),
+		Titulo:     titulo,
+		Descricao:  descricao,
+		Valor:      mesasFora,
+		Tom:        tom,
+		Candidatos: nuncaNil(ids),
+	}
 }
 
 func nuncaNil(ids []int) []int {
