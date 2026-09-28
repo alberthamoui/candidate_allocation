@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { fileURLToPath } from "node:url";
 import { PLANILHA_EXEMPLO, PLANILHA_OFICIAL, linhaMapeamento } from "./apoio";
 
 async function enviar(page: import("@playwright/test").Page, planilha: string) {
@@ -48,4 +49,16 @@ test("avaliadores e restrições com cabeçalhos diferentes", async ({ page }) =
 	await expect(linhaMapeamento(page, "candidato")).toContainText("CANDIDATOS");
 	await expect(linhaMapeamento(page, "naoPosso")).toContainText("NÃO POSSO");
 	await expect(linhaMapeamento(page, "prefiroNao")).toContainText("PREFIRO NÃO");
+});
+
+test("erro ao salvar avaliadores aparece na tela", async ({ page }) => {
+	await enviar(page, fileURLToPath(new URL("./planilhas/avaliador_repetido.xlsx", import.meta.url)));
+	await page.getByRole("button", { name: "Confirmar Mudanças" }).click();
+	await page.getByRole("button", { name: "Salvar Candidatos" }).first().click();
+
+	await page.getByRole("button", { name: "Processar Avaliadores" }).click();
+	await page.getByRole("button", { name: "Confirmar Mudanças" }).click();
+	// dois avaliadores com o mesmo nome: nada é salvo e a tela avisa
+	await expect(page.getByText(/avaliador "Ana Souza" \(sigla "AS2"\) não foi salvo: nome ou email repetido/)).toBeVisible();
+	await expect(page).toHaveURL(/\/mapping-avaliador$/);
 });

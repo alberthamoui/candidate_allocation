@@ -32,7 +32,9 @@ func createMockExcelFile(data [][]interface{}) (*bytes.Buffer, error) {
 	// Preenche a planilha com dados
 	for i, row := range data {
 		cell, _ := excelize.CoordinatesToCellName(1, i+1)
-		f.SetSheetRow("Sheet1", cell, &row)
+		if err := f.SetSheetRow("Sheet1", cell, &row); err != nil {
+			return nil, err
+		}
 	}
 
 	// Salva o arquivo em um buffer

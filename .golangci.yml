@@ -1,0 +1,31 @@
+version: "2"
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck, unused
+  default: standard
+  enable:
+    - bodyclose     # corpo de resposta HTTP não fechado
+    - copyloopvar   # cópias desnecessárias de variável de loop
+    - errorlint     # comparação/conversão de erros sem errors.Is/As
+    - nilerr        # devolve nil logo depois de checar um erro
+    - unconvert     # conversões de tipo desnecessárias
+    - usestdlibvars # constantes da biblioteca padrão (http.MethodGet...) em vez de literais
+  settings:
+    errcheck:
+      # Close de algo que só foi lido e escrita da resposta HTTP: o erro não
+      # muda nada (os dados já foram lidos / o cliente já foi embora).
+      exclude-functions:
+        - (*database/sql.Rows).Close
+        - (*github.com/xuri/excelize/v2.File).Close
+        - (mime/multipart.File).Close
+        - (io/fs.File).Close
+        - (net/http.ResponseWriter).Write
+
+issues:
+  # mostrar todos os achados, não só os primeiros de cada tipo
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt

@@ -91,6 +91,24 @@ Uma linha por candidato que possui restrição. As siglas devem corresponder exa
 - [Go](https://golang.org/) 1.21+
 - [Node.js](https://nodejs.org/) 18+
 - Compilador C (necessário para `go-sqlite3`) — no Windows, instale o [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)
+- `make` (opcional, para os atalhos abaixo) — no Windows: `scoop install make` ou `choco install make`
+
+### Atalhos (`make`)
+
+O [Makefile](Makefile) junta os comandos do dia a dia; `make` sozinho lista todos.
+
+| Comando | O que faz |
+|---|---|
+| `make instalar` | instala as dependências do frontend e do Go |
+| `make rodar` | compila o frontend e sobe o servidor em http://localhost:8080 |
+| `make build` | gera o executável `server` (`server.exe` no Windows) com o frontend embutido |
+| `make testar` | testes do Go e de interface (`make testar-go` / `make testar-interface` para só um deles) |
+| `make lint` | analisa o código Go com o [golangci-lint](https://golangci-lint.run/) (regras em [.golangci.yml](.golangci.yml)) |
+| `make formatar` | formata o código Go |
+| `make verificar` | lint + todos os testes — rode antes de abrir um PR |
+| `make limpar` | apaga o executável e os relatórios de teste |
+
+O golangci-lint não precisa ser instalado: o `make lint` roda uma versão fixa via `go run` (baixada e guardada em cache na primeira vez, o que leva ~2 min). Os arquivos `.go` usam fim de linha LF também no Windows ([.gitattributes](.gitattributes)); com CRLF, o formatador acusaria todos os arquivos.
 
 ### Desenvolvimento
 
@@ -156,6 +174,8 @@ candidate_allocation/
 ├── setup.go        -- inicialização do banco SQLite
 ├── db/             -- funções auxiliares de banco
 ├── Dockerfile      -- build multi-stage (Node → Go → Alpine)
+├── Makefile        -- atalhos: rodar, testar, lint...
+├── .golangci.yml   -- regras do golangci-lint
 ├── Excels/         -- arquivo de exemplo para download
 └── frontend/       -- app React/TypeScript (Vite + Tailwind)
     ├── e2e/                -- testes de interface (Playwright)

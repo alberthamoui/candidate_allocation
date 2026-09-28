@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -23,20 +24,17 @@ type Session struct {
 
 // SaveUsuarios persiste candidatos no banco da sessão.
 func (s *Session) SaveUsuarios(data []Usuario) error {
-	fillDb(s.db, data)
-	return nil
+	return fillDb(s.db, data)
 }
 
 // SaveAvaliadores persiste avaliadores no banco da sessão.
 func (s *Session) SaveAvaliadores(data []AvaliadorInfo) error {
-	fillDb(s.db, data)
-	return nil
+	return fillDb(s.db, data)
 }
 
 // SaveRestricoes persiste restrições no banco da sessão.
 func (s *Session) SaveRestricoes(data []Restricao) error {
-	fillDb(s.db, data)
-	return nil
+	return fillDb(s.db, data)
 }
 
 // ==================================================
@@ -56,7 +54,9 @@ func NewSessionStore() *SessionStore {
 
 func newSessionID() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(err) // sem aleatoriedade não dá para criar ids de sessão seguros
+	}
 	return hex.EncodeToString(b)
 }
 
@@ -95,7 +95,7 @@ func (s *SessionStore) Get(id string) *Session {
 func (s *SessionStore) Delete(id string) {
 	s.mu.Lock()
 	if sess, ok := s.sessions[id]; ok {
-		sess.db.Close()
+		fecharBanco(sess)
 		delete(s.sessions, id)
 	}
 	s.mu.Unlock()
@@ -109,11 +109,17 @@ func (s *SessionStore) cleanup() {
 		s.mu.Lock()
 		for id, sess := range s.sessions {
 			if sess.updatedAt.Before(cutoff) {
-				sess.db.Close()
+				fecharBanco(sess)
 				delete(s.sessions, id)
 			}
 		}
 		s.mu.Unlock()
+	}
+}
+
+func fecharBanco(sess *Session) {
+	if err := sess.db.Close(); err != nil {
+		log.Printf("[WARN] erro ao fechar o banco da sessão: %v", err)
 	}
 }
 
