@@ -25,9 +25,13 @@ func main() {
 		port = "8080"
 	}
 
+	versaoAtual = carregarVersao()
 	store := NewSessionStore()
 	mux := buildRouter(store, distFS)
 
-	log.Printf("Servidor iniciado em http://localhost:%s", port)
+	log.Printf("Servidor iniciado em http://localhost:%s (branch %q, commit %s)", port, versaoAtual.Branch, versaoAtual.Commit)
+	if versaoAtual.Desatualizado {
+		log.Printf("[WARN] O binário foi compilado de outro commit que o atual do repositório; recompile.")
+	}
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
