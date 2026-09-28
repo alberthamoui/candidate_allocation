@@ -314,6 +314,7 @@ func buildRouter(store *SessionStore, distFS fs.FS) http.Handler {
 	mux.HandleFunc("GET /api/alocar", store.handleAlocar)
 	mux.HandleFunc("GET /api/export", store.handleExport)
 	mux.HandleFunc("GET /api/exemplo", handleExemplo)
+	mux.HandleFunc("GET /api/versao", handleVersao)
 	mux.HandleFunc("DELETE /api/session", store.handleReset)
 
 	// SPA: serve index.html para rotas do React Router, static assets direto do FS

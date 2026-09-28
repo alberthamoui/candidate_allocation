@@ -171,6 +171,7 @@ candidate_allocation/
 | `GET` | `/api/alocar?sessionId=` | Executa alocação via Server-Sent Events (streaming de progresso) |
 | `GET` | `/api/export?sessionId=` | Download do resultado em `.xlsx` |
 | `GET` | `/api/exemplo` | Download do arquivo de exemplo |
+| `GET` | `/api/versao` | Branch e commit que o servidor está rodando (exibidos no canto da tela) |
 | `DELETE` | `/api/session` | Encerra e limpa a sessão atual |
 
 Todas as rotas de sessão recebem o `sessionId` pelo header `X-Session-Id`.

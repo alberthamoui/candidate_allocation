@@ -211,3 +211,15 @@ export async function resetSession(): Promise<void> {
   await apiFetch('/api/session', { method: 'DELETE' });
   clearSessionId();
 }
+
+// Versão — branch e commit que o servidor está rodando
+export interface VersaoInfo {
+  branch: string;
+  commit: string;
+  modificado: boolean;
+  desatualizado: boolean;
+}
+
+export async function getVersao(): Promise<VersaoInfo> {
+  return checkOk(await fetch('/api/versao'));
+}

@@ -8,6 +8,7 @@ import UploadRestricao from "./pages/UploadRestricao";
 import Resultado from "./pages/Resultado";
 import "./index.css";
 import VerifyUserPage from "./pages/VerifyUsers";
+import { BranchBadge } from "./components/BranchBadge";
 import {
   buildUsuarios,
   buildAvaliadores,
@@ -102,6 +103,7 @@ function Root() {
             element={<Resultado />}
           />
         </Routes>
+        <BranchBadge />
       </BrowserRouter>
     </React.StrictMode>
   );
