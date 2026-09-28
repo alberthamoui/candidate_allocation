@@ -135,6 +135,20 @@ export default function Resultado() {
 						<h1 className="text-xl font-bold text-red-700">Falha na Alocação</h1>
 					</div>
 					<p className="text-gray-700 text-sm bg-red-50 border border-red-200 rounded-lg p-4">{error}</p>
+					<div className="flex gap-3">
+						<button
+							onClick={() => navigate(-1)}
+							className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-semibold"
+						>
+							Voltar
+						</button>
+						<button
+							onClick={handleReset}
+							className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold"
+						>
+							Recomeçar
+						</button>
+					</div>
 				</div>
 			</div>
 		);

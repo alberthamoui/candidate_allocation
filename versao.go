@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime/debug"
 	"strings"
@@ -25,7 +26,8 @@ var versaoAtual VersaoInfo
 // carregarVersao junta o commit gravado pelo `go build` no binário (o que foi
 // de fato compilado) com a branch atual do repositório. Se o repositório
 // estiver em outro commit, o binário está desatualizado. Sem git (ex.:
-// Docker) ou com `go run`, que não grava o commit, usa o que houver.
+// Docker no Render) usa RENDER_GIT_BRANCH/RENDER_GIT_COMMIT; com `go run`,
+// que não grava o commit, usa o que houver.
 func carregarVersao() VersaoInfo {
 	var v VersaoInfo
 	var commitBinario string
@@ -48,6 +50,13 @@ func carregarVersao() VersaoInfo {
 	v.Commit = commitBinario
 	if v.Commit == "" {
 		v.Commit = commitRepo
+	}
+	// no Render não há git no container, mas ele informa branch e commit
+	if v.Branch == "" {
+		v.Branch = os.Getenv("RENDER_GIT_BRANCH")
+	}
+	if v.Commit == "" {
+		v.Commit = os.Getenv("RENDER_GIT_COMMIT")
 	}
 	v.Commit = v.Commit[:min(7, len(v.Commit))]
 	v.Desatualizado = commitBinario != "" && commitRepo != "" && commitBinario != commitRepo

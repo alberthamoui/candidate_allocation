@@ -23,8 +23,14 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
   return fetch(path, { ...options, headers });
 }
 
+// Mensagem para quando a sessão some: no plano gratuito do Render o servidor
+// dorme sem uso e as sessões (em memória) se perdem.
+export const MSG_SESSAO_EXPIRADA =
+  'Sua sessão expirou (o servidor reinicia depois de um tempo sem uso). Recomece enviando a planilha.';
+
 async function checkOk(res: Response): Promise<any> {
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) throw new Error(MSG_SESSAO_EXPIRADA);
   if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
   return data;
 }

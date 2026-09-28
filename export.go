@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -18,7 +19,7 @@ type progressEvent struct {
 
 // RunAlocacao executa o algoritmo na sessão com os parâmetros dados (já
 // validados) e retorna o resultado. emit é chamado com eventos progressEvent.
-func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (AlocacaoResponse, error) {
+func (s *Session) RunAlocacao(ctx context.Context, param ParametrosAlocacao, emit func(any)) (AlocacaoResponse, error) {
 	emit(progressEvent{Step: "Carregando dados...", Pct: 15})
 
 	d, err := s.carregarDados()
@@ -27,7 +28,7 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 	}
 	prefs := d.prefs
 
-	emit(progressEvent{Step: "Iniciando algoritmo...", Pct: 25, Total: SA_EXECUCOES * SA_ITERACOES})
+	emit(progressEvent{Step: "Iniciando algoritmo...", Pct: 25, Total: recursos.Execucoes * recursos.Iteracoes})
 
 	onProgress := func(feitas, total, score int) {
 		pct := 25 + (feitas*70)/total
@@ -37,7 +38,7 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 		emit(progressEvent{Step: "Otimizando alocação...", Pct: pct, Tentativa: feitas, Total: total, Score: score})
 	}
 
-	res, mesas := fazerMelhorAlocacaoMesas(param, d.horarios, d.avals, prefs, d.hard, d.soft, d.atributos, onProgress)
+	res, mesas := fazerMelhorAlocacaoMesas(ctx, param, d.horarios, d.avals, prefs, d.hard, d.soft, d.atributos, onProgress)
 	emit(progressEvent{Step: "Finalizando...", Pct: 97})
 
 	mapMesa := make(map[int]*Mesa, len(mesas))
