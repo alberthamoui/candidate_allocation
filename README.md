@@ -117,6 +117,18 @@ cd frontend && npm run dev
 go run .
 ```
 
+### Testes
+
+```bash
+# backend: algoritmo, mapeamento, API
+go test ./...
+
+# interface: abre um navegador e usa o app como uma pessoa (Playwright)
+cd frontend && npm run test:e2e
+```
+
+Os testes de interface compilam o frontend, sobem o servidor Go na porta 8099 (sem conflitar com um servidor aberto na 8080) e percorrem as telas com as planilhas de `Excels/`: fluxo completo até a exportação, sugestão e troca de colunas no mapeamento, parâmetros e prévia de capacidade, erros de upload e o selo de versão. Na primeira vez, instale o navegador com `npx playwright install chromium`. Para ver o que falhou, `npx playwright show-report` abre um relatório com screenshot e passo a passo de cada teste.
+
 ### Docker
 
 ```bash
@@ -146,6 +158,8 @@ candidate_allocation/
 ├── Dockerfile      -- build multi-stage (Node → Go → Alpine)
 ├── Excels/         -- arquivo de exemplo para download
 └── frontend/       -- app React/TypeScript (Vite + Tailwind)
+    ├── e2e/                -- testes de interface (Playwright)
+    ├── playwright.config.ts
     └── src/
         ├── main.tsx            -- roteamento e estado global
         ├── api.ts              -- cliente HTTP/SSE e gestão do sessionId
