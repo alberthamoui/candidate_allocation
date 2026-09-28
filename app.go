@@ -61,15 +61,18 @@ func newSessionID() string {
 }
 
 // Create abre um banco :memory: exclusivo para a sessão e inicializa o schema.
-func (s *SessionStore) Create() (string, *Session) {
+func (s *SessionStore) Create() (string, *Session, error) {
 	db, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
-		panic(err)
+		return "", nil, err
 	}
 	// MaxOpenConns=1 garante que o pool sempre reutilize a mesma conexão,
 	// preservando o banco em memória entre queries.
 	db.SetMaxOpenConns(1)
-	setupConn(db)
+	if err := setupConn(db); err != nil {
+		_ = db.Close()
+		return "", nil, err
+	}
 
 	id := newSessionID()
 	sess := &Session{db: db, updatedAt: time.Now()}
@@ -77,7 +80,7 @@ func (s *SessionStore) Create() (string, *Session) {
 	s.mu.Lock()
 	s.sessions[id] = sess
 	s.mu.Unlock()
-	return id, sess
+	return id, sess, nil
 }
 
 // Get retorna a sessão e atualiza o timestamp de acesso.

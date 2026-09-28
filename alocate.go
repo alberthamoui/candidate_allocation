@@ -111,37 +111,65 @@ type Horario struct {
 // =========== CARREGAMENTO DE DADOS DB ============
 // ==================================================
 
-func carregarHorarios(db *sql.DB) map[int]*Horario {
+// dadosAlocacao é tudo o que a alocação lê do banco da sessão.
+type dadosAlocacao struct {
+	horarios   map[int]*Horario
+	prefs      map[int][]int // pessoa_id → horários em ordem de preferência
+	avals      []*Avaliador
+	hard, soft map[int]map[int]bool // avaliador_id → candidato_id → restrição
+}
+
+// carregarDados lê do banco da sessão os dados da alocação. Um erro aqui
+// falha só a requisição desta sessão, nunca o servidor.
+func (s *Session) carregarDados() (dadosAlocacao, error) {
+	var d dadosAlocacao
+	var err error
+	if d.horarios, err = carregarHorarios(s.db); err != nil {
+		return d, fmt.Errorf("carregando horários: %w", err)
+	}
+	if d.prefs, err = carregarDisponibilidades(s.db, d.horarios); err != nil {
+		return d, fmt.Errorf("carregando disponibilidades: %w", err)
+	}
+	if d.avals, err = carregarAvaliadores(s.db); err != nil {
+		return d, fmt.Errorf("carregando avaliadores: %w", err)
+	}
+	if d.hard, d.soft, err = carregarRestricoes(s.db); err != nil {
+		return d, fmt.Errorf("carregando restrições: %w", err)
+	}
+	return d, nil
+}
+
+func carregarHorarios(db *sql.DB) (map[int]*Horario, error) {
 	horarios := make(map[int]*Horario)
 	rows, err := db.Query(`SELECT id, opcao FROM opcoes_horario`)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var h Horario
 		if err := rows.Scan(&h.ID, &h.Descricao); err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 		h.Candidatos = []int{}
 		horarios[h.ID] = &h
 	}
-	return horarios
+	return horarios, rows.Err()
 }
 
-func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]int {
+func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) (map[int][]int, error) {
 	prefs := make(map[int][]int)
 	rows, err := db.Query(`SELECT pessoa_id, horario_id, preferencia FROM disponibilidade ORDER BY pessoa_id, preferencia ASC`)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var pid, hid, pref int
 		if err := rows.Scan(&pid, &hid, &pref); err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 
 		h, ok := horarios[hid]
@@ -153,13 +181,13 @@ func carregarDisponibilidades(db *sql.DB, horarios map[int]*Horario) map[int][]i
 		h.Candidatos = append(h.Candidatos, pid)
 		prefs[pid] = append(prefs[pid], hid)
 	}
-	return prefs
+	return prefs, rows.Err()
 }
 
-func carregarAvaliadores(db *sql.DB) []*Avaliador {
+func carregarAvaliadores(db *sql.DB) ([]*Avaliador, error) {
 	rows, err := db.Query(`SELECT id, nome, email FROM avaliador`)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -167,38 +195,41 @@ func carregarAvaliadores(db *sql.DB) []*Avaliador {
 	for rows.Next() {
 		var a Avaliador
 		if err := rows.Scan(&a.ID, &a.Nome, &a.Email); err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 		avals = append(avals, &a)
 	}
-	return avals
+	return avals, rows.Err()
 }
 
-func carregarRestricoes(db *sql.DB) (hard map[int]map[int]bool, soft map[int]map[int]bool) {
-	hard = make(map[int]map[int]bool)
-	soft = make(map[int]map[int]bool)
-
-	loadInto := func(m map[int]map[int]bool, query string) {
+func carregarRestricoes(db *sql.DB) (hard, soft map[int]map[int]bool, err error) {
+	loadInto := func(query string) (map[int]map[int]bool, error) {
+		m := make(map[int]map[int]bool)
 		rows, err := db.Query(query)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var aid, cid int
 			if err := rows.Scan(&aid, &cid); err != nil {
-				log.Fatal(err)
+				return nil, err
 			}
 			if m[aid] == nil {
 				m[aid] = make(map[int]bool)
 			}
 			m[aid][cid] = true
 		}
+		return m, rows.Err()
 	}
 
-	loadInto(hard, `SELECT avaliador_id, candidato_id FROM restricoesNposso`)
-	loadInto(soft, `SELECT avaliador_id, candidato_id FROM restricoesPrefiroN`)
-	return
+	if hard, err = loadInto(`SELECT avaliador_id, candidato_id FROM restricoesNposso`); err != nil {
+		return nil, nil, err
+	}
+	if soft, err = loadInto(`SELECT avaliador_id, candidato_id FROM restricoesPrefiroN`); err != nil {
+		return nil, nil, err
+	}
+	return hard, soft, nil
 }
 
 // ==================================================

@@ -22,10 +22,11 @@ type progressEvent struct {
 func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (AlocacaoResponse, error) {
 	emit(progressEvent{Step: "Carregando dados...", Pct: 15})
 
-	avals := carregarAvaliadores(s.db)
-	hard, soft := carregarRestricoes(s.db)
-	horarios := carregarHorarios(s.db)
-	prefs := carregarDisponibilidades(s.db, horarios)
+	d, err := s.carregarDados()
+	if err != nil {
+		return AlocacaoResponse{}, err
+	}
+	avals, hard, soft, horarios, prefs := d.avals, d.hard, d.soft, d.horarios, d.prefs
 
 	emit(progressEvent{Step: "Iniciando algoritmo...", Pct: 25, Total: SA_EXECUCOES * SA_ITERACOES})
 

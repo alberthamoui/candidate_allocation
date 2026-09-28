@@ -2,13 +2,14 @@ package main
 
 import (
 	"database/sql"
-	"log"
+	"fmt"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 // setupConn inicializa o schema em um banco já aberto (ex.: :memory: por sessão).
-func setupConn(db *sql.DB) {
+func setupConn(db *sql.DB) error {
 	statements := []string{
 		`PRAGMA foreign_keys = ON;`,
 
@@ -64,7 +65,9 @@ func setupConn(db *sql.DB) {
 	}
 	for _, stmt := range statements {
 		if _, err := db.Exec(stmt); err != nil {
-			log.Fatalf("Erro ao executar statement:\n%s\nErro: %v", stmt, err)
+			primeiraLinha, _, _ := strings.Cut(stmt, "\n")
+			return fmt.Errorf("criando o schema (%s): %w", strings.TrimSpace(primeiraLinha), err)
 		}
 	}
+	return nil
 }

@@ -31,11 +31,12 @@ type CapacidadeResponse struct {
 
 // PreviaCapacidade calcula quantas mesas e vagas os parâmetros permitem com os
 // dados da sessão. Os parâmetros já devem ter sido validados.
-func (s *Session) PreviaCapacidade(param ParametrosAlocacao) CapacidadeResponse {
-	horarios := carregarHorarios(s.db)
-	prefs := carregarDisponibilidades(s.db, horarios)
-	hard, soft := carregarRestricoes(s.db)
-	p := montarProblema(param, horarios, carregarAvaliadores(s.db), prefs, hard, soft)
+func (s *Session) PreviaCapacidade(param ParametrosAlocacao) (CapacidadeResponse, error) {
+	d, err := s.carregarDados()
+	if err != nil {
+		return CapacidadeResponse{}, err
+	}
+	p := montarProblema(param, d.horarios, d.avals, d.prefs, d.hard, d.soft)
 
 	r := CapacidadeResponse{
 		Parametros:           param,
@@ -78,7 +79,7 @@ func (s *Session) PreviaCapacidade(param ParametrosAlocacao) CapacidadeResponse 
 			r.Avisos = append(r.Avisos, fmt.Sprintf("%s: só %d candidato(s) escolheram este horário, menos que o mínimo de %d por mesa.", h.Descricao, h.Interessados, p.minPessoas))
 		}
 	}
-	return r
+	return r, nil
 }
 
 var diasDaSemana = map[string]int{

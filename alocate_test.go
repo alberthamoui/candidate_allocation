@@ -61,6 +61,25 @@ func carregarSessaoXLSX(t testing.TB, path string, nOpcoes int) *Session {
 	return s
 }
 
+// dadosDaSessao lê os dados da alocação do banco da sessão.
+func dadosDaSessao(t testing.TB, s *Session) dadosAlocacao {
+	t.Helper()
+	d, err := s.carregarDados()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+func previa(t testing.TB, s *Session, param ParametrosAlocacao) CapacidadeResponse {
+	t.Helper()
+	r, err := s.PreviaCapacidade(param)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
 // validarAlocacao confere todas as regras que uma alocação precisa respeitar.
 func validarAlocacao(t *testing.T, param ParametrosAlocacao, res ResultadoAlocacao, mesas []*Mesa, prefs map[int][]int, hard map[int]map[int]bool) {
 	t.Helper()
@@ -115,10 +134,8 @@ func validarAlocacao(t *testing.T, param ParametrosAlocacao, res ResultadoAlocac
 
 func TestAlocacaoTesteOficial(t *testing.T) {
 	s := carregarSessaoXLSX(t, "Excels/teste_oficial.xlsx", 5)
-	avals := carregarAvaliadores(s.db)
-	hard, soft := carregarRestricoes(s.db)
-	horarios := carregarHorarios(s.db)
-	prefs := carregarDisponibilidades(s.db, horarios)
+	d := dadosDaSessao(t, s)
+	avals, hard, soft, horarios, prefs := d.avals, d.hard, d.soft, d.horarios, d.prefs
 
 	param := parametrosAlocacaoPadrao()
 	res, mesas := fazerMelhorAlocacaoMesas(param, horarios, avals, prefs, hard, soft, nil)
@@ -138,11 +155,8 @@ func TestAlocacaoTesteOficial(t *testing.T) {
 func TestAlocacaoSemAvaliadoresSuficientes(t *testing.T) {
 	// base_exemplo tem 3 avaliadores: não dá para formar mesa de 5
 	s := carregarSessaoXLSX(t, "Excels/base_exemplo.xlsx", 5)
-	horarios := carregarHorarios(s.db)
-	prefs := carregarDisponibilidades(s.db, horarios)
-	hard, soft := carregarRestricoes(s.db)
-
-	res, mesas := fazerMelhorAlocacaoMesas(parametrosAlocacaoPadrao(), horarios, carregarAvaliadores(s.db), prefs, hard, soft, nil)
+	d := dadosDaSessao(t, s)
+	res, mesas := fazerMelhorAlocacaoMesas(parametrosAlocacaoPadrao(), d.horarios, d.avals, d.prefs, d.hard, d.soft, nil)
 	if len(mesas) != 0 || res.Alocados != 0 {
 		t.Errorf("esperado nenhuma mesa, obteve %d mesas e %d alocados", len(mesas), res.Alocados)
 	}
@@ -150,10 +164,8 @@ func TestAlocacaoSemAvaliadoresSuficientes(t *testing.T) {
 
 func TestAlocacaoParametrosEditaveis(t *testing.T) {
 	s := carregarSessaoXLSX(t, "Excels/teste_oficial.xlsx", 5)
-	avals := carregarAvaliadores(s.db)
-	hard, soft := carregarRestricoes(s.db)
-	horarios := carregarHorarios(s.db)
-	prefs := carregarDisponibilidades(s.db, horarios)
+	d := dadosDaSessao(t, s)
+	avals, hard, soft, horarios, prefs := d.avals, d.hard, d.soft, d.horarios, d.prefs
 
 	casos := []ParametrosAlocacao{
 		{MesasPorHorario: 2, MinPessoasPorMesa: 3, MaxPessoasPorMesa: 6, AvaliadoresPorMesa: 3},
@@ -218,7 +230,7 @@ func TestPreviaCapacidade(t *testing.T) {
 	s := carregarSessaoXLSX(t, "Excels/teste_oficial.xlsx", 5)
 
 	// padrão: 19 avaliadores / 5 = 3 mesas por horário, 9 horários
-	r := s.PreviaCapacidade(parametrosAlocacaoPadrao())
+	r := previa(t, s, parametrosAlocacaoPadrao())
 	if r.Candidatos != 98 || r.Avaliadores != 19 || r.MesasPorHorario != 3 || r.CapacidadePorHorario != 24 || r.CapacidadeTotal != 9*24 || r.MaxAlocaveis != 98 {
 		t.Errorf("padrão: %+v", r)
 	}
@@ -244,13 +256,13 @@ func TestPreviaCapacidade(t *testing.T) {
 	}
 
 	// 1 mesa de até 5 por horário: 45 vagas para 98 candidatos
-	r = s.PreviaCapacidade(ParametrosAlocacao{MesasPorHorario: 1, MinPessoasPorMesa: 5, MaxPessoasPorMesa: 5, AvaliadoresPorMesa: 5})
+	r = previa(t, s, ParametrosAlocacao{MesasPorHorario: 1, MinPessoasPorMesa: 5, MaxPessoasPorMesa: 5, AvaliadoresPorMesa: 5})
 	if r.CapacidadeTotal != 45 || r.MaxAlocaveis > 45 || len(r.Avisos) == 0 {
 		t.Errorf("capacidade curta: %+v", r)
 	}
 
 	// base_exemplo tem 3 avaliadores: nenhuma mesa de 5
-	r = carregarSessaoXLSX(t, "Excels/base_exemplo.xlsx", 5).PreviaCapacidade(parametrosAlocacaoPadrao())
+	r = previa(t, carregarSessaoXLSX(t, "Excels/base_exemplo.xlsx", 5), parametrosAlocacaoPadrao())
 	if r.Avaliadores != 3 || r.MesasPorHorario != 0 || r.CapacidadeTotal != 0 || r.MaxAlocaveis != 0 || len(r.Avisos) == 0 {
 		t.Errorf("sem mesas: %+v", r)
 	}
@@ -355,10 +367,8 @@ func TestHungaroContraForcaBruta(t *testing.T) {
 
 func TestCustoIncrementalConsistente(t *testing.T) {
 	s := carregarSessaoXLSX(t, "Excels/teste_oficial.xlsx", 5)
-	hard, soft := carregarRestricoes(s.db)
-	horarios := carregarHorarios(s.db)
-	prefs := carregarDisponibilidades(s.db, horarios)
-	p := montarProblema(parametrosAlocacaoPadrao(), horarios, carregarAvaliadores(s.db), prefs, hard, soft)
+	d := dadosDaSessao(t, s)
+	p := montarProblema(parametrosAlocacaoPadrao(), d.horarios, d.avals, d.prefs, d.hard, d.soft)
 
 	e := p.novoEstado(1)
 	e.definirPesos(0.5)
@@ -377,10 +387,8 @@ func TestCustoIncrementalConsistente(t *testing.T) {
 // calculado do zero.
 func TestAceitarEquivaleAoCalculoCompleto(t *testing.T) {
 	s := carregarSessaoXLSX(t, "Excels/teste_oficial.xlsx", 5)
-	hard, soft := carregarRestricoes(s.db)
-	horarios := carregarHorarios(s.db)
-	prefs := carregarDisponibilidades(s.db, horarios)
-	p := montarProblema(parametrosAlocacaoPadrao(), horarios, carregarAvaliadores(s.db), prefs, hard, soft)
+	d := dadosDaSessao(t, s)
+	p := montarProblema(parametrosAlocacaoPadrao(), d.horarios, d.avals, d.prefs, d.hard, d.soft)
 
 	e := p.novoEstado(3)
 	scratch := make([][]int, p.nMesas)
