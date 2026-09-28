@@ -14,7 +14,7 @@ O sistema guia o usuário em 5 etapas:
 2. **Candidatos** — mapeamento de colunas, revisão e correção dos dados (duplicatas, campos inválidos)
 3. **Avaliadores** — mapeamento e confirmação da aba de avaliadores
 4. **Restrições** — mapeamento e confirmação da aba de restrições
-5. **Parâmetros** — mesas por horário, avaliadores por mesa e mínimo/máximo de candidatos por mesa, com uma prévia da capacidade (mesas que cabem com os avaliadores, vagas, quantos candidatos cabem pelos horários que escolheram e avisos)
+5. **Parâmetros** — mesas por horário, avaliadores por mesa e mínimo/máximo de candidatos por mesa, com uma prévia da capacidade (mesas que cabem com os avaliadores, vagas, quantos candidatos cabem pelos horários que escolheram e avisos) e **critérios adicionais** opcionais sobre curso ou semestre
 
 Ao confirmar os parâmetros, o algoritmo de alocação é executado. A tela de resultado mostra:
 
@@ -35,6 +35,19 @@ Cada candidato vai para uma mesa de um dos horários que escolheu. Por padrão, 
 | Avaliador "prefiro não" na mesa | −5 por avaliador |
 | Candidato sem mesa | −1000 |
 | Avaliador "não posso" na mesa | proibido |
+| Critério adicional não atendido | −1 / −3 / −10 por desvio (importância baixa / média / alta) |
+
+Os **critérios adicionais** (até 5, em [criterios.go](criterios.go)) valem para a coluna curso ou semestre e contam desvios em cada mesa:
+
+| Critério | Desvio |
+|---|---|
+| Misturar | cada par de candidatos com o mesmo valor na mesa |
+| Agrupar | cada par de candidatos com valores diferentes na mesa |
+| No máximo N por mesa | cada candidato de um dos valores escolhidos acima de N |
+| Se aparecer, pelo menos N por mesa | o que falta para N quando um dos valores escolhidos aparece |
+| Pelo menos um de cada | cada valor escolhido que não aparece na mesa |
+
+Eles pesam junto com as preferências de horário: com importância alta, a alocação pode trocar a opção de horário de alguém para cumprir a regra. O resultado mostra, para cada critério, quantas mesas não o atendem.
 
 A busca é um **simulated annealing** sobre a divisão dos candidatos em mesas (mover um candidato de mesa ou trocar dois candidatos). Os avaliadores não são sorteados: para cada divisão, a melhor escolha de avaliadores de um horário é um problema de atribuição, resolvido de forma exata pelo **algoritmo húngaro** a cada movimento. Mesas incompletas e conflitos "não posso" recebem penalidades que começam brandas e endurecem ao longo da busca, para que ela consiga montar mesas aos poucos. Rodam 8 buscas independentes em paralelo (sementes fixas, então a mesma planilha gera o mesmo resultado) e fica a melhor.
 
@@ -172,6 +185,7 @@ candidate_allocation/
 ├── app.go          -- SessionStore e lógica de sessão
 ├── alocate.go      -- algoritmo de alocação
 ├── capacidade.go   -- prévia de capacidade para os parâmetros da alocação
+├── criterios.go    -- critérios adicionais (curso/semestre) usados na alocação
 ├── versao.go       -- branch e commit exibidos no canto da tela
 ├── processa.go     -- parsing do arquivo Excel
 ├── mapping.go      -- lógica de mapeamento de colunas
@@ -191,7 +205,7 @@ candidate_allocation/
     └── src/
         ├── main.tsx            -- roteamento e estado global
         ├── api.ts              -- cliente HTTP/SSE e gestão do sessionId
-        ├── components/         -- UserCard, EditableCell, PainelResultado (conteúdo da tela de resultado)
+        ├── components/         -- UserCard, EditableCell, PainelResultado (conteúdo da tela de resultado), EditorCriterios
         └── pages/
             ├── Home.tsx            -- tela inicial e upload
             ├── MappingPage.tsx     -- mapeamento de colunas (reutilizado nas 3 etapas)

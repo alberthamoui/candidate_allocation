@@ -37,7 +37,7 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 		emit(progressEvent{Step: "Otimizando alocação...", Pct: pct, Tentativa: feitas, Total: total, Score: score})
 	}
 
-	res, mesas := fazerMelhorAlocacaoMesas(param, d.horarios, d.avals, prefs, d.hard, d.soft, onProgress)
+	res, mesas := fazerMelhorAlocacaoMesas(param, d.horarios, d.avals, prefs, d.hard, d.soft, d.atributos, onProgress)
 	emit(progressEvent{Step: "Finalizando...", Pct: 97})
 
 	mapMesa := make(map[int]*Mesa, len(mesas))
@@ -51,7 +51,7 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 	if err != nil {
 		return AlocacaoResponse{}, fmt.Errorf("carregando candidatos: %w", err)
 	}
-	result := montarResultado(d, cands, res, mesas)
+	result := montarResultado(d, cands, res, mesas, param.Criterios)
 	s.lastResult = &result
 	return result, nil
 }

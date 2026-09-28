@@ -12,10 +12,12 @@ import {
 	getParametrosSalvos,
 	salvarParametros,
 	CapacidadeResponse,
+	CriterioAlocacao,
 	ParametrosAlocacao,
 } from "../api";
+import EditorCriterios from "../components/EditorCriterios";
 
-type Campo = keyof ParametrosAlocacao;
+type Campo = Exclude<keyof ParametrosAlocacao, "criterios">; // campos numéricos
 
 const CAMPOS: { campo: Campo; label: string; dica: string }[] = [
 	{ campo: "mesas_por_horario", label: "Mesas por horário", dica: "Máximo de mesas em cada horário" },
@@ -25,8 +27,8 @@ const CAMPOS: { campo: Campo; label: string; dica: string }[] = [
 ];
 
 // Texto digitado → parâmetros; null se algum campo estiver vazio ou não for inteiro.
-function paraParametros(valores: Record<Campo, string>): ParametrosAlocacao | null {
-	const p = {} as ParametrosAlocacao;
+function paraParametros(valores: Record<Campo, string>, criterios: CriterioAlocacao[]): ParametrosAlocacao | null {
+	const p = { criterios } as ParametrosAlocacao;
 	for (const { campo } of CAMPOS) {
 		const n = Number(valores[campo]);
 		if (valores[campo].trim() === "" || !Number.isInteger(n)) return null;
@@ -42,6 +44,7 @@ function paraTexto(p: ParametrosAlocacao): Record<Campo, string> {
 export default function Parametros() {
 	const navigate = useNavigate();
 	const [valores, setValores] = useState<Record<Campo, string> | null>(null);
+	const [criterios, setCriterios] = useState<CriterioAlocacao[]>([]);
 	const [padrao, setPadrao] = useState<ParametrosAlocacao | null>(null);
 	const [previa, setPrevia] = useState<CapacidadeResponse | null>(null);
 	const [erro, setErro] = useState<string | null>(null);
@@ -56,6 +59,7 @@ export default function Parametros() {
 				setPadrao(inicial.parametros);
 				const salvos = getParametrosSalvos();
 				setValores(paraTexto(salvos ?? inicial.parametros));
+				setCriterios(salvos?.criterios ?? []);
 				if (!salvos) setPrevia(inicial);
 			} catch (err: any) {
 				setErro(err.message);
@@ -67,7 +71,7 @@ export default function Parametros() {
 	// Recalcula a prévia a cada mudança (com um pequeno atraso enquanto digita)
 	useEffect(() => {
 		if (!valores) return;
-		const params = paraParametros(valores);
+		const params = paraParametros(valores, criterios);
 		if (!params) {
 			setErro("Preencha todos os campos com números inteiros.");
 			return;
@@ -88,9 +92,9 @@ export default function Parametros() {
 			}
 		}, 250);
 		return () => clearTimeout(t);
-	}, [valores]);
+	}, [valores, criterios]);
 
-	const params = valores ? paraParametros(valores) : null;
+	const params = valores ? paraParametros(valores, criterios) : null;
 	const podeRodar = !!params && !erro && !carregando && !!previa && previa.mesas_por_horario > 0;
 
 	function rodar() {
@@ -152,6 +156,14 @@ export default function Parametros() {
 							</button>
 						)}
 					</div>
+				)}
+
+				{valores && (
+					<EditorCriterios
+						criterios={criterios}
+						onChange={setCriterios}
+						valoresColunas={previa?.valores_colunas ?? {}}
+					/>
 				)}
 
 				{erro && (
