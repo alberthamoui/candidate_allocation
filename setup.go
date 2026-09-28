@@ -17,6 +17,7 @@ func setupConn(db *sql.DB) {
 			"nome" TEXT NOT NULL UNIQUE,
 			"email" TEXT NOT NULL UNIQUE,
 			"sigla" TEXT NOT NULL UNIQUE,
+			"extras" TEXT NOT NULL DEFAULT '{}',
 			PRIMARY KEY("id" AUTOINCREMENT)
 			);`,
 
@@ -29,6 +30,7 @@ func setupConn(db *sql.DB) {
 			"email_pessoal" TEXT NOT NULL,
 			"semestre" INTEGER NOT NULL,
 			"curso" TEXT NOT NULL,
+			"extras" TEXT NOT NULL DEFAULT '{}',
 			PRIMARY KEY("id" AUTOINCREMENT)
 			);`,
 

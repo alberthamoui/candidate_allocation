@@ -26,12 +26,12 @@ func AddHorario(db *sql.DB, opcao string) (int64, error) {
 	return existing, err
 }
 
-// AddPessoa insere um novo registro em pessoa
-func AddPessoa(db *sql.DB, nome, cpf, numero, emailInsper, emailPessoal string, semestre int, curso string) (int64, error) {
+// AddPessoa insere um novo registro em pessoa; extras é o JSON dos campos extras
+func AddPessoa(db *sql.DB, nome, cpf, numero, emailInsper, emailPessoal string, semestre int, curso, extras string) (int64, error) {
 	res, err := db.Exec(`
-        INSERT INTO pessoa (nome,cpf, numero, email_insper, email_pessoal,  semestre, curso)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, nome, cpf, numero, emailInsper, emailPessoal, semestre, curso)
+        INSERT INTO pessoa (nome,cpf, numero, email_insper, email_pessoal,  semestre, curso, extras)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, nome, cpf, numero, emailInsper, emailPessoal, semestre, curso, extras)
 	if err != nil {
 		return 0, err
 	}
@@ -50,11 +50,12 @@ func AddDisponibilidade(db *sql.DB, pessoaID, horarioID, preferencia int64) (int
 	return res.LastInsertId()
 }
 
-func AddAvaliador(db *sql.DB, nome, email, sigla string) (int64, error) {
+// AddAvaliador insere um avaliador; extras é o JSON dos campos extras
+func AddAvaliador(db *sql.DB, nome, email, sigla, extras string) (int64, error) {
 	res, err := db.Exec(`
-		INSERT OR IGNORE INTO avaliador (nome, email, sigla)
-		VALUES (?, ?, ?)
-	`, nome, email, sigla)
+		INSERT OR IGNORE INTO avaliador (nome, email, sigla, extras)
+		VALUES (?, ?, ?, ?)
+	`, nome, email, sigla, extras)
 	if err != nil {
 		return 0, err
 	}

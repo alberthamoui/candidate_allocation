@@ -37,7 +37,7 @@ func (s *Session) SuggestMapping(data []byte, quantidade_opcoes int, emailDomain
 	if err != nil {
 		return nil, err
 	}
-	return sugerirMapeamento(header, getUsuarioFields(quantidade_opcoes)), nil
+	return acrescentarExtras(sugerirMapeamento(header, getUsuarioFields(quantidade_opcoes), false), header), nil
 }
 
 // SuggestMappingAvaliador lê o cabeçalho da segunda aba do Excel e sugere
@@ -47,7 +47,7 @@ func (s *Session) SuggestMappingAvaliador() ([]MappingItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sugerirMapeamento(header, getAvaliadorFields()), nil
+	return acrescentarExtras(sugerirMapeamento(header, getAvaliadorFields(), false), header), nil
 }
 
 // SuggestMappingRestricao lê o cabeçalho da terceira aba do Excel e sugere
@@ -57,7 +57,7 @@ func (s *Session) SuggestMappingRestricao() ([]MappingItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sugerirMapeamento(header, getRestricaoFields()), nil
+	return sugerirMapeamento(header, getRestricaoFields(), true), nil
 }
 
 // BuildUsuariosWithMapping lê a primeira aba do Excel aplicando o mapeamento
@@ -80,12 +80,18 @@ func (s *Session) BuildUsuariosWithMapping(mappingItems []MappingItem) (Usuarios
 	if len(rows) < 2 {
 		return UsuariosResponse{}, fmt.Errorf("arquivo sem dados além do header")
 	}
+	nomesExtras, err := validarExtras(mappingItems, getUsuarioFields(nOpcoes))
+	if err != nil {
+		return UsuariosResponse{}, err
+	}
+	s.extrasCandidatos = nomesExtras
 
 	var users []Usuario
 
 	for _, row := range rows[1:] {
 		u := Usuario{
 			Opcoes: make([]string, nOpcoes),
+			Extras: novosExtras(nomesExtras),
 		}
 		for _, mItem := range mappingItems {
 			if mItem.Indice >= len(row) {
@@ -110,7 +116,9 @@ func (s *Session) BuildUsuariosWithMapping(mappingItems []MappingItem) (Usuarios
 			case "email_pessoal":
 				u.EmailPessoal = cell
 			default:
-				if strings.HasPrefix(mItem.Variavel, "opcao") {
+				if nome, ok := nomeExtra(mItem.Variavel); ok {
+					u.Extras[nome] = strings.TrimSpace(cell)
+				} else if strings.HasPrefix(mItem.Variavel, "opcao") {
 					parts := strings.Split(mItem.Variavel, " ")
 					if len(parts) == 2 {
 						optionNum, err := strconv.Atoi(parts[1])
@@ -153,16 +161,24 @@ func (s *Session) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Ava
 	if len(rows) < 2 {
 		return nil, fmt.Errorf("aba de avaliadores não contém dados além do cabeçalho")
 	}
+	nomesExtras, err := validarExtras(mappingItems, getAvaliadorFields())
+	if err != nil {
+		return nil, err
+	}
 
 	var avaliadores []AvaliadorInfo
 
 	for _, row := range rows[1:] {
-		av := AvaliadorInfo{}
+		av := AvaliadorInfo{Extras: novosExtras(nomesExtras)}
 		for _, m := range mappingItems {
 			if m.Indice >= len(row) {
 				continue
 			}
 			val := strings.TrimSpace(row[m.Indice])
+			if nome, ok := nomeExtra(m.Variavel); ok {
+				av.Extras[nome] = val
+				continue
+			}
 
 			switch strings.ToLower(m.Variavel) {
 			case "nome":

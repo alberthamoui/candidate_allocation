@@ -11,6 +11,8 @@ type Usuario struct {
 	EmailInsper  string   `json:"email_insper"`
 	EmailPessoal string   `json:"email_pessoal"`
 	Opcoes       []string `json:"opcoes"`
+	// Extras guarda as colunas extras escolhidas no mapeamento (nome → valor).
+	Extras map[string]string `json:"extras,omitempty"`
 }
 
 // Candidato é um alias de Usuario — mantém compatibilidade com processa.go e testes.
@@ -18,9 +20,10 @@ type Candidato = Usuario
 
 // AvaliadorInfo representa um avaliador extraído do Excel.
 type AvaliadorInfo struct {
-	Nome  string `json:"nome"`
-	Email string `json:"email"`
-	Sigla string `json:"sigla"`
+	Nome   string            `json:"nome"`
+	Email  string            `json:"email"`
+	Sigla  string            `json:"sigla"`
+	Extras map[string]string `json:"extras,omitempty"`
 }
 
 // Restricao representa uma restrição de avaliação extraída do Excel.
@@ -51,15 +54,18 @@ type MesaResult struct {
 	Descricao   string   `json:"descricao"`
 	Candidatos  []string `json:"candidatos"`
 	Avaliadores []string `json:"avaliadores"`
+	// CandidatosExtras[i] são os campos extras de Candidatos[i] (só quando há extras).
+	CandidatosExtras []map[string]string `json:"candidatos_extras,omitempty"`
 }
 
 // PessoaInfo carrega os campos exibidos para candidatos não alocados.
 type PessoaInfo struct {
-	ID          int    `json:"id"`
-	Nome        string `json:"nome"`
-	EmailInsper string `json:"email_insper"`
-	Curso       string `json:"curso"`
-	Semestre    int    `json:"semestre"`
+	ID          int               `json:"id"`
+	Nome        string            `json:"nome"`
+	EmailInsper string            `json:"email_insper"`
+	Curso       string            `json:"curso"`
+	Semestre    int               `json:"semestre"`
+	Extras      map[string]string `json:"extras,omitempty"`
 }
 
 // AlocacaoResponse é o que RunAlocacao retorna ao frontend.
@@ -68,4 +74,6 @@ type AlocacaoResponse struct {
 	TotalAlocados   int          `json:"total_alocados"`
 	NaoAlocadosInfo []PessoaInfo `json:"nao_alocados_info"`
 	Pontuacao       int          `json:"pontuacao"`
+	// ExtrasCandidatos são os nomes dos campos extras dos candidatos, na ordem do mapeamento.
+	ExtrasCandidatos []string `json:"extras_candidatos,omitempty"`
 }

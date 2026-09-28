@@ -11,13 +11,14 @@ interface ErrorItem {
 	msg: string;
 }
 interface MapUsuario {
-	[key: string]: string | number;
+	[key: string]: any;
 }
 interface UserCardProps {
 	userId: number;
 	user: MapUsuario;
 	errors: ErrorItem[];
 	onDelete: (userId: number) => void;
+	/** Campos extras chegam como field = "extras.<nome>". */
 	onCellChange: (userId: number, field: string, value: string) => void;
 	extraBtn?: React.ReactNode;
 }
@@ -95,7 +96,7 @@ export function UserCard({
 
 			{/* User fields */}
 			<div className="space-y-2">
-				{Object.entries(user).map(([field, val]) => {
+				{Object.entries(user).filter(([field]) => field !== "extras").map(([field, val]) => {
 					const fieldError = errors.find((e) => e.field === field);
 					const hasFieldError = !!fieldError;
 
@@ -130,6 +131,26 @@ export function UserCard({
 					);
 				})}
 			</div>
+
+			{/* Campos extras */}
+			{user.extras && Object.keys(user.extras).length > 0 && (
+				<div className="mt-3 pt-3 border-t border-dashed border-purple-200 space-y-2">
+					{Object.entries(user.extras as Record<string, string>).map(([nome, val]) => (
+						<div key={nome} className="p-2 rounded-lg border border-purple-100 bg-purple-50/50">
+							<div className="flex items-center gap-2 mb-1">
+								<span className="text-xs font-semibold text-gray-700">{nome}</span>
+								<span className="text-[10px] font-semibold text-purple-700 bg-purple-100 px-1.5 rounded-full">
+									extra
+								</span>
+							</div>
+							<EditableCell
+								value={val}
+								onChange={(v) => onCellChange(userId, `extras.${nome}`, v)}
+							/>
+						</div>
+					))}
+				</div>
+			)}
 
 			{/* Action button */}
 			{extraBtn && (

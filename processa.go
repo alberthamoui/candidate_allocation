@@ -18,13 +18,21 @@ var (
 	reSemestre     = regexp.MustCompile(`^([1-9]|10)$`)
 )
 
+// campoJSON devolve o nome JSON de um campo mapeável da struct, ou "" para
+// campos que não vêm de uma coluna (sem tag, "-" ou os extras).
+func campoJSON(f reflect.StructField) string {
+	tag, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+	if tag == "-" || tag == "extras" {
+		return ""
+	}
+	return tag
+}
+
 func getUsuarioFields(quantidade_opcoes int) []string {
 	t := reflect.TypeOf(Candidato{})
 	var fields []string
 	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		tag := field.Tag.Get("json")
-		if tag != "" && tag != "-" {
+		if tag := campoJSON(t.Field(i)); tag != "" {
 			if tag == "opcoes" {
 				for j := 1; j <= quantidade_opcoes; j++ {
 					fields = append(fields, fmt.Sprintf("opcao %d", j))
@@ -41,12 +49,10 @@ func getAvaliadorFields() []string {
 	t := reflect.TypeOf(AvaliadorInfo{})
 	var fields []string
 	for i := 0; i < t.NumField(); i++ {
-		tag := t.Field(i).Tag.Get("json")
-		if tag != "" && tag != "-" {
+		if tag := campoJSON(t.Field(i)); tag != "" {
 			fields = append(fields, tag)
 		}
 	}
-	// preenche com "none" ou trunca para chegar em quantidade_opcoes
 	return fields
 }
 
@@ -215,7 +221,7 @@ func fillDb(db *sql.DB, data interface{}) {
 		// CANDIDATOS & DISPONIBILIDADES
 		for _, usuario := range v {
 			semestreInt, _ := strconv.Atoi(usuario.Semestre)
-			id, _ := dbpkg.AddPessoa(db, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
+			id, _ := dbpkg.AddPessoa(db, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso, extrasJSON(usuario.Extras))
 			fmt.Printf("Adicionando usuário: %s (ID: %d)\n", usuario.Nome, id)
 			count := 0
 			for _, opcao := range usuario.Opcoes {
@@ -230,7 +236,7 @@ func fillDb(db *sql.DB, data interface{}) {
 		}
 	case []AvaliadorInfo:
 		for _, a := range v {
-			id, err := dbpkg.AddAvaliador(db, a.Nome, a.Email, a.Sigla)
+			id, err := dbpkg.AddAvaliador(db, a.Nome, a.Email, a.Sigla, extrasJSON(a.Extras))
 			if err != nil {
 				fmt.Printf("Erro ao adicionar avaliador %s: %v\n", a.Nome, err)
 			} else {

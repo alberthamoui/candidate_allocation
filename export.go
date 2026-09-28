@@ -58,18 +58,26 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 		EmailInsper string
 		Curso       string
 		Semestre    int
+		Extras      map[string]string
 	}
 	var todasPessoas []pessoaRow
 	pessoaNames := make(map[int]string)
+	pessoaExtras := make(map[int]map[string]string)
+	temExtras := len(s.extrasCandidatos) > 0
 
-	pRows, err := s.db.Query(`SELECT id, nome, email_insper, curso, semestre FROM pessoa`)
+	pRows, err := s.db.Query(`SELECT id, nome, email_insper, curso, semestre, extras FROM pessoa`)
 	if err != nil {
 		return AlocacaoResponse{}, fmt.Errorf("erro ao carregar candidatos: %w", err)
 	}
 	for pRows.Next() {
 		var p pessoaRow
-		if scanErr := pRows.Scan(&p.ID, &p.Nome, &p.EmailInsper, &p.Curso, &p.Semestre); scanErr == nil {
+		var extras string
+		if scanErr := pRows.Scan(&p.ID, &p.Nome, &p.EmailInsper, &p.Curso, &p.Semestre, &extras); scanErr == nil {
+			if temExtras {
+				p.Extras = lerExtrasJSON(extras)
+			}
 			pessoaNames[p.ID] = p.Nome
+			pessoaExtras[p.ID] = p.Extras
 			todasPessoas = append(todasPessoas, p)
 		}
 	}
@@ -92,6 +100,9 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 				name = fmt.Sprintf("ID %d", pid)
 			}
 			mr.Candidatos = append(mr.Candidatos, name)
+			if temExtras {
+				mr.CandidatosExtras = append(mr.CandidatosExtras, pessoaExtras[pid])
+			}
 		}
 		for _, aid := range m.Avaliadores {
 			name := avalNames[aid]
@@ -119,6 +130,7 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 				EmailInsper: p.EmailInsper,
 				Curso:       p.Curso,
 				Semestre:    p.Semestre,
+				Extras:      p.Extras,
 			})
 		}
 	}
@@ -128,6 +140,8 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 		TotalAlocados:   res.Alocados,
 		NaoAlocadosInfo: naoAlocados,
 		Pontuacao:       res.Pontuacao,
+
+		ExtrasCandidatos: s.extrasCandidatos,
 	}
 	s.lastResult = &result
 	return result, nil
@@ -145,17 +159,24 @@ func (s *Session) ExportResultado() ([]byte, error) {
 	// --- Aba "Lista": uma linha por candidato (mesmo formato anterior) ---
 	lista := "Lista"
 	f.SetSheetName("Sheet1", lista)
-	for i, h := range []string{"Mesa", "Candidato", "Avaliadores"} {
+	extras := s.lastResult.ExtrasCandidatos
+	for i, h := range append([]string{"Mesa", "Candidato", "Avaliadores"}, extras...) {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		f.SetCellValue(lista, cell, h)
 	}
 	row := 2
 	for _, mesa := range s.lastResult.Mesas {
 		avStr := strings.Join(mesa.Avaliadores, ", ")
-		for _, cand := range mesa.Candidatos {
+		for i, cand := range mesa.Candidatos {
 			f.SetCellValue(lista, fmt.Sprintf("A%d", row), mesa.Descricao)
 			f.SetCellValue(lista, fmt.Sprintf("B%d", row), cand)
 			f.SetCellValue(lista, fmt.Sprintf("C%d", row), avStr)
+			if i < len(mesa.CandidatosExtras) {
+				for k, nome := range extras {
+					cell, _ := excelize.CoordinatesToCellName(4+k, row)
+					f.SetCellValue(lista, cell, mesa.CandidatosExtras[i][nome])
+				}
+			}
 			row++
 		}
 	}
@@ -259,7 +280,7 @@ func (s *Session) ExportResultado() ([]byte, error) {
 	// --- Aba "Não Alocados" ---
 	nao := "Não Alocados"
 	f.NewSheet(nao)
-	for i, h := range []string{"Nome", "Email Institucional", "Curso", "Semestre"} {
+	for i, h := range append([]string{"Nome", "Email Institucional", "Curso", "Semestre"}, extras...) {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		f.SetCellValue(nao, cell, h)
 	}
@@ -269,6 +290,10 @@ func (s *Session) ExportResultado() ([]byte, error) {
 		f.SetCellValue(nao, fmt.Sprintf("B%d", r), p.EmailInsper)
 		f.SetCellValue(nao, fmt.Sprintf("C%d", r), p.Curso)
 		f.SetCellValue(nao, fmt.Sprintf("D%d", r), p.Semestre)
+		for k, nome := range extras {
+			cell, _ := excelize.CoordinatesToCellName(5+k, r)
+			f.SetCellValue(nao, cell, p.Extras[nome])
+		}
 	}
 
 	buf, err := f.WriteToBuffer()

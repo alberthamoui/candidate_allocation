@@ -14,14 +14,17 @@ import (
 // sugere o melhor par, sem repetir coluna. A comparação ignora caixa, acentos,
 // espaços, pontuação, "_" e "-", separa camelCase e letras de números e
 // entende ordinais ("Primeira Opção" = "opcao 1"). Campos sem par por nome
-// recebem as colunas que sobraram, na ordem da planilha (como era antes, por
-// posição); se não sobrar coluna, ficam sem coluna.
+// ficam sem coluna; em candidatos e avaliadores as colunas que sobram viram
+// campos extras (acrescentarExtras), e o usuário arrasta a coluna certa para o
+// campo vazio. Nas restrições, que não têm extras, os campos sem par recebem
+// as colunas que sobraram, na ordem da planilha (porPosicao).
 
 // aliasesCampo lista outros nomes comuns de coluna para cada campo.
 var aliasesCampo = map[string][]string{
 	"email_insper": {"email institucional", "email corporativo", "email da faculdade"},
 	"numero":       {"telefone", "celular", "whatsapp"},
 	"semestre":     {"periodo"},
+	"nome":         {"avaliador", "candidato"},
 	"candidato":    {"nome"},
 	"naoPosso":     {"nao pode", "impedido"},
 	"prefiroNao":   {"prefere nao", "evitar"},
@@ -160,9 +163,10 @@ func ultimoNumero(tokens []string) (string, bool) {
 }
 
 // sugerirMapeamento devolve um MappingItem por campo, na ordem de campos.
+// Com porPosicao, campos sem par por nome recebem as colunas que sobraram.
 // Campo sem coluna fica com NomeColuna vazio e Indice fora do cabeçalho, que
 // os Build*WithMapping ignoram.
-func sugerirMapeamento(cabecalho, campos []string) []MappingItem {
+func sugerirMapeamento(cabecalho, campos []string, porPosicao bool) []MappingItem {
 	type par struct{ campo, coluna, pontos int }
 	var pares []par
 	for i, campo := range campos {
@@ -203,7 +207,7 @@ func sugerirMapeamento(cabecalho, campos []string) []MappingItem {
 	// campos sem par por nome: colunas que sobraram, na ordem da planilha
 	livre := 0
 	for i := range campos {
-		if colunaDe[i] >= 0 {
+		if colunaDe[i] >= 0 || !porPosicao {
 			continue
 		}
 		for livre < len(cabecalho) && usada[livre] {

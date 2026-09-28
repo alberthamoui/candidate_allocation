@@ -61,10 +61,10 @@ func TestSuggestMapping(t *testing.T) {
 		t.Fatalf("SuggestMapping retornou um erro inesperado: %v", err)
 	}
 
-	// Um item por campo de Candidato (opcoes vira "opcao 1")
-	expected := reflect.TypeOf(Candidato{}).NumField()
+	// Um item por campo de Candidato (opcoes vira "opcao 1"; extras não é coluna)
+	expected := reflect.TypeOf(Candidato{}).NumField() - 1
 	if len(mappings) != expected {
-		t.Errorf("Esperado %d mapeamentos, mas obteve %d", expected, len(mappings))
+		t.Errorf("Esperado %d mapeamentos, mas obteve %d: %+v", expected, len(mappings), mappings)
 	}
 
 	want := map[string]MappingItem{

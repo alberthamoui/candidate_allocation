@@ -6,9 +6,9 @@ import (
 )
 
 // colunasSugeridas devolve, para cada campo, o nome da coluna sugerida.
-func colunasSugeridas(cabecalho, campos []string) map[string]string {
+func colunasSugeridas(cabecalho, campos []string, porPosicao bool) map[string]string {
 	res := map[string]string{}
-	for _, m := range sugerirMapeamento(cabecalho, campos) {
+	for _, m := range sugerirMapeamento(cabecalho, campos, porPosicao) {
 		res[m.Variavel] = m.NomeColuna
 	}
 	return res
@@ -36,10 +36,11 @@ func TestTokensNome(t *testing.T) {
 
 func TestSugestaoCabecalhosReais(t *testing.T) {
 	casos := []struct {
-		nome      string
-		cabecalho []string
-		campos    []string
-		want      map[string]string
+		nome       string
+		cabecalho  []string
+		campos     []string
+		porPosicao bool // como nas restrições
+		want       map[string]string
 	}{
 		{
 			nome:      "teste_oficial candidatos",
@@ -72,27 +73,43 @@ func TestSugestaoCabecalhosReais(t *testing.T) {
 			},
 		},
 		{
-			// "Avaliador" não parece com nenhum campo: fica com a coluna que sobrou
 			nome:      "base_exemplo avaliadores",
 			cabecalho: []string{"Avaliador", "Email", "Sigla"},
 			campos:    getAvaliadorFields(),
 			want:      map[string]string{"nome": "Avaliador", "email": "Email", "sigla": "Sigla"},
 		},
 		{
-			nome:      "base_exemplo restrições",
-			cabecalho: []string{"CANDIDATOS", "NÃO POSSO", "PREFIRO NÃO"},
-			campos:    getRestricaoFields(),
-			want:      map[string]string{"candidato": "CANDIDATOS", "naoPosso": "NÃO POSSO", "prefiroNao": "PREFIRO NÃO"},
+			nome:       "base_exemplo restrições",
+			cabecalho:  []string{"CANDIDATOS", "NÃO POSSO", "PREFIRO NÃO"},
+			campos:     getRestricaoFields(),
+			porPosicao: true,
+			want:       map[string]string{"candidato": "CANDIDATOS", "naoPosso": "NÃO POSSO", "prefiroNao": "PREFIRO NÃO"},
 		},
 		{
-			nome:      "restrições fora de ordem",
-			cabecalho: []string{"PrefiroNao", "Candidato", "NaoPosso"},
-			campos:    getRestricaoFields(),
-			want:      map[string]string{"candidato": "Candidato", "naoPosso": "NaoPosso", "prefiroNao": "PrefiroNao"},
+			nome:       "restrições fora de ordem",
+			cabecalho:  []string{"PrefiroNao", "Candidato", "NaoPosso"},
+			campos:     getRestricaoFields(),
+			porPosicao: true,
+			want:       map[string]string{"candidato": "Candidato", "naoPosso": "NaoPosso", "prefiroNao": "PrefiroNao"},
+		},
+		{
+			// sem par por nome e sem posição: campo fica vazio (a coluna vira extra)
+			nome:      "candidatos com coluna desconhecida",
+			cabecalho: []string{"Nome", "Turma", "CPF"},
+			campos:    []string{"nome", "cpf", "curso"},
+			want:      map[string]string{"nome": "Nome", "cpf": "CPF", "curso": ""},
+		},
+		{
+			// restrições sem par por nome: por posição
+			nome:       "restrições com nomes desconhecidos",
+			cabecalho:  []string{"Aluno", "Bloqueio", "Outra"},
+			campos:     getRestricaoFields(),
+			porPosicao: true,
+			want:       map[string]string{"candidato": "Aluno", "naoPosso": "Bloqueio", "prefiroNao": "Outra"},
 		},
 	}
 	for _, c := range casos {
-		got := colunasSugeridas(c.cabecalho, c.campos)
+		got := colunasSugeridas(c.cabecalho, c.campos, c.porPosicao)
 		for campo, col := range c.want {
 			if got[campo] != col {
 				t.Errorf("%s: campo %q → %q, esperado %q", c.nome, campo, got[campo], col)
@@ -103,7 +120,7 @@ func TestSugestaoCabecalhosReais(t *testing.T) {
 
 func TestSugestaoSemColunaRepetidaEIndices(t *testing.T) {
 	cabecalho := []string{"Nome", "Opção 2", "Opção 1"}
-	itens := sugerirMapeamento(cabecalho, getUsuarioFields(3))
+	itens := sugerirMapeamento(cabecalho, getUsuarioFields(3), true)
 	if len(itens) != len(getUsuarioFields(3)) {
 		t.Fatalf("esperado um item por campo, obteve %d", len(itens))
 	}
@@ -126,7 +143,7 @@ func TestSugestaoSemColunaRepetidaEIndices(t *testing.T) {
 }
 
 func TestSugestaoCabecalhoVazio(t *testing.T) {
-	for _, m := range sugerirMapeamento(nil, getAvaliadorFields()) {
+	for _, m := range sugerirMapeamento(nil, getAvaliadorFields(), true) {
 		if m.NomeColuna != "" || m.Indice < 0 {
 			t.Errorf("sem cabeçalho, esperado campo sem coluna; obteve %+v", m)
 		}

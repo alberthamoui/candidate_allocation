@@ -58,10 +58,14 @@ export default function VerifyUserPage({
 		field: string,
 		value: string | number
 	) {
-		setEditedUsers((prev) => ({
-			...prev,
-			[userId]: { ...prev[userId], [field]: value },
-		}));
+		setEditedUsers((prev) => {
+			const user = prev[userId];
+			if (field.startsWith("extras.")) {
+				const nome = field.slice("extras.".length);
+				return { ...prev, [userId]: { ...user, extras: { ...user.extras, [nome]: String(value) } } };
+			}
+			return { ...prev, [userId]: { ...user, [field]: value } };
+		});
 	}
 	const flattenDup = () => dupGroups.flat();
 	const isDuplicate = (id: number) => flattenDup().includes(id);
@@ -155,6 +159,7 @@ export default function VerifyUserPage({
 				email_insper: user.email_insper || "",
 				email_pessoal: user.email_pessoal || "",
 				opcoes: user.opcoes || [],
+				extras: user.extras || {},
 			})
 		);
 

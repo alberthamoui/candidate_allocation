@@ -145,6 +145,13 @@ export default function Resultado() {
 
 	const mesas = result.mesas ?? [];
 	const naoAlocados = result.nao_alocados_info ?? [];
+	const nomesExtras = result.extras_candidatos ?? [];
+	// "Turma: T1 · Área: X", só com os extras preenchidos
+	const resumoExtras = (extras?: Record<string, string>) =>
+		nomesExtras
+			.filter((n) => extras?.[n])
+			.map((n) => `${n}: ${extras![n]}`)
+			.join(" · ");
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -318,14 +325,18 @@ export default function Resultado() {
 											<span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Candidatos</span>
 										</div>
 										<ul className="space-y-1.5">
-											{mesa.candidatos.map((nome, i) => (
-												<li key={i} className="text-sm text-gray-700 flex items-center space-x-2">
-													<span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-														{i + 1}
-													</span>
-													<span>{nome}</span>
-												</li>
-											))}
+											{mesa.candidatos.map((nome, i) => {
+												const extras = resumoExtras(mesa.candidatos_extras?.[i]);
+												return (
+													<li key={i} className="text-sm text-gray-700 flex items-center space-x-2">
+														<span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+															{i + 1}
+														</span>
+														<span>{nome}</span>
+														{extras && <span className="text-xs text-purple-700/80 truncate">{extras}</span>}
+													</li>
+												);
+											})}
 										</ul>
 									</div>
 
@@ -381,6 +392,9 @@ export default function Resultado() {
 										<th className="text-left px-6 py-3 font-semibold">Email Institucional</th>
 										<th className="text-left px-6 py-3 font-semibold">Curso</th>
 										<th className="text-left px-6 py-3 font-semibold">Semestre</th>
+										{nomesExtras.map((n) => (
+											<th key={n} className="text-left px-6 py-3 font-semibold">{n}</th>
+										))}
 									</tr>
 								</thead>
 								<tbody className="divide-y divide-red-100">
@@ -391,6 +405,9 @@ export default function Resultado() {
 											<td className="px-6 py-3 text-gray-600">{p.email_insper}</td>
 											<td className="px-6 py-3 text-gray-600">{p.curso}</td>
 											<td className="px-6 py-3 text-gray-600">{p.semestre}º</td>
+											{nomesExtras.map((n) => (
+												<td key={n} className="px-6 py-3 text-gray-600">{p.extras?.[n] ?? ""}</td>
+											))}
 										</tr>
 									))}
 								</tbody>

@@ -43,6 +43,7 @@ function Root() {
               <MappingPage
                 mapping={mappingData}
                 buildFn={buildUsuarios}
+                permitirExtras
                 onSuccess={(result) => {
                   setUsers(result.usuarios);
                   setDuplicatas(result.duplicates);
@@ -72,6 +73,7 @@ function Root() {
               <MappingPage
                 mapping={mappingAvaliador}
                 buildFn={buildAvaliadores}
+                permitirExtras
                 onSuccess={async (result) => {
                   await saveAvaliadores(result);
                 }}

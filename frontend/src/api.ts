@@ -55,6 +55,7 @@ export interface AlocacaoResponse {
   total_alocados: number;
   nao_alocados_info: PessoaInfo[];
   pontuacao: number;
+  extras_candidatos?: string[]; // nomes dos campos extras, na ordem do mapeamento
 }
 
 export interface MesaResult {
@@ -62,6 +63,7 @@ export interface MesaResult {
   descricao: string;
   candidatos: string[];
   avaliadores: string[];
+  candidatos_extras?: Record<string, string>[]; // [i] = extras de candidatos[i]
 }
 
 export interface PessoaInfo {
@@ -70,6 +72,7 @@ export interface PessoaInfo {
   email_insper: string;
   curso: string;
   semestre: number;
+  extras?: Record<string, string>;
 }
 
 export interface ParametrosAlocacao {

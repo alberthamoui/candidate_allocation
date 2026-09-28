@@ -17,8 +17,10 @@ type Session struct {
 	excelData   []byte
 	nOpcoes     int
 	emailDomain string
-	lastResult  *AlocacaoResponse
-	updatedAt   time.Time
+	// extrasCandidatos são os nomes dos campos extras dos candidatos, na ordem do mapeamento.
+	extrasCandidatos []string
+	lastResult       *AlocacaoResponse
+	updatedAt        time.Time
 }
 
 // SaveUsuarios persiste candidatos no banco da sessão.
