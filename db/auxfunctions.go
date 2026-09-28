@@ -5,10 +5,15 @@ import (
 	"strings"
 )
 
-// --- removido var Conn *sql.DB e Configure ---
+// Executor é o que as funções abaixo precisam do banco: *sql.DB ou *sql.Tx
+// (para gravar tudo numa transação).
+type Executor interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
 
 // AddHorario insere um novo registro em opcoes_horario
-func AddHorario(db *sql.DB, opcao string) (int64, error) {
+func AddHorario(db Executor, opcao string) (int64, error) {
 	opcao = strings.TrimSpace(strings.ToLower(opcao))
 	res, err := db.Exec(`
 		INSERT OR IGNORE INTO opcoes_horario (opcao) VALUES (?)	`, opcao)
@@ -16,10 +21,13 @@ func AddHorario(db *sql.DB, opcao string) (int64, error) {
 		return 0, err
 	}
 
-	id, _ := res.LastInsertId()
-	if id != 0 {
-		return id, nil
-	} // inseriu agora
+	// INSERT OR IGNORE que não inseriu deixa LastInsertId com o id do insert
+	// anterior (de outro registro): só confiar nele se inseriu
+	if n, err := res.RowsAffected(); err != nil {
+		return 0, err
+	} else if n > 0 {
+		return res.LastInsertId()
+	}
 
 	var existing int64
 	err = db.QueryRow(`SELECT id FROM opcoes_horario WHERE opcao = ?`, opcao).Scan(&existing)
@@ -27,7 +35,7 @@ func AddHorario(db *sql.DB, opcao string) (int64, error) {
 }
 
 // AddPessoa insere um novo registro em pessoa
-func AddPessoa(db *sql.DB, nome, cpf, numero, emailInsper, emailPessoal string, semestre int, curso string) (int64, error) {
+func AddPessoa(db Executor, nome, cpf, numero, emailInsper, emailPessoal string, semestre int, curso string) (int64, error) {
 	res, err := db.Exec(`
         INSERT INTO pessoa (nome,cpf, numero, email_insper, email_pessoal,  semestre, curso)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -39,7 +47,7 @@ func AddPessoa(db *sql.DB, nome, cpf, numero, emailInsper, emailPessoal string, 
 }
 
 // AddDisponibilidade insere um vínculo em disponibilidade
-func AddDisponibilidade(db *sql.DB, pessoaID, horarioID, preferencia int64) (int64, error) {
+func AddDisponibilidade(db Executor, pessoaID, horarioID, preferencia int64) (int64, error) {
 	res, err := db.Exec(`
         INSERT INTO disponibilidade (pessoa_id, horario_id, preferencia)
         VALUES (?, ?, ?)
@@ -50,7 +58,7 @@ func AddDisponibilidade(db *sql.DB, pessoaID, horarioID, preferencia int64) (int
 	return res.LastInsertId()
 }
 
-func AddAvaliador(db *sql.DB, nome, email, sigla string) (int64, error) {
+func AddAvaliador(db Executor, nome, email, sigla string) (int64, error) {
 	res, err := db.Exec(`
 		INSERT OR IGNORE INTO avaliador (nome, email, sigla)
 		VALUES (?, ?, ?)
@@ -59,17 +67,21 @@ func AddAvaliador(db *sql.DB, nome, email, sigla string) (int64, error) {
 		return 0, err
 	}
 
-	id, _ := res.LastInsertId()
-	if id != 0 {
-		return id, nil // inserido agora
+	// ver AddHorario: LastInsertId só vale se inseriu
+	if n, err := res.RowsAffected(); err != nil {
+		return 0, err
+	} else if n > 0 {
+		return res.LastInsertId()
 	}
 
-	// reaproveita avaliador existente (usa sigla, que é única)
+	// reaproveita avaliador existente (usa sigla, que é única); se não houver,
+	// o nome ou o email repetem os de outro avaliador (sql.ErrNoRows)
+	var id int64
 	err = db.QueryRow(`SELECT id FROM avaliador WHERE sigla = ?`, sigla).Scan(&id)
 	return id, err
 }
 
-func AddRestricaoNposso(db *sql.DB, avaliadorID, candidatoID int64) (int64, error) {
+func AddRestricaoNposso(db Executor, avaliadorID, candidatoID int64) (int64, error) {
 	res, err := db.Exec(`
         INSERT INTO restricoesNposso (avaliador_id, candidato_id)
         VALUES (?, ?)
@@ -79,7 +91,7 @@ func AddRestricaoNposso(db *sql.DB, avaliadorID, candidatoID int64) (int64, erro
 	}
 	return res.LastInsertId()
 }
-func AddRestricaoPrefiroN(db *sql.DB, avaliadorID, candidatoID int64) (int64, error) {
+func AddRestricaoPrefiroN(db Executor, avaliadorID, candidatoID int64) (int64, error) {
 	res, err := db.Exec(`
         INSERT INTO restricoesPrefiroN (avaliador_id, candidato_id)
         VALUES (?, ?)
@@ -89,7 +101,7 @@ func AddRestricaoPrefiroN(db *sql.DB, avaliadorID, candidatoID int64) (int64, er
 	}
 	return res.LastInsertId()
 }
-func GetAvaliadorIDBySigla(db *sql.DB, sigla string) (int64, error) {
+func GetAvaliadorIDBySigla(db Executor, sigla string) (int64, error) {
 	var id int64
 	err := db.QueryRow(
 		`SELECT id FROM avaliador WHERE sigla = ?`,
@@ -98,7 +110,7 @@ func GetAvaliadorIDBySigla(db *sql.DB, sigla string) (int64, error) {
 	return id, err
 }
 
-func GetPessoaIDByName(db *sql.DB, nome string) (int64, error) {
+func GetPessoaIDByName(db Executor, nome string) (int64, error) {
 	var id int64
 	err := db.QueryRow(
 		`SELECT id FROM pessoa WHERE nome = ?`,

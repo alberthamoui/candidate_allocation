@@ -31,7 +31,9 @@ func carregarSessaoXLSX(t testing.TB, path string, nOpcoes int) *Session {
 	for i := 1; i <= len(usuarios.Usuarios); i++ {
 		cands = append(cands, usuarios.Usuarios[i].Usuario)
 	}
-	s.SaveUsuarios(cands)
+	if err := s.SaveUsuarios(cands); err != nil {
+		t.Fatal(err)
+	}
 
 	mAv, err := s.SuggestMappingAvaliador()
 	if err != nil {
@@ -41,7 +43,9 @@ func carregarSessaoXLSX(t testing.TB, path string, nOpcoes int) *Session {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.SaveAvaliadores(avals)
+	if err := s.SaveAvaliadores(avals); err != nil {
+		t.Fatal(err)
+	}
 
 	mRe, err := s.SuggestMappingRestricao()
 	if err != nil {
@@ -51,7 +55,9 @@ func carregarSessaoXLSX(t testing.TB, path string, nOpcoes int) *Session {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.SaveRestricoes(restricoes)
+	if err := s.SaveRestricoes(restricoes); err != nil {
+		t.Fatal(err)
+	}
 	return s
 }
 

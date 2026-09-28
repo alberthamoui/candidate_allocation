@@ -113,13 +113,7 @@ func (s *Session) RunAlocacao(param ParametrosAlocacao, emit func(any)) (Alocaca
 	var naoAlocados []PessoaInfo
 	for _, p := range todasPessoas {
 		if !alocadosSet[p.ID] {
-			naoAlocados = append(naoAlocados, PessoaInfo{
-				ID:          p.ID,
-				Nome:        p.Nome,
-				EmailInsper: p.EmailInsper,
-				Curso:       p.Curso,
-				Semestre:    p.Semestre,
-			})
+			naoAlocados = append(naoAlocados, PessoaInfo(p))
 		}
 	}
 
@@ -142,27 +136,43 @@ func (s *Session) ExportResultado() ([]byte, error) {
 	f := excelize.NewFile()
 	defer f.Close()
 
+	// celula grava um valor na coluna col e linha lin (a partir de 1); o
+	// primeiro erro fica em errCelula e é devolvido no fim.
+	var errCelula error
+	celula := func(aba string, col, lin int, val any) {
+		cell, err := excelize.CoordinatesToCellName(col, lin)
+		if err == nil {
+			err = f.SetCellValue(aba, cell, val)
+		}
+		if errCelula == nil && err != nil {
+			errCelula = fmt.Errorf("aba %q, célula (%d, %d): %w", aba, col, lin, err)
+		}
+	}
+
 	// --- Aba "Lista": uma linha por candidato (mesmo formato anterior) ---
 	lista := "Lista"
-	f.SetSheetName("Sheet1", lista)
+	if err := f.SetSheetName("Sheet1", lista); err != nil {
+		return nil, err
+	}
 	for i, h := range []string{"Mesa", "Candidato", "Avaliadores"} {
-		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		f.SetCellValue(lista, cell, h)
+		celula(lista, i+1, 1, h)
 	}
 	row := 2
 	for _, mesa := range s.lastResult.Mesas {
 		avStr := strings.Join(mesa.Avaliadores, ", ")
 		for _, cand := range mesa.Candidatos {
-			f.SetCellValue(lista, fmt.Sprintf("A%d", row), mesa.Descricao)
-			f.SetCellValue(lista, fmt.Sprintf("B%d", row), cand)
-			f.SetCellValue(lista, fmt.Sprintf("C%d", row), avStr)
+			celula(lista, 1, row, mesa.Descricao)
+			celula(lista, 2, row, cand)
+			celula(lista, 3, row, avStr)
 			row++
 		}
 	}
 
 	// --- Aba "Alocação": grade 2D agrupada por dia ---
 	aloc := "Alocação"
-	f.NewSheet(aloc)
+	if _, err := f.NewSheet(aloc); err != nil {
+		return nil, err
+	}
 
 	// Agrupar mesas por DiaID, preservando ordem de ID
 	type diaGroup struct {
@@ -181,10 +191,7 @@ func (s *Session) ExportResultado() ([]byte, error) {
 	}
 
 	curRow := 1
-	set := func(col, r int, val any) {
-		cell, _ := excelize.CoordinatesToCellName(col, r)
-		f.SetCellValue(aloc, cell, val)
-	}
+	set := func(col, r int, val any) { celula(aloc, col, r, val) }
 
 	for _, diaID := range diaOrder {
 		grp := diaMap[diaID]
@@ -258,17 +265,21 @@ func (s *Session) ExportResultado() ([]byte, error) {
 
 	// --- Aba "Não Alocados" ---
 	nao := "Não Alocados"
-	f.NewSheet(nao)
+	if _, err := f.NewSheet(nao); err != nil {
+		return nil, err
+	}
 	for i, h := range []string{"Nome", "Email Institucional", "Curso", "Semestre"} {
-		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		f.SetCellValue(nao, cell, h)
+		celula(nao, i+1, 1, h)
 	}
 	for i, p := range s.lastResult.NaoAlocadosInfo {
 		r := i + 2
-		f.SetCellValue(nao, fmt.Sprintf("A%d", r), p.Nome)
-		f.SetCellValue(nao, fmt.Sprintf("B%d", r), p.EmailInsper)
-		f.SetCellValue(nao, fmt.Sprintf("C%d", r), p.Curso)
-		f.SetCellValue(nao, fmt.Sprintf("D%d", r), p.Semestre)
+		celula(nao, 1, r, p.Nome)
+		celula(nao, 2, r, p.EmailInsper)
+		celula(nao, 3, r, p.Curso)
+		celula(nao, 4, r, p.Semestre)
+	}
+	if errCelula != nil {
+		return nil, errCelula
 	}
 
 	buf, err := f.WriteToBuffer()

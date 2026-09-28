@@ -34,7 +34,7 @@ func setupConn(db *sql.DB) {
 
 		`CREATE TABLE IF NOT EXISTS "opcoes_horario" (
 			"id" INTEGER PRIMARY KEY AUTOINCREMENT,
-			"opcao" TEXT NOT NULL
+			"opcao" TEXT NOT NULL UNIQUE
 			);`,
 
 		`CREATE TABLE IF NOT EXISTS "disponibilidade" (

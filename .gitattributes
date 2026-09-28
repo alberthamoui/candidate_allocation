@@ -1,0 +1,5 @@
+# Go espera LF (gofmt marca CRLF como fora do padrão); vale também no Windows
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+Makefile text eol=lf

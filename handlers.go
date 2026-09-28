@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -18,7 +19,9 @@ import (
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("[WARN] erro ao escrever resposta JSON: %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
@@ -54,7 +57,14 @@ func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	nOpcoes := 5
-	fmt.Sscan(r.FormValue("nOpcoes"), &nOpcoes)
+	if v := r.FormValue("nOpcoes"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 10 {
+			writeError(w, 400, fmt.Sprintf("número de opções inválido: %q (esperado de 1 a 10)", v))
+			return
+		}
+		nOpcoes = n
+	}
 	emailDomain := r.FormValue("emailDomain")
 	if emailDomain == "" {
 		emailDomain = "@al.insper.edu.br"
@@ -226,13 +236,13 @@ func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) 
 	sessionId := r.URL.Query().Get("sessionId")
 	sess := store.Get(sessionId)
 	if sess == nil {
-		http.Error(w, "sessão não encontrada", 404)
+		http.Error(w, "sessão não encontrada", http.StatusNotFound)
 		return
 	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "streaming não suportado", 500)
+		http.Error(w, "streaming não suportado", http.StatusInternalServerError)
 		return
 	}
 
@@ -243,7 +253,8 @@ func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) 
 
 	emit := func(v any) {
 		b, _ := json.Marshal(v)
-		fmt.Fprintf(w, "data: %s\n\n", b)
+		// se o cliente desconectou, não há a quem avisar
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", b)
 		flusher.Flush()
 	}
 
@@ -314,12 +325,12 @@ func (store *SessionStore) handleExport(w http.ResponseWriter, r *http.Request) 
 	}
 	sess := store.Get(sessionId)
 	if sess == nil {
-		http.Error(w, "sessão não encontrada", 404)
+		http.Error(w, "sessão não encontrada", http.StatusNotFound)
 		return
 	}
 	data, err := sess.ExportResultado()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
