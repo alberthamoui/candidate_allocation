@@ -52,12 +52,17 @@ export async function usarParametros(page: Page, params: Record<string, number>)
 	await page.addInitScript((p) => sessionStorage.setItem("allocation_params", p), JSON.stringify(params));
 }
 
-/** Linha da tabela de mapeamento de uma variável (ex.: "nome", "opcao 1"). */
+/** Linha do mapeamento de uma variável (ex.: "nome", "opcao 1"). */
 export function linhaMapeamento(page: Page, variavel: string) {
-	return page.getByRole("row").filter({ has: page.getByRole("cell", { name: variavel, exact: true }) });
+	return page.locator(`[data-testid="linha-mapeamento"][data-variavel="${variavel}"]`);
 }
 
-/** Número de um dos cartões da prévia de capacidade (ex.: "mesas por horário"). */
+/** Coluna da planilha ligada a uma variável no mapeamento (a caixa arrastável). */
+export function colunaMapeada(page: Page, variavel: string) {
+	return linhaMapeamento(page, variavel).getByTestId("coluna");
+}
+
+/** Um dos cartões da prévia de capacidade (ex.: "mesas por horário"). */
 export function cartaoPrevia(page: Page, rotulo: string) {
-	return page.locator("div.border.rounded-xl").filter({ hasText: rotulo });
+	return page.locator('[data-testid^="previa-"]').filter({ hasText: rotulo });
 }

@@ -1,142 +1,101 @@
-import { motion } from "framer-motion";
-import {
-	PencilIcon,
-	ExclamationTriangleIcon,
-	TrashIcon,
-} from "@heroicons/react/24/outline";
+import { ReactNode } from "react";
+import { ExclamationTriangleIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { EditableCell } from "./EditableCell";
+import { cn, Selo } from "./ui";
+import { nomeCampo } from "../nomesCampos";
 
 interface ErrorItem {
 	field: string;
 	msg: string;
 }
-interface MapUsuario {
-	[key: string]: string | number;
-}
 interface UserCardProps {
 	userId: number;
-	user: MapUsuario;
+	user: Record<string, any>;
 	errors: ErrorItem[];
 	onDelete: (userId: number) => void;
 	onCellChange: (userId: number, field: string, value: string) => void;
-	extraBtn?: React.ReactNode;
+	extraBtn?: ReactNode;
+	destaque?: boolean; // ex.: faz parte de um grupo de duplicados
 }
 
-export function UserCard({
-	userId,
-	user,
-	errors,
-	onDelete,
-	onCellChange,
-	extraBtn,
-}: UserCardProps) {
-	const hasErrors = errors.length > 0;
+// Cartão de um candidato na revisão: campos editáveis, erros e opções de horário.
+export function UserCard({ userId, user, errors, onDelete, onCellChange, extraBtn, destaque }: UserCardProps) {
+	const temErro = errors.length > 0;
+	const opcoes: string[] = Array.isArray(user.opcoes) ? user.opcoes.filter(Boolean) : [];
+	const campos = Object.entries(user).filter(([campo]) => campo !== "opcoes" && campo !== "nome");
 
 	return (
-		<motion.div
-			key={userId}
-			initial={{ opacity: 0, y: 20 }}
-			animate={{ opacity: 1, y: 0 }}
-			className={`relative border-2 rounded-xl shadow-lg p-4 w-80 flex-shrink-0 transition-all duration-200 ${
-				hasErrors
-					? "border-red-300 bg-red-50 shadow-red-100"
-					: "border-gray-200 bg-white hover:shadow-xl hover:border-blue-300"
-			}`}
+		<div
+			data-testid="cartao-candidato"
+			className={cn(
+				"painel flex flex-col p-4",
+				temErro && "border-[rgba(212,32,32,0.3)]",
+				destaque && "border-[rgba(245,166,35,0.5)] shadow-[var(--shadow-md)]"
+			)}
 		>
-			{/* Header with ID, error indicator, and delete button */}
-			<div className="flex items-center justify-between mb-3">
-				<div className="flex items-center space-x-2">
-					<span className="text-sm font-bold text-gray-600">
-						ID: {userId}
-					</span>
-					{hasErrors && (
-						<div className="flex items-center space-x-1 bg-red-100 px-2 py-1 rounded-full">
-							<ExclamationTriangleIcon className="w-4 h-4 text-red-600" />
-							<span className="text-xs font-semibold text-red-600">
-								{errors.length} erro
-								{errors.length > 1 ? "s" : ""}
-							</span>
-						</div>
-					)}
-				</div>
-				<div className="flex items-center space-x-2">
-					<div className="flex items-center space-x-1 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-						<PencilIcon className="w-3 h-3" />
-						<span>Editável</span>
+			<div className="flex items-start justify-between gap-2">
+				<div className="min-w-0 flex-1">
+					<div className="font-mono text-[11px] text-[var(--text-light)]">#{userId}</div>
+					<div className="-mx-2 font-medium">
+						<EditableCell value={user.nome ?? ""} onChange={(v) => onCellChange(userId, "nome", v)} hasError={errors.some((e) => e.field === "nome")} />
 					</div>
+				</div>
+				<div className="flex items-center gap-1">
+					{temErro && (
+						<Selo tom="perigo">
+							<ExclamationTriangleIcon className="h-3 w-3" />
+							{errors.length} erro{errors.length > 1 ? "s" : ""}
+						</Selo>
+					)}
 					<button
+						type="button"
 						onClick={() => onDelete(userId)}
-						className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full transition-colors"
-						title="Deletar usuário"
+						className="rounded-md p-1 text-[var(--text-light)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+						title="Remover candidato"
+						aria-label={`Remover candidato ${userId}`}
 					>
-						<TrashIcon className="w-4 h-4" />
+						<TrashIcon className="h-4 w-4" />
 					</button>
 				</div>
 			</div>
 
-			{/* Error summary */}
-			{hasErrors && (
-				<div className="mb-3 p-2 bg-red-100 border border-red-200 rounded-lg">
-					<div className="text-xs font-semibold text-red-700 mb-1">
-						Erros encontrados:
+			{temErro && (
+				<ul className="mt-2 space-y-0.5 rounded-[var(--radius)] bg-[var(--danger-soft)] px-2.5 py-2 text-xs text-[#a51818]">
+					{errors.map((e, i) => (
+						<li key={i}>
+							<b>{nomeCampo(e.field)}:</b> {e.msg}
+						</li>
+					))}
+				</ul>
+			)}
+
+			<dl className="mt-3 space-y-1">
+				{campos.map(([campo, valor]) => (
+					<div key={campo} className="grid grid-cols-[96px_1fr] items-center gap-2">
+						<dt className="truncate text-xs text-[var(--text-muted)]" title={nomeCampo(campo)}>
+							{nomeCampo(campo)}
+						</dt>
+						<dd className="min-w-0">
+							<EditableCell value={valor ?? ""} onChange={(v) => onCellChange(userId, campo, v)} hasError={errors.some((e) => e.field === campo)} />
+						</dd>
 					</div>
-					<div className="space-y-1">
-						{errors.map((error, idx) => (
-							<div key={idx} className="text-xs text-red-600">
-								<span className="font-medium">
-									{error.field}:
-								</span>{" "}
-								{error.msg}
-							</div>
+				))}
+			</dl>
+
+			{opcoes.length > 0 && (
+				<div className="mt-3 border-t border-[var(--line)] pt-2">
+					<div className="rotulo-caps mb-1">Horários escolhidos</div>
+					<ol className="space-y-0.5 text-xs text-[var(--text-muted)]">
+						{opcoes.map((o, i) => (
+							<li key={i} className="capitalize">
+								<span className="text-[var(--text-light)]">{i + 1}.</span> {o}
+							</li>
 						))}
-					</div>
+					</ol>
 				</div>
 			)}
 
-			{/* User fields */}
-			<div className="space-y-2">
-				{Object.entries(user).map(([field, val]) => {
-					const fieldError = errors.find((e) => e.field === field);
-					const hasFieldError = !!fieldError;
-
-					return (
-						<div
-							key={field}
-							className={`p-2 rounded-lg border transition-all duration-200 ${
-								hasFieldError
-									? "border-red-300 bg-red-50"
-									: "border-gray-200 bg-gray-50 hover:bg-gray-100"
-							}`}
-						>
-							<div className="flex items-center justify-between mb-1">
-								<span className="text-xs font-semibold text-gray-700 capitalize">
-									{field
-										.replace(/([A-Z])/g, " $1")
-										.replace(/^./, (str) =>
-											str.toUpperCase()
-										)}
-								</span>
-								{hasFieldError && (
-									<ExclamationTriangleIcon className="w-3 h-3 text-red-500" />
-								)}
-							</div>
-
-							<EditableCell
-								value={val}
-								onChange={(v) => onCellChange(userId, field, v)}
-								hasError={hasFieldError}
-							/>
-						</div>
-					);
-				})}
-			</div>
-
-			{/* Action button */}
-			{extraBtn && (
-				<div className="mt-4 pt-3 border-t border-gray-200">
-					{extraBtn}
-				</div>
-			)}
-		</motion.div>
+			{extraBtn && <div className="mt-4 border-t border-[var(--line)] pt-3">{extraBtn}</div>}
+		</div>
 	);
 }
