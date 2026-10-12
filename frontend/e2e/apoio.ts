@@ -12,7 +12,12 @@ export const PLANILHA_EXEMPLO = fileURLToPath(new URL("../../Excels/base_exemplo
  * aceitando as sugestões de mapeamento, e devolve o id da sessão. Serve para
  * testes que começam depois da importação.
  */
-export async function prepararSessao(request: APIRequestContext, planilha = PLANILHA_OFICIAL): Promise<string> {
+export async function prepararSessao(
+	request: APIRequestContext,
+	planilha = PLANILHA_OFICIAL,
+	opcoes?: { usarPreferencia?: boolean }
+): Promise<string> {
+	const usarPreferencia = opcoes?.usarPreferencia !== false;
 	const ok = async (resp: Awaited<ReturnType<APIRequestContext["post"]>>) => {
 		expect(resp.ok(), `${resp.url()} → ${resp.status()} ${await resp.text()}`).toBeTruthy();
 		return resp.json();
@@ -22,8 +27,9 @@ export async function prepararSessao(request: APIRequestContext, planilha = PLAN
 		await request.post("/api/upload", {
 			multipart: {
 				file: { name: path.basename(planilha), mimeType: "application/octet-stream", buffer: readFileSync(planilha) },
-				nOpcoes: "5",
+				nOpcoes: usarPreferencia ? "5" : "0",
 				emailDomain: "@al.insper.edu.br",
+				usarPreferencia: usarPreferencia ? "true" : "false",
 			},
 		})
 	);

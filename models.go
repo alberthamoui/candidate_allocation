@@ -60,4 +60,6 @@ type AlocacaoResponse struct {
 	NaoAlocadosInfo []CandidatoResultado `json:"nao_alocados_info"`
 	Pontuacao       int                  `json:"pontuacao"`
 	Qualidade       []ItemQualidade      `json:"qualidade"`
+	// SemPreferencia é verdadeiro quando o ranking de horários foi desligado.
+	SemPreferencia bool `json:"sem_preferencia,omitempty"`
 }

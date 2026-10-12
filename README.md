@@ -10,11 +10,11 @@ Sistema web para alocação de candidatos em mesas de entrevista, desenvolvido e
 
 O sistema guia o usuário em 5 etapas:
 
-1. **Upload** — envia o arquivo `.xlsx` com candidatos, avaliadores e restrições e configura parâmetros iniciais
+1. **Upload** — envia o arquivo `.xlsx` com candidatos, avaliadores e restrições. A preferência de horário e os avisos (e-mail e WhatsApp) são opcionais e se configuram nesta tela
 2. **Candidatos** — mapeamento de colunas, revisão e correção dos dados (duplicatas, campos inválidos)
 3. **Avaliadores** — mapeamento e confirmação da aba de avaliadores
 4. **Restrições** — mapeamento e confirmação da aba de restrições
-5. **Parâmetros** — mesas por horário, avaliadores por mesa e mínimo/máximo de candidatos por mesa, com uma prévia da capacidade (mesas que cabem com os avaliadores, vagas, quantos candidatos cabem pelos horários que escolheram e avisos) e **critérios adicionais** opcionais sobre curso ou semestre
+5. **Parâmetros** — mesas por horário, avaliadores por mesa e mínimo/máximo de candidatos por mesa, com uma prévia da capacidade (mesas que cabem com os avaliadores, vagas, quantos candidatos cabem pelos horários que escolheram e avisos) e **critérios adicionais** opcionais sobre curso ou semestre. Se a preferência de horário foi desligada no upload, esta etapa pede a lista de horários: todo mundo pode ir em qualquer um deles
 
 Ao confirmar os parâmetros, o algoritmo de alocação é executado. A tela de resultado mostra:
 
@@ -25,9 +25,17 @@ Ao confirmar os parâmetros, o algoritmo de alocação é executado. A tela de r
 
 É possível voltar e ajustar os parâmetros, exportar o resultado para `.xlsx` ou reiniciar do zero.
 
+Na mesma tela, depois da alocação:
+
+- **Imprevisto** — move um dia inteiro ou uma mesa para outro horário. Se o aviso estiver marcado, o sistema pede confirmação e envia e-mail e WhatsApp para quem foi afetado.
+- **Uma pessoa** — troca o horário de quem pediu outro encaixe. Se o horário ainda não existe, abre uma mesa nele.
+- **Avaliação** — marca quem passou e quem não passou. A marca aparece na lista e no Excel (`passou` / `não passou`).
+- **Avisos** — edita a mensagem (com `{{nome}}`, `{{data}}`, `{{horario}}`, `{{mesa}}`, `{{email}}`, `{{curso}}`, `{{numero}}`) e dispara o envio para todo mundo alocado.
+- **Exportar Excel** — baixa a planilha já com horário, e-mail, número e avaliação.
+
 ### Algoritmo de alocação
 
-Cada candidato vai para uma mesa de um dos horários que escolheu. Por padrão, cada horário tem até 5 mesas (limitado por `avaliadores / avaliadores por mesa`, pois cada avaliador fica em uma mesa por horário), cada mesa tem 5 avaliadores distintos e só é formada com 5 a 8 candidatos. Esses quatro valores são editáveis na etapa de parâmetros. A pontuação (em [alocate.go](alocate.go)) penaliza:
+Cada candidato vai para uma mesa de um dos horários que escolheu. Com a preferência desligada, o custo de horário é zero e qualquer horário informado pelo administrador serve. Por padrão, cada horário tem até 5 mesas (limitado por `avaliadores / avaliadores por mesa`, pois cada avaliador fica em uma mesa por horário), cada mesa tem 5 avaliadores distintos e só é formada com 5 a 8 candidatos. Esses quatro valores são editáveis na etapa de parâmetros. A pontuação (em [alocate.go](alocate.go)) penaliza:
 
 | Situação | Pontos |
 |---|---|
@@ -57,7 +65,7 @@ Um limite inferior exato (fluxo de custo mínimo sobre a escolha de horários) e
 
 ## Formatação do arquivo Excel
 
-O arquivo `.xlsx` deve ter exatamente **3 abas**, nesta ordem. Um arquivo de exemplo pode ser baixado diretamente na tela inicial do app (botão "Baixar exemplo").
+O arquivo `.xlsx` deve ter exatamente **3 abas**, nesta ordem. Um arquivo de exemplo pode ser baixado diretamente na tela inicial do app (botão "Baixar planilha de exemplo").
 
 ### Aba 1 — Candidatos
 
@@ -67,18 +75,21 @@ Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos
 |---|---|---|
 | Timestamp | Data/hora do preenchimento (opcional) | — |
 | Nome | Nome completo | — |
-| CPF | Apenas dígitos, sem pontuação | 11 dígitos numéricos |
-| Número | RA ou número de matrícula | 9 dígitos numéricos |
+| CPF | Apenas dígitos, sem pontuação. Opcional | Se vier preenchido, 11 dígitos numéricos |
+| Número | RA ou telefone (também reconhecido como telefone, celular ou WhatsApp) | RA com 9 dígitos, ou telefone com 10 a 13 dígitos. Pontos, espaços e parênteses são ignorados |
 | Semestre | Semestre atual do candidato | Valor entre 1 e 10 |
 | Curso | Nome do curso | — |
 | Email Institucional | Email institucional do candidato | Deve terminar com o domínio configurado (ex: `@al.insper.edu.br`) |
 | Email Pessoal | Email pessoal | Qualquer email válido |
 | Opção 1 … Opção N | Horários disponíveis em ordem de preferência | Uma coluna por opção |
 
-Dois parâmetros são configurados antes do upload:
+Três escolhas são feitas antes do upload:
 
-- **Número de opções de horário** (N): quantas colunas de disponibilidade existem na planilha. A primeira opção tem maior prioridade no algoritmo.
+- **Preferência de horário** (ligada por padrão): se a planilha tiver colunas de opção, informe quantas são (N). A primeira opção tem maior prioridade no algoritmo. Se desligar, a planilha não precisa dessas colunas; os horários são digitados na etapa de parâmetros e todos os candidatos podem ir em qualquer um, com o mesmo custo.
 - **Domínio do email institucional**: sufixo que todos os emails institucionais devem ter (ex: `@al.insper.edu.br`).
+- **Avisos** (opcional): uma mensagem com variáveis e, se quiser, o SMTP e a URL de um webhook de WhatsApp. Nada é enviado nesta etapa. O envio só acontece quando você confirma, na tela de resultado ou pela CLI (`-avisar` / `enviar`).
+
+O e-mail sai pelo SMTP (porta 587, ou 465 com TLS) para o e-mail institucional e, se ele estiver vazio, para o pessoal. O WhatsApp é um POST JSON `{"to","message","para","mensagem"}` na URL informada, com `Authorization: Bearer` se houver token. O destino é a coluna Número. Sem servidor ou sem URL, a mensagem é montada e mostrada, mas não sai.
 
 Exemplo de horário: `quarta 14-16`
 
@@ -145,6 +156,24 @@ go run .
 
 Acesse em [http://localhost:8080](http://localhost:8080).
 
+Os mesmos passos existem na linha de comando. Sem argumentos, o programa sobe o site. Com um comando, ele trabalha numa pasta local (`alocacao-cli/` por padrão, arquivo `estado.json`):
+
+```bash
+go run . alocar -planilha Excels/base_exemplo.xlsx
+go run . alocar -planilha planilha.xlsx -sem-preferencia -horarios "quarta 14-16,quinta 10-12"
+go run . avisos -mensagem "Olá {{nome}}, sua entrevista é em {{data}}, no horário {{horario}}." -email -smtp-host smtp.exemplo.com -remetente org@exemplo.com
+go run . realocar-dia -de "quarta 14-16" -para "sexta 14-16" -avisar
+go run . realocar-mesa -mesa 1 -para "quinta 10-12"
+go run . realocar-pessoa -pessoa "Ana" -horario "sexta 8-10" -avisar
+go run . avaliar -pessoa "Ana" -resultado aprovado
+go run . avaliar -listar
+go run . enviar
+go run . exportar -saida resultado.xlsx
+go run . ajuda
+```
+
+`realocar-dia`, `realocar-mesa` e `realocar-pessoa` mudam o horário sem rodar o algoritmo de novo. `-avisar` e `enviar` disparam e-mail e WhatsApp. `avaliar` aceita `aprovado`/`passou` e `reprovado`/`não passou`. O Excel do `exportar` traz horário, e-mail, número e avaliação. O `estado.json` pode conter a senha do SMTP; a pasta `alocacao-cli/` não entra no git.
+
 Para hot-reload do frontend durante desenvolvimento:
 
 ```bash
@@ -196,10 +225,14 @@ Referência medida com 1 núcleo: a planilha oficial (98 candidatos) leva ~0,5 s
 
 ```
 candidate_allocation/
-├── main.go         -- entrypoint: servidor HTTP, roteamento
+├── main.go         -- entrypoint: servidor HTTP ou comandos da CLI
+├── cli.go          -- alocar, avisar, realocar, avaliar e exportar pela linha de comando
 ├── handlers.go     -- handlers das rotas HTTP e router
 ├── app.go          -- SessionStore e lógica de sessão
 ├── alocate.go      -- algoritmo de alocação
+├── preferencia.go  -- horários definidos pelo administrador quando a preferência está desligada
+├── avisos.go       -- mensagem com variáveis, SMTP e webhook de WhatsApp
+├── realocar.go     -- mudar dia, mesa ou pessoa e registrar a avaliação
 ├── capacidade.go   -- prévia de capacidade para os parâmetros da alocação
 ├── criterios.go    -- critérios adicionais (curso/semestre) usados na alocação
 ├── recursos.go     -- limites do servidor conforme a CPU disponível (produção)
@@ -222,7 +255,7 @@ candidate_allocation/
     └── src/
         ├── main.tsx            -- roteamento e estado global
         ├── api.ts              -- cliente HTTP/SSE e gestão do sessionId
-        ├── components/         -- UserCard, EditableCell, PainelResultado (conteúdo da tela de resultado), EditorCriterios
+        ├── components/         -- UserCard, EditableCell, PainelResultado, OperacoesResultado (imprevisto, pessoa, avaliação, avisos), EditorCriterios
         └── pages/
             ├── Home.tsx            -- tela inicial e upload
             ├── MappingPage.tsx     -- mapeamento de colunas (reutilizado nas 3 etapas)
@@ -247,8 +280,14 @@ candidate_allocation/
 | `POST` | `/api/build-restricoes` | Aplica mapeamento e retorna restrições parseadas |
 | `POST` | `/api/save-restricoes` | Salva restrições na sessão |
 | `GET` | `/api/capacidade` | Prévia de capacidade para os parâmetros (query opcional: `mesas_por_horario`, `avaliadores_por_mesa`, `min_pessoas_por_mesa`, `max_pessoas_por_mesa`; sem eles, usa os padrões) |
-| `GET` | `/api/alocar?sessionId=` | Executa alocação via Server-Sent Events (streaming de progresso); aceita os mesmos parâmetros de `/api/capacidade` |
-| `GET` | `/api/export?sessionId=` | Download do resultado em `.xlsx` |
+| `GET` | `/api/alocar?sessionId=` | Executa alocação via Server-Sent Events (streaming de progresso); aceita os mesmos parâmetros de `/api/capacidade`, mais `sem_preferencia` e `horarios_livres` |
+| `GET` | `/api/resultado` | Última alocação, já com realocações e avaliações |
+| `GET` | `/api/avisos` | Mensagem e canais configurados na sessão |
+| `POST` | `/api/avisos` | Grava a mensagem e os canais (SMTP e WhatsApp) |
+| `POST` | `/api/avisos/enviar` | Envia a mensagem para todo mundo alocado |
+| `POST` | `/api/realocar` | Move um dia, uma mesa ou uma pessoa (`tipo`: `dia`, `mesa` ou `pessoa`) |
+| `POST` | `/api/avaliar` | Marca quem passou e quem não passou |
+| `GET` | `/api/export?sessionId=` | Download do resultado em `.xlsx` (inclui horário, e-mail, número e avaliação) |
 | `GET` | `/api/exemplo` | Download do arquivo de exemplo |
 | `GET` | `/api/versao` | Branch e commit que o servidor está rodando (exibidos no canto da tela) |
 | `DELETE` | `/api/session` | Encerra e limpa a sessão atual |

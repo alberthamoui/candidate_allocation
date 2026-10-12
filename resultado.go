@@ -16,15 +16,18 @@ import (
 
 // CandidatoResultado é um candidato como aparece no resultado.
 type CandidatoResultado struct {
-	ID          int      `json:"id"`
-	Nome        string   `json:"nome"`
-	EmailInsper string   `json:"email_insper"`
-	Curso       string   `json:"curso"`
-	Semestre    int      `json:"semestre"`
-	Opcoes      []string `json:"opcoes"`      // horários na ordem de preferência
-	Opcao       int      `json:"opcao"`       // em qual opção ficou (1 = 1ª); 0 se não alocado
-	NaoPosso    []string `json:"nao_posso"`   // avaliadores que não podem avaliá-lo
-	PrefiroNao  []string `json:"prefiro_nao"` // avaliadores que preferem não avaliá-lo
+	ID           int      `json:"id"`
+	Nome         string   `json:"nome"`
+	EmailInsper  string   `json:"email_insper"`
+	EmailPessoal string   `json:"email_pessoal,omitempty"`
+	Numero       string   `json:"numero,omitempty"`
+	Curso        string   `json:"curso"`
+	Semestre     int      `json:"semestre"`
+	Avaliacao    string   `json:"avaliacao,omitempty"` // "aprovado", "reprovado" ou vazio
+	Opcoes       []string `json:"opcoes"`              // horários na ordem de preferência
+	Opcao        int      `json:"opcao"`               // em qual opção ficou (1 = 1ª); 0 se não alocado
+	NaoPosso     []string `json:"nao_posso"`           // avaliadores que não podem avaliá-lo
+	PrefiroNao   []string `json:"prefiro_nao"`         // avaliadores que preferem não avaliá-lo
 	// Conflitos são os avaliadores "prefiro não" que ficaram na mesa dele.
 	Conflitos []string `json:"conflitos"`
 }
@@ -51,15 +54,17 @@ type ItemQualidade struct {
 }
 
 type candidatoDB struct {
-	ID          int
-	Nome        string
-	EmailInsper string
-	Curso       string
-	Semestre    int
+	ID           int
+	Nome         string
+	EmailInsper  string
+	EmailPessoal string
+	Numero       string
+	Curso        string
+	Semestre     int
 }
 
 func carregarCandidatos(s *Session) ([]candidatoDB, error) {
-	rows, err := s.db.Query(`SELECT id, nome, email_insper, curso, semestre FROM pessoa`)
+	rows, err := s.db.Query(`SELECT id, nome, email_insper, email_pessoal, numero, curso, semestre FROM pessoa`)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +72,7 @@ func carregarCandidatos(s *Session) ([]candidatoDB, error) {
 	var cands []candidatoDB
 	for rows.Next() {
 		var c candidatoDB
-		if err := rows.Scan(&c.ID, &c.Nome, &c.EmailInsper, &c.Curso, &c.Semestre); err != nil {
+		if err := rows.Scan(&c.ID, &c.Nome, &c.EmailInsper, &c.EmailPessoal, &c.Numero, &c.Curso, &c.Semestre); err != nil {
 			return nil, err
 		}
 		cands = append(cands, c)
@@ -117,7 +122,8 @@ func montarResultado(d dadosAlocacao, cands []candidatoDB, res ResultadoAlocacao
 
 	candidato := func(c candidatoDB) CandidatoResultado {
 		r := CandidatoResultado{
-			ID: c.ID, Nome: c.Nome, EmailInsper: c.EmailInsper, Curso: c.Curso, Semestre: c.Semestre,
+			ID: c.ID, Nome: c.Nome, EmailInsper: c.EmailInsper, EmailPessoal: c.EmailPessoal, Numero: c.Numero,
+			Curso: c.Curso, Semestre: c.Semestre,
 			Opcoes:     []string{},
 			NaoPosso:   nomesAval(naoPosso[c.ID]),
 			PrefiroNao: nomesAval(prefiroNao[c.ID]),
@@ -209,6 +215,32 @@ func montarResultado(d dadosAlocacao, cands []candidatoDB, res ResultadoAlocacao
 	resultado.Pontuacao = res.Pontuacao
 	resultado.Qualidade = relatorioQualidade(resultado, criterios)
 	return resultado
+}
+
+// marcarSemPreferencia tira da tela a ideia de 1ª/2ª opção: sem ranking,
+// o horário em que a pessoa ficou não é "melhor" nem "pior".
+func (r *AlocacaoResponse) marcarSemPreferencia() {
+	r.SemPreferencia = true
+	limpar := func(c *CandidatoResultado) {
+		c.Opcao = 0
+		c.Opcoes = []string{}
+	}
+	for i := range r.Mesas {
+		for j := range r.Mesas[i].Candidatos {
+			limpar(&r.Mesas[i].Candidatos[j])
+		}
+	}
+	for i := range r.NaoAlocadosInfo {
+		limpar(&r.NaoAlocadosInfo[i])
+	}
+	filtrados := make([]ItemQualidade, 0, len(r.Qualidade))
+	for _, it := range r.Qualidade {
+		if strings.HasPrefix(it.Codigo, "opcao_") {
+			continue
+		}
+		filtrados = append(filtrados, it)
+	}
+	r.Qualidade = filtrados
 }
 
 // relatorioQualidade resume o resultado em itens clicáveis: quantos ficaram

@@ -15,12 +15,15 @@ import (
 
 // Session guarda o estado de um usuário durante o fluxo de alocação.
 type Session struct {
-	db          *sql.DB
-	excelData   []byte
-	nOpcoes     int
-	emailDomain string
-	lastResult  *AlocacaoResponse
-	updatedAt   time.Time
+	db              *sql.DB
+	excelData       []byte
+	nOpcoes         int
+	emailDomain     string
+	usarPreferencia bool // false: o administrador define os horários, sem ranking dos candidatos
+	avisos          ConfigAvisos
+	avaliacoes      map[int]string // pessoa_id → "aprovado" ou "reprovado"
+	lastResult      *AlocacaoResponse
+	updatedAt       time.Time
 }
 
 // SaveUsuarios persiste candidatos no banco da sessão.
@@ -90,7 +93,12 @@ func (s *SessionStore) Create() (string, *Session, error) {
 	}
 
 	id := newSessionID()
-	sess := &Session{db: db, updatedAt: time.Now()}
+	sess := &Session{
+		db:              db,
+		updatedAt:       time.Now(),
+		usarPreferencia: true,
+		avaliacoes:      map[int]string{},
+	}
 
 	s.mu.Lock()
 	s.sessions[id] = sess

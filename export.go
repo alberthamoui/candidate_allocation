@@ -26,6 +26,12 @@ func (s *Session) RunAlocacao(ctx context.Context, param ParametrosAlocacao, emi
 	if err != nil {
 		return AlocacaoResponse{}, err
 	}
+	if param.SemPreferencia {
+		if len(normalizarHorarios(param.HorariosLivres)) == 0 {
+			return AlocacaoResponse{}, fmt.Errorf("a preferência de horário está desligada: informe pelo menos um horário")
+		}
+		d = aplicarSemPreferencia(d, param.HorariosLivres)
+	}
 	prefs := d.prefs
 
 	emit(progressEvent{Step: "Iniciando algoritmo...", Pct: 25, Total: recursos.Execucoes * recursos.Iteracoes})
@@ -53,6 +59,10 @@ func (s *Session) RunAlocacao(ctx context.Context, param ParametrosAlocacao, emi
 		return AlocacaoResponse{}, fmt.Errorf("carregando candidatos: %w", err)
 	}
 	result := montarResultado(d, cands, res, mesas, param.Criterios)
+	if param.SemPreferencia {
+		result.marcarSemPreferencia()
+	}
+	s.aplicarAvaliacoes(&result)
 	s.lastResult = &result
 	return result, nil
 }
@@ -84,7 +94,7 @@ func (s *Session) ExportResultado() ([]byte, error) {
 	if err := f.SetSheetName("Sheet1", lista); err != nil {
 		return nil, err
 	}
-	for i, h := range []string{"Mesa", "Candidato", "Avaliadores"} {
+	for i, h := range []string{"Mesa", "Candidato", "Avaliadores", "Horário", "Email", "Número", "Avaliação"} {
 		celula(lista, i+1, 1, h)
 	}
 	row := 2
@@ -98,6 +108,10 @@ func (s *Session) ExportResultado() ([]byte, error) {
 			celula(lista, 1, row, mesa.Descricao)
 			celula(lista, 2, row, cand.Nome)
 			celula(lista, 3, row, avStr)
+			celula(lista, 4, row, mesa.DiaNome)
+			celula(lista, 5, row, emailDe(cand))
+			celula(lista, 6, row, cand.Numero)
+			celula(lista, 7, row, textoAvaliacao(cand.Avaliacao))
 			row++
 		}
 	}
@@ -202,7 +216,7 @@ func (s *Session) ExportResultado() ([]byte, error) {
 	if _, err := f.NewSheet(nao); err != nil {
 		return nil, err
 	}
-	for i, h := range []string{"Nome", "Email Institucional", "Curso", "Semestre"} {
+	for i, h := range []string{"Nome", "Email Institucional", "Curso", "Semestre", "Número", "Avaliação"} {
 		celula(nao, i+1, 1, h)
 	}
 	for i, p := range s.lastResult.NaoAlocadosInfo {
@@ -211,6 +225,8 @@ func (s *Session) ExportResultado() ([]byte, error) {
 		celula(nao, 2, r, p.EmailInsper)
 		celula(nao, 3, r, p.Curso)
 		celula(nao, 4, r, p.Semestre)
+		celula(nao, 5, r, p.Numero)
+		celula(nao, 6, r, textoAvaliacao(p.Avaliacao))
 	}
 	if errCelula != nil {
 		return nil, errCelula

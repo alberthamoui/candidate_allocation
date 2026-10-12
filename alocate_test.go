@@ -143,7 +143,7 @@ func TestAlocacaoTesteOficial(t *testing.T) {
 	res, mesas := fazerMelhorAlocacaoMesas(context.Background(), param, horarios, avals, prefs, hard, soft, nil, nil)
 	validarAlocacao(t, param, res, mesas, prefs, hard)
 
-	score, pen, _ := pontuarResultado(res, mesas, prefs, hard, soft)
+	score, pen, _ := pontuarResultado(res, mesas, prefs, hard, soft, false)
 	if score != res.Pontuacao {
 		t.Errorf("Pontuacao %d difere de pontuarResultado %d", res.Pontuacao, score)
 	}
@@ -178,7 +178,7 @@ func TestAlocacaoParametrosEditaveis(t *testing.T) {
 	for _, param := range casos {
 		res, mesas := fazerMelhorAlocacaoMesas(context.Background(), param, horarios, avals, prefs, hard, soft, nil, nil)
 		validarAlocacao(t, param, res, mesas, prefs, hard)
-		score, _, _ := pontuarResultado(res, mesas, prefs, hard, soft)
+		score, _, _ := pontuarResultado(res, mesas, prefs, hard, soft, false)
 		if score != res.Pontuacao {
 			t.Errorf("%+v: Pontuacao %d difere de pontuarResultado %d", param, res.Pontuacao, score)
 		}

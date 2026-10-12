@@ -62,6 +62,7 @@ export interface AlocacaoResponse {
   nao_alocados_info: CandidatoResultado[];
   pontuacao: number;
   qualidade: ItemQualidade[];
+  sem_preferencia?: boolean;
 }
 
 export interface MesaResult {
@@ -77,8 +78,11 @@ export interface CandidatoResultado {
   id: number;
   nome: string;
   email_insper: string;
+  email_pessoal?: string;
+  numero?: string;
   curso: string;
   semestre: number;
+  avaliacao?: "" | "aprovado" | "reprovado";
   opcoes: string[]; // horários na ordem de preferência
   opcao: number; // em qual opção ficou (1 = 1ª); 0 se não alocado
   nao_posso: string[]; // avaliadores
@@ -110,6 +114,53 @@ export interface ParametrosAlocacao {
   max_pessoas_por_mesa: number;
   avaliadores_por_mesa: number;
   criterios: CriterioAlocacao[];
+  sem_preferencia?: boolean;
+  horarios_livres?: string[];
+}
+
+export interface ConfigAvisos {
+  ativo: boolean;
+  mensagem: string;
+  email: {
+    ativo: boolean;
+    host: string;
+    porta: number;
+    usuario: string;
+    senha: string;
+    remetente: string;
+  };
+  whatsapp: {
+    ativo: boolean;
+    url: string;
+    token: string;
+  };
+}
+
+export interface AvisoGerado {
+  nome: string;
+  canal: string;
+  destino: string;
+  mensagem: string;
+  enviado: boolean;
+  erro?: string;
+}
+
+export interface ResultadoOperacao {
+  resumo: string;
+  avisos: AvisoGerado[];
+  resultado?: AlocacaoResponse;
+}
+
+export const MENSAGEM_PADRAO =
+  "Olá {{nome}}, sua entrevista é em {{data}}, no horário {{horario}} ({{mesa}}).";
+
+export function configAvisosVazia(): ConfigAvisos {
+  return {
+    ativo: false,
+    mensagem: MENSAGEM_PADRAO,
+    email: { ativo: false, host: "", porta: 587, usuario: "", senha: "", remetente: "" },
+    whatsapp: { ativo: false, url: "", token: "" },
+  };
 }
 
 export type TipoCriterio = 'misturar' | 'agrupar' | 'maximo' | 'minimo' | 'um_de_cada';
@@ -164,6 +215,28 @@ export function salvarParametros(p: ParametrosAlocacao): void {
   sessionStorage.setItem(PARAMS_KEY, JSON.stringify(p));
 }
 
+const PREF_KEY = "allocation_usar_preferencia";
+const RODAR_KEY = "allocation_rodar_nova";
+
+export function setUsarPreferencia(ligada: boolean): void {
+  sessionStorage.setItem(PREF_KEY, ligada ? "true" : "false");
+}
+
+export function getUsarPreferencia(): boolean {
+  return sessionStorage.getItem(PREF_KEY) !== "false";
+}
+
+/** A próxima abertura da tela de resultado roda o algoritmo de novo. */
+export function marcarNovaAlocacao(): void {
+  sessionStorage.setItem(RODAR_KEY, "1");
+}
+
+export function consumirNovaAlocacao(): boolean {
+  const sim = sessionStorage.getItem(RODAR_KEY) === "1";
+  sessionStorage.removeItem(RODAR_KEY);
+  return sim;
+}
+
 function paramsQuery(p: ParametrosAlocacao | null): string {
   if (!p) return '';
   // números como texto; os critérios vão como JSON
@@ -180,12 +253,17 @@ function paramsQuery(p: ParametrosAlocacao | null): string {
 export async function upload(
   file: File,
   nOpcoes: number,
-  emailDomain: string
+  emailDomain: string,
+  extra?: { usarPreferencia?: boolean; avisos?: ConfigAvisos }
 ): Promise<MappingItem[]> {
+  const usarPreferencia = extra?.usarPreferencia !== false;
   const form = new FormData();
   form.append('file', file);
-  form.append('nOpcoes', String(nOpcoes));
+  form.append('nOpcoes', String(usarPreferencia ? nOpcoes : 0));
   form.append('emailDomain', emailDomain);
+  form.append('usarPreferencia', usarPreferencia ? 'true' : 'false');
+  if (extra?.avisos) form.append('avisos', JSON.stringify(extra.avisos));
+  setUsarPreferencia(usarPreferencia);
 
   const res = await fetch('/api/upload', { method: 'POST', body: form });
   const data = await checkOk(res);
@@ -303,6 +381,57 @@ export function startAlocacao(
 }
 
 // Etapa 6 — download do Excel
+export async function getResultado(): Promise<AlocacaoResponse> {
+  return checkOk(await apiFetch('/api/resultado'));
+}
+
+export async function getAvisos(): Promise<ConfigAvisos> {
+  const cfg = await checkOk(await apiFetch('/api/avisos'));
+  const vazio = configAvisosVazia();
+  return {
+    ...vazio,
+    ...cfg,
+    email: { ...vazio.email, ...cfg.email, porta: cfg.email?.porta || 587 },
+    whatsapp: { ...vazio.whatsapp, ...cfg.whatsapp },
+  };
+}
+
+export async function salvarAvisos(cfg: ConfigAvisos): Promise<void> {
+  await checkOk(await apiFetch('/api/avisos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  }));
+}
+
+export async function enviarAvisos(): Promise<ResultadoOperacao> {
+  return checkOk(await apiFetch('/api/avisos/enviar', { method: 'POST' }));
+}
+
+export async function realocar(pedido: {
+  tipo: 'dia' | 'mesa' | 'pessoa';
+  de?: string;
+  para?: string;
+  horario?: string;
+  pessoa?: string;
+  mesa_id?: number;
+  avisar?: boolean;
+}): Promise<ResultadoOperacao> {
+  return checkOk(await apiFetch('/api/realocar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pedido),
+  }));
+}
+
+export async function avaliar(itens: { id?: number; pessoa?: string; resultado: string }[]): Promise<ResultadoOperacao> {
+  return checkOk(await apiFetch('/api/avaliar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itens }),
+  }));
+}
+
 export function downloadExcel(): void {
   const id = getSessionId();
   const url = `/api/export?sessionId=${encodeURIComponent(id ?? '')}`;
