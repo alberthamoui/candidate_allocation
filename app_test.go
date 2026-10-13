@@ -17,7 +17,7 @@ func setupSession() *Session {
 	if err := setupConn(db); err != nil {
 		panic(err)
 	}
-	return &Session{db: db, emailDomain: "@al.insper.edu.br"}
+	return &Session{db: db, emailDomain: "@al.insper.edu.br", usarPreferencia: true, avaliacoes: map[int]string{}}
 }
 
 // createMockExcelFile cria um arquivo Excel em memória para testes.

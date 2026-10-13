@@ -41,9 +41,24 @@ type ValorColuna struct {
 // PreviaCapacidade calcula quantas mesas e vagas os parâmetros permitem com os
 // dados da sessão. Os parâmetros já devem ter sido validados.
 func (s *Session) PreviaCapacidade(param ParametrosAlocacao) (CapacidadeResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	d, err := s.carregarDados()
 	if err != nil {
 		return CapacidadeResponse{}, err
+	}
+	if param.SemPreferencia && len(normalizarHorarios(param.HorariosLivres)) == 0 {
+		return CapacidadeResponse{
+			Parametros:     param,
+			Candidatos:     len(d.atributos),
+			Avaliadores:    len(d.avals),
+			Horarios:       []HorarioCapacidade{},
+			Avisos:         []string{"Informe pelo menos um horário. A preferência dos candidatos está desligada, então todos podem ir em qualquer horário que você definir."},
+			ValoresColunas: valoresColunas(d.atributos),
+		}, nil
+	}
+	if param.SemPreferencia {
+		d = aplicarSemPreferencia(d, param.HorariosLivres)
 	}
 	p := montarProblema(param, d.horarios, d.avals, d.prefs, d.hard, d.soft)
 
@@ -64,7 +79,7 @@ func (s *Session) PreviaCapacidade(param ParametrosAlocacao) (CapacidadeResponse
 	for _, ps := range p.prefs {
 		for nivel, s := range ps {
 			r.Horarios[s].Interessados++
-			if nivel == 0 {
+			if !param.SemPreferencia && nivel == 0 {
 				r.Horarios[s].PrimeiraOpcao++
 			}
 		}
@@ -80,8 +95,15 @@ func (s *Session) PreviaCapacidade(param ParametrosAlocacao) (CapacidadeResponse
 	case p.nMesas < param.MesasPorHorario:
 		r.Avisos = append(r.Avisos, fmt.Sprintf("Com %d avaliadores cabem só %d mesas por horário (cada avaliador fica em uma mesa por horário).", p.nAval, p.nMesas))
 	}
+	if param.SemPreferencia {
+		r.Avisos = append(r.Avisos, "Preferência de horário desligada: todos os candidatos podem ir em qualquer horário informado.")
+	}
 	if p.nMesas > 0 && r.MaxAlocaveis < p.nCand {
-		r.Avisos = append(r.Avisos, fmt.Sprintf("Pelos horários que escolheram, no máximo %d dos %d candidatos cabem nas mesas.", r.MaxAlocaveis, p.nCand))
+		if param.SemPreferencia {
+			r.Avisos = append(r.Avisos, fmt.Sprintf("Com esses horários, no máximo %d dos %d candidatos cabem nas mesas.", r.MaxAlocaveis, p.nCand))
+		} else {
+			r.Avisos = append(r.Avisos, fmt.Sprintf("Pelos horários que escolheram, no máximo %d dos %d candidatos cabem nas mesas.", r.MaxAlocaveis, p.nCand))
+		}
 	}
 	for _, h := range r.Horarios {
 		if h.Interessados > 0 && h.Interessados < p.minPessoas {

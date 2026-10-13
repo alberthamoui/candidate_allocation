@@ -24,8 +24,9 @@ func setupConn(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS "pessoa" (
 			"id" INTEGER,
 			"nome" TEXT NOT NULL,
-			"cpf" TEXT NOT NULL UNIQUE,
+			"cpf" TEXT UNIQUE,
 			"numero" TEXT NOT NULL,
+			"telefone" TEXT NOT NULL DEFAULT '',
 			"email_insper" TEXT NOT NULL,
 			"email_pessoal" TEXT NOT NULL,
 			"semestre" INTEGER NOT NULL,

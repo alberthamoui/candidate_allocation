@@ -128,7 +128,7 @@ func TestFilaDeAlocacoes(t *testing.T) {
 func TestAlocacaoSemSessaoAvisaQueExpirou(t *testing.T) {
 	rec := httptest.NewRecorder()
 	novoRouter(NewSessionStore()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/alocar?sessionId=nao-existe", nil))
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "sessão expirou") {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "alocação não encontrada") {
 		t.Errorf("status %d, corpo %s", rec.Code, rec.Body.String())
 	}
 }

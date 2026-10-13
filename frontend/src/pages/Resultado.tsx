@@ -9,8 +9,9 @@ import {
 	ArrowLeftIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { startAlocacao, downloadExcel, resetSession, getParametrosSalvos, AlocacaoResponse } from "../api";
+import { startAlocacao, downloadExcel, resetSession, getParametrosSalvos, getResultado, setSessionId, consumirNovaAlocacao, AlocacaoResponse } from "../api";
 import PainelResultado from "../components/PainelResultado";
+import OperacoesResultado from "../components/OperacoesResultado";
 
 function formatEta(ms: number): string {
 	if (ms <= 0) return "";
@@ -37,43 +38,75 @@ export default function Resultado() {
 	const startTimeRef = useRef<number | null>(null);
 
 	useEffect(() => {
-		const es = startAlocacao(
-			getParametrosSalvos(),
-			(ev) => {
-				if (ev.pct !== undefined && ev.pct > progressRef.current) {
-					progressRef.current = ev.pct;
-					setProgressPct(ev.pct);
-				}
-				if (ev.step) setProgressStep(ev.step);
-				if (ev.tentativa && ev.total && ev.tentativa > 0) {
-					if (startTimeRef.current === null) {
-						startTimeRef.current = Date.now();
-					} else {
-						const elapsed = Date.now() - startTimeRef.current;
-						const avgMs = elapsed / ev.tentativa;
-						const remainingMs = avgMs * (ev.total - ev.tentativa);
-						setEta(formatEta(remainingMs));
+		const idURL = new URLSearchParams(window.location.search).get("sessao");
+		if (idURL) { setSessionId(idURL); window.history.replaceState(null, "", "/resultado"); }
+		let es: EventSource | null = null;
+		let cancelado = false;
+		const alocar = () => {
+			es = startAlocacao(
+				getParametrosSalvos(),
+				(ev) => {
+					if (cancelado) return;
+					if (ev.pct !== undefined && ev.pct > progressRef.current) {
+						progressRef.current = ev.pct;
+						setProgressPct(ev.pct);
 					}
+					if (ev.step) setProgressStep(ev.step);
+					if (ev.tentativa && ev.total && ev.tentativa > 0) {
+						if (startTimeRef.current === null) {
+							startTimeRef.current = Date.now();
+						} else {
+							const elapsed = Date.now() - startTimeRef.current;
+							const avgMs = elapsed / ev.tentativa;
+							const remainingMs = avgMs * (ev.total - ev.tentativa);
+							setEta(formatEta(remainingMs));
+						}
+					}
+				},
+				(resultado) => {
+					if (cancelado) return;
+					setProgressPct(100);
+					setProgressStep("Concluído!");
+					setResult(resultado);
+					setTimeout(() => setLoading(false), 400);
+				},
+				(msg) => {
+					if (cancelado) return;
+					setError("Erro ao executar alocação: " + msg);
+					setLoading(false);
 				}
-			},
-			(result) => {
-				setProgressPct(100);
-				setProgressStep("Concluído!");
-				setResult(result);
-				setTimeout(() => setLoading(false), 400);
-			},
-			(msg) => {
-				setError("Erro ao executar alocação: " + msg);
-				setLoading(false);
-			}
-		);
-		return () => { es.close(); };
+			);
+		};
+		if (consumirNovaAlocacao()) {
+			alocar();
+		} else {
+			getResultado()
+				.then((r) => {
+					if (cancelado) return;
+					setResult(r);
+					setLoading(false);
+				})
+				.catch((err: any) => {
+					if (cancelado) return;
+					if (String(err?.message ?? "").includes("expirou")) {
+						setError(err.message);
+						setLoading(false);
+						return;
+					}
+					if (String(err?.message ?? "").includes("nenhuma alocação")) alocar();
+					else { setError(err.message); setLoading(false); }
+				});
+		}
+		return () => {
+			cancelado = true;
+			es?.close();
+		};
 	}, []);
 
-	function handleExport() {
+	async function handleExport() {
 		setExporting(true);
 		try {
-			downloadExcel();
+			await downloadExcel();
 			setExportDone(true);
 			setTimeout(() => setExportDone(false), 2500);
 		} catch (err: any) {
@@ -297,7 +330,8 @@ export default function Resultado() {
 				</div>
 			</div>
 
-			<div className="max-w-7xl mx-auto px-6 py-8">
+			<div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+				<OperacoesResultado result={result} onResultado={setResult} />
 				<PainelResultado result={result} />
 			</div>
 		</div>

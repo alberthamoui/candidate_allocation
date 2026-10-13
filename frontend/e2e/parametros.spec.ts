@@ -14,6 +14,7 @@ test("prévia com os valores padrão", async ({ page }) => {
 	await expect(page.getByLabel("Avaliadores por mesa")).toHaveValue("5");
 	await expect(page.getByLabel("Mínimo de candidatos por mesa")).toHaveValue("5");
 	await expect(page.getByLabel("Máximo de candidatos por mesa")).toHaveValue("8");
+	await expect(page.getByText("Horários da entrevista")).toHaveCount(0);
 
 	// 19 avaliadores / 5 por mesa = 3 mesas por horário, das 5 pedidas
 	await expect(cartaoPrevia(page, "mesas por horário")).toContainText("3");

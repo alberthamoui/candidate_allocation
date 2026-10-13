@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -15,6 +16,18 @@ var frontendDist embed.FS
 var exemploXLSX []byte
 
 func main() {
+	if err := prepararRecursos(); err != nil {
+		log.Fatal(err)
+	}
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] != "servir" && args[0] != "serve" {
+		if err := executarCLI(args); err != nil {
+			fmt.Fprintf(os.Stderr, "erro: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	distFS, err := fs.Sub(frontendDist, "frontend/dist")
 	if err != nil {
 		log.Fatal(err)
@@ -25,13 +38,14 @@ func main() {
 		port = "8080"
 	}
 
-	versaoAtual = carregarVersao()
-	r, err := configurarRecursos(os.Getenv, cotaCPU())
+	dir := os.Getenv("ALOCACAO_DADOS")
+	if dir == "" {
+		dir = "alocacao-dados"
+	}
+	store, err := NewPersistentSessionStore(dir)
 	if err != nil {
 		log.Fatal(err)
 	}
-	aplicarRecursos(r)
-	store := NewSessionStore()
 	mux := buildRouter(store, distFS)
 
 	log.Printf("Servidor iniciado em http://localhost:%s (branch %q, commit %s)", port, versaoAtual.Branch, versaoAtual.Commit)
@@ -39,4 +53,14 @@ func main() {
 		log.Printf("[WARN] O binário foi compilado de outro commit que o atual do repositório; recompile.")
 	}
 	log.Fatal(http.ListenAndServe(":"+port, mux))
+}
+
+func prepararRecursos() error {
+	versaoAtual = carregarVersao()
+	r, err := configurarRecursos(os.Getenv, cotaCPU())
+	if err != nil {
+		return err
+	}
+	aplicarRecursos(r)
+	return nil
 }

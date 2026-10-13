@@ -150,6 +150,7 @@ export default function VerifyUserPage({
 				nome: user.nome || "",
 				cpf: user.cpf || "",
 				numero: user.numero || "",
+				telefone: user.telefone || "",
 				semestre: user.semestre || "",
 				curso: user.curso || "",
 				email_insper: user.email_insper || "",

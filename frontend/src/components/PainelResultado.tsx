@@ -222,6 +222,12 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 																	{c.opcao}ª opção
 																</span>
 															)}
+															{c.avaliacao === "aprovado" && (
+																<span className="text-[10px] font-semibold text-green-800 bg-green-100 px-1.5 rounded-full whitespace-nowrap">passou</span>
+															)}
+															{c.avaliacao === "reprovado" && (
+																<span className="text-[10px] font-semibold text-red-800 bg-red-100 px-1.5 rounded-full whitespace-nowrap">não passou</span>
+															)}
 															{c.conflitos.length > 0 && (
 																<ExclamationTriangleIcon className="w-4 h-4 text-amber-500 flex-shrink-0" aria-label="avaliador prefiro não na mesa" />
 															)}
@@ -292,7 +298,7 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 										</td>
 										<td className="px-6 py-3 text-gray-600">{c.curso}</td>
 										<td className="px-6 py-3 text-gray-600">{c.semestre ? `${c.semestre}º` : ""}</td>
-										<td className="px-6 py-3 text-gray-600">{c.opcoes.join(" · ")}</td>
+										<td className="px-6 py-3 text-gray-600">{(c.opcoes ?? []).join(" · ")}</td>
 									</tr>
 								))}
 							</tbody>
@@ -393,6 +399,8 @@ function Detalhes({ selecao, mesas, onFechar }: { selecao: Selecao; mesas: MesaR
 }
 
 function DetalhesCandidato({ c, mesa }: { c: CandidatoResultado; mesa?: MesaResult }) {
+	const opcoes = c.opcoes ?? [];
+	const conflitos = c.conflitos ?? [];
 	return (
 		<>
 			<div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-xl p-3">
@@ -405,17 +413,23 @@ function DetalhesCandidato({ c, mesa }: { c: CandidatoResultado; mesa?: MesaResu
 			<div className={`rounded-xl p-3 ${mesa ? "bg-blue-50 text-blue-900" : "bg-red-50 text-red-900"}`}>
 				{mesa ? (
 					<>
-						Alocado em <b className="capitalize">{mesa.descricao}</b>, a sua <b>{c.opcao}ª opção</b>.
+						Alocado em <b className="capitalize">{mesa.descricao}</b>
+						{c.opcao > 0 && (
+							<>
+								, a sua <b>{c.opcao}ª opção</b>
+							</>
+						)}
+						.
 					</>
 				) : (
-					<>Sem mesa: não coube em nenhum dos horários que escolheu.</>
+					<>Sem mesa: não coube {opcoes.length ? "em nenhum dos horários que escolheu" : "nos horários disponíveis"}.</>
 				)}
 			</div>
 			<div>
 				<div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Horários que escolheu</div>
-				{c.opcoes.length ? (
+				{opcoes.length ? (
 					<ol className="space-y-1">
-						{c.opcoes.map((o, i) => (
+						{opcoes.map((o, i) => (
 							<li key={i} className={`capitalize ${mesa && i + 1 === c.opcao ? "font-bold text-blue-700" : ""}`}>
 								{i + 1}. {o} {mesa && i + 1 === c.opcao && <span className="normal-case">← alocado</span>}
 							</li>
@@ -425,9 +439,9 @@ function DetalhesCandidato({ c, mesa }: { c: CandidatoResultado; mesa?: MesaResu
 					<p className="text-gray-500">Nenhum horário informado.</p>
 				)}
 			</div>
-			{c.conflitos.length > 0 && (
+			{conflitos.length > 0 && (
 				<div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
-					Ficou na mesa de <b>{c.conflitos.join(", ")}</b>, que marcou "prefiro não" para ele.
+					Ficou na mesa de <b>{conflitos.join(", ")}</b>, que marcou "prefiro não" para ele.
 				</div>
 			)}
 			<Lista rotulo="Não podem avaliá-lo" nomes={c.nao_posso} />

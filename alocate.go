@@ -301,6 +301,12 @@ type ParametrosAlocacao struct {
 	AvaliadoresPorMesa int `json:"avaliadores_por_mesa"`
 	// Criterios são regras opcionais sobre curso/semestre (criterios.go).
 	Criterios []CriterioAlocacao `json:"criterios"`
+	// SemPreferencia desliga o ranking de horários: todos os candidatos podem
+	// ir em qualquer horário de HorariosLivres, com o mesmo custo.
+	SemPreferencia bool `json:"sem_preferencia"`
+	// HorariosLivres são os horários definidos pelo administrador quando a
+	// preferência dos candidatos está desligada.
+	HorariosLivres []string `json:"horarios_livres"`
 }
 
 func parametrosAlocacaoPadrao() ParametrosAlocacao {
@@ -412,7 +418,11 @@ func montarProblema(param ParametrosAlocacao, horarios map[int]*Horario, avals [
 			if p.custoPref[c*p.nSlot+s] >= 0 {
 				continue // horário repetido: vale a melhor opção
 			}
-			p.custoPref[c*p.nSlot+s] = -pontosOpcao(nivel)
+			custo := -pontosOpcao(nivel)
+			if param.SemPreferencia {
+				custo = 0 // qualquer horário serve igual
+			}
+			p.custoPref[c*p.nSlot+s] = custo
 			p.prefs[c] = append(p.prefs[c], s)
 		}
 	}
@@ -1143,7 +1153,7 @@ esperar:
 
 	aloc, mesas := p.montarMesas(melhor)
 	res := ResultadoAlocacao{Alocacao: aloc, Alocados: len(aloc)}
-	score, penalidades, _ := pontuarResultado(res, mesas, prefs, hard, soft)
+	score, penalidades, _ := pontuarResultado(res, mesas, prefs, hard, soft, param.SemPreferencia)
 	if len(p.criterios) > 0 {
 		penalidades["criterios"] = p.penalidadeCriterios(melhor)
 		score -= penalidades["criterios"]
@@ -1166,7 +1176,7 @@ esperar:
 // pontuarResultado calcula a pontuação de uma alocação com base nos
 // critérios definidos nas constantes PONTOS_OPCAO_*, PENALIDADE_SOFT e PENALIDADE_HARD.
 // Retorna um valor inteiro — quanto maior, melhor o resultado.
-func pontuarResultado(res ResultadoAlocacao, mesas []*Mesa, prefs map[int][]int, hard, soft map[int]map[int]bool) (int, map[string]int, int) {
+func pontuarResultado(res ResultadoAlocacao, mesas []*Mesa, prefs map[int][]int, hard, soft map[int]map[int]bool, semPreferencia bool) (int, map[string]int, int) {
 	var MAP_PENALIDADES = map[string]int{
 		"opcao_1":     0,
 		"opcao_2":     0,
@@ -1202,13 +1212,16 @@ func pontuarResultado(res ResultadoAlocacao, mesas []*Mesa, prefs map[int][]int,
 			continue
 		}
 
-		// Pontos pela preferência de horário do candidato
-		for nivel, hid := range prefs[pid] {
-			if hid == m.DiaID {
-				score += pontosOpcao(nivel)
-				PONTOS_TOMADOS += pontosOpcao(nivel)
-				MAP_PENALIDADES[fmt.Sprintf("opcao_%d", nivel+1)] += 1
-				break
+		// Pontos pela preferência de horário do candidato. Sem preferência,
+		// qualquer horário vale o mesmo e não há o que penalizar.
+		if !semPreferencia {
+			for nivel, hid := range prefs[pid] {
+				if hid == m.DiaID {
+					score += pontosOpcao(nivel)
+					PONTOS_TOMADOS += pontosOpcao(nivel)
+					MAP_PENALIDADES[fmt.Sprintf("opcao_%d", nivel+1)] += 1
+					break
+				}
 			}
 		}
 

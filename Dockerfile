@@ -21,5 +21,6 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=builder /app/server .
+VOLUME ["/app/alocacao-dados"]
 EXPOSE 8080
 CMD ["./server"]
