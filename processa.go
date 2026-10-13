@@ -103,6 +103,14 @@ func processData(data []Candidato, emailDomain string) (map[int]ValidationResult
 		entrada.EmailInsper = strings.ToLower(strings.TrimSpace(entrada.EmailInsper))
 		entrada.EmailPessoal = strings.ToLower(strings.TrimSpace(entrada.EmailPessoal))
 		entrada.Numero = digitosNumero(entrada.Numero)
+		if entrada.Telefone != "" {
+			n, err := normalizarTelefone(entrada.Telefone)
+			if err != nil {
+				errs = append(errs, ErrorEntry{"telefone", err.Error()})
+			} else {
+				entrada.Telefone = "+" + n
+			}
+		}
 
 		// CPF é opcional. Se veio preenchido, continua tendo de ser 11 dígitos.
 		if entrada.CPF != "" && !reCPF.MatchString(entrada.CPF) {
@@ -259,6 +267,9 @@ func gravarCandidatos(tx *sql.Tx, candidatos []Candidato) error {
 		id, err := dbpkg.AddPessoa(tx, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
 		if err != nil {
 			return fmt.Errorf("candidato %q (CPF %q) não foi salvo: %w", usuario.Nome, usuario.CPF, err)
+		}
+		if _, err := tx.Exec("UPDATE pessoa SET telefone = ? WHERE id = ?", usuario.Telefone, id); err != nil {
+			return err
 		}
 		preferencia := int64(0)
 		for _, opcao := range usuario.Opcoes {

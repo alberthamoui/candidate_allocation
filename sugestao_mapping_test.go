@@ -66,7 +66,7 @@ func TestSugestaoCabecalhosReais(t *testing.T) {
 			cabecalho: []string{"Opção 3", "E-mail pessoal", "Curso", "Opção 1", "Nome completo", "Semestre atual", "CPF", "Opção 2", "Telefone", "E-mail institucional"},
 			campos:    getUsuarioFields(3),
 			want: map[string]string{
-				"nome": "Nome completo", "cpf": "CPF", "numero": "Telefone", "semestre": "Semestre atual", "curso": "Curso",
+				"nome": "Nome completo", "cpf": "CPF", "telefone": "Telefone", "numero": "", "semestre": "Semestre atual", "curso": "Curso",
 				"email_insper": "E-mail institucional", "email_pessoal": "E-mail pessoal",
 				"opcao 1": "Opção 1", "opcao 2": "Opção 2", "opcao 3": "Opção 3", "timestamp": "",
 			},

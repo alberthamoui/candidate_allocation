@@ -10,6 +10,8 @@ import (
 // ResultadoOperacao é o que a tela e a CLI recebem depois de realocar,
 // avaliar ou disparar avisos.
 type ResultadoOperacao struct {
+	LoteID    string            `json:"lote_id,omitempty"`
+	Envio     *LoteAvisos       `json:"envio,omitempty"`
 	Resumo    string            `json:"resumo"`
 	Avisos    []AvisoGerado     `json:"avisos"`
 	Resultado *AlocacaoResponse `json:"resultado,omitempty"`
@@ -24,7 +26,7 @@ func (s *Session) exigirResultado() error {
 
 // RealocarDia move todas as mesas de um horário para outro. Se avisar for
 // verdadeiro, monta (e envia, se estiver configurado) a mensagem de cada pessoa.
-func (s *Session) RealocarDia(de, para string, avisar bool) (ResultadoOperacao, error) {
+func (s *Session) realocarDiaLocked(de, para string, avisar bool) (ResultadoOperacao, error) {
 	if err := s.exigirResultado(); err != nil {
 		return ResultadoOperacao{}, err
 	}
@@ -38,11 +40,17 @@ func (s *Session) RealocarDia(de, para string, avisar bool) (ResultadoOperacao, 
 	var ids []int
 	n := 0
 	for i := range s.lastResult.Mesas {
-		if normalizaOpcao(s.lastResult.Mesas[i].DiaNome) != deN {
+		atual := normalizaOpcao(s.lastResult.Mesas[i].DiaNome)
+		data, hora := dividirDataHorario(atual)
+		if atual != deN && data != deN {
 			continue
 		}
-		s.lastResult.Mesas[i].DiaNome = paraN
-		s.lastResult.Mesas[i].Descricao = trocarPrefixoHorario(s.lastResult.Mesas[i].Descricao, paraN)
+		destino := paraN
+		if atual != deN {
+			destino = paraN + " " + hora
+		}
+		s.lastResult.Mesas[i].DiaNome = destino
+		s.lastResult.Mesas[i].Descricao = trocarPrefixoHorario(s.lastResult.Mesas[i].Descricao, destino)
 		n++
 		for _, c := range s.lastResult.Mesas[i].Candidatos {
 			ids = append(ids, c.ID)
@@ -55,7 +63,7 @@ func (s *Session) RealocarDia(de, para string, avisar bool) (ResultadoOperacao, 
 }
 
 // RealocarMesa move uma mesa inteira para outro horário.
-func (s *Session) RealocarMesa(mesaID int, para string, avisar bool) (ResultadoOperacao, error) {
+func (s *Session) realocarMesaLocked(mesaID int, para string, avisar bool) (ResultadoOperacao, error) {
 	if err := s.exigirResultado(); err != nil {
 		return ResultadoOperacao{}, err
 	}
@@ -81,7 +89,7 @@ func (s *Session) RealocarMesa(mesaID int, para string, avisar bool) (ResultadoO
 // mesaID, se for diferente de zero, escolhe a mesa de destino. Senão, entra
 // na mesa daquele horário com menos gente, ou numa mesa nova se o horário
 // ainda não existir.
-func (s *Session) RealocarPessoa(busca, horario string, mesaID int, avisar bool) (ResultadoOperacao, error) {
+func (s *Session) realocarPessoaLocked(busca, horario string, mesaID int, avisar bool) (ResultadoOperacao, error) {
 	if err := s.exigirResultado(); err != nil {
 		return ResultadoOperacao{}, err
 	}
@@ -147,7 +155,7 @@ func (s *Session) RealocarPessoa(busca, horario string, mesaID int, avisar bool)
 }
 
 // Avaliar marca quem passou e quem não passou. resultado vazio volta para pendente.
-func (s *Session) Avaliar(busca string, id int, resultado string) (ResultadoOperacao, error) {
+func (s *Session) avaliarLocked(busca string, id int, resultado string) (ResultadoOperacao, error) {
 	if err := s.exigirResultado(); err != nil {
 		return ResultadoOperacao{}, err
 	}
@@ -182,7 +190,12 @@ func (s *Session) Avaliar(busca string, id int, resultado string) (ResultadoOper
 
 // EnviarAvisosTodos manda a mensagem configurada para cada pessoa alocada.
 // O administrador precisa ter aceitado (o botão ou a flag da CLI).
-func (s *Session) EnviarAvisosTodos() (ResultadoOperacao, error) {
+func (s *Session) enviarAvisosTodosLocked() (ResultadoOperacao, error) {
+	for _, l := range s.historico {
+		if l.Status == "enviando" {
+			return ResultadoOperacao{}, fmt.Errorf("já existe um envio em andamento; acompanhe o histórico")
+		}
+	}
 	if err := s.exigirResultado(); err != nil {
 		return ResultadoOperacao{}, err
 	}
@@ -200,30 +213,15 @@ func (s *Session) EnviarAvisosTodos() (ResultadoOperacao, error) {
 }
 
 func (s *Session) finalizar(ids []int, avisar bool, resumo string) ResultadoOperacao {
-	ordenarMesasResultado(s.lastResult)
-	avisos := []AvisoGerado{}
-	if avisar {
-		avisos = s.enviarIDs(ids)
+	s.atualizarAgendaLocked()
+	op := ResultadoOperacao{Resumo: resumo, Avisos: []AvisoGerado{}, Resultado: clonarResultado(s.lastResult)}
+	if avisar && len(ids) > 0 {
+		lote := s.prepararLoteLocked(ids)
+		s.historico = append(s.historico, lote)
+		op.LoteID = lote.ID
+		op.Envio = &lote
 	}
-	return ResultadoOperacao{Resumo: resumo, Avisos: avisos, Resultado: s.lastResult}
-}
-
-func (s *Session) enviarIDs(ids []int) []AvisoGerado {
-	quero := map[int]bool{}
-	for _, id := range ids {
-		quero[id] = true
-	}
-	var pessoas []CandidatoResultado
-	mesaDe := map[int]MesaResult{}
-	for _, m := range s.lastResult.Mesas {
-		for _, c := range m.Candidatos {
-			if quero[c.ID] {
-				pessoas = append(pessoas, c)
-				mesaDe[c.ID] = m
-			}
-		}
-	}
-	return s.enviarPara(pessoas, mesaDe)
+	return op
 }
 
 func (s *Session) aplicarAvaliacoes(r *AlocacaoResponse) {
@@ -394,4 +392,37 @@ func ordenarMesasResultado(r *AlocacaoResponse) {
 		}
 		return a.ID < b.ID
 	})
+}
+
+func (s *Session) RealocarDia(de, para string, avisar bool) (ResultadoOperacao, error) {
+	return s.operar(func() (ResultadoOperacao, error) { return s.realocarDiaLocked(de, para, avisar) }, false)
+}
+func (s *Session) RealocarMesa(id int, para string, avisar bool) (ResultadoOperacao, error) {
+	return s.operar(func() (ResultadoOperacao, error) { return s.realocarMesaLocked(id, para, avisar) }, false)
+}
+func (s *Session) RealocarPessoa(busca, horario string, id int, avisar bool) (ResultadoOperacao, error) {
+	return s.operar(func() (ResultadoOperacao, error) { return s.realocarPessoaLocked(busca, horario, id, avisar) }, false)
+}
+func (s *Session) Avaliar(busca string, id int, res string) (ResultadoOperacao, error) {
+	return s.operar(func() (ResultadoOperacao, error) { return s.avaliarLocked(busca, id, res) }, false)
+}
+func (s *Session) EnviarAvisosTodos() (ResultadoOperacao, error) {
+	return s.operar(s.enviarAvisosTodosLocked, false)
+}
+func (s *Session) RealocarAsync(p pedidoRealocar) (ResultadoOperacao, error) {
+	return s.operar(func() (ResultadoOperacao, error) {
+		switch p.Tipo {
+		case "dia":
+			return s.realocarDiaLocked(p.De, p.Para, p.Avisar)
+		case "mesa":
+			return s.realocarMesaLocked(p.MesaID, p.Para, p.Avisar)
+		case "pessoa":
+			if p.Horario == "" {
+				p.Horario = p.Para
+			}
+			return s.realocarPessoaLocked(p.Pessoa, p.Horario, p.MesaID, p.Avisar)
+		default:
+			return ResultadoOperacao{}, fmt.Errorf("tipo deve ser dia, mesa ou pessoa")
+		}
+	}, true)
 }

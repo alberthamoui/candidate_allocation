@@ -391,7 +391,7 @@ func interpretarBool(v string, padrao bool) bool {
 
 // msgSessaoExpirada explica o erro mais comum em produção: no plano gratuito
 // o servidor dorme sem uso e as sessões (em memória) se perdem.
-const msgSessaoExpirada = "sua sessão expirou (o servidor reinicia depois de um tempo sem uso); recomece enviando a planilha"
+const msgSessaoExpirada = "alocação não encontrada; retome usando o identificador salvo ou envie uma nova planilha"
 
 // GET /api/capacidade?mesas_por_horario=...&min_pessoas_por_mesa=...
 // Prévia do que cabe com os parâmetros; sem parâmetros, usa os padrões.
@@ -405,6 +405,9 @@ func (store *SessionStore) handleCapacidade(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		writeError(w, 400, err.Error())
 		return
+	}
+	if len(r.URL.Query()) == 0 {
+		param = sess.ParametrosAtuais()
 	}
 	param = sess.comPreferenciaDaSessao(param)
 	previa, err := sess.PreviaCapacidade(param)
@@ -451,11 +454,12 @@ func (store *SessionStore) handleResultado(w http.ResponseWriter, r *http.Reques
 		writeError(w, 401, msgSessaoExpirada)
 		return
 	}
-	if sess.lastResult == nil {
+	resultado, err := sess.ResultadoAtual()
+	if err != nil {
 		writeError(w, http.StatusNotFound, "nenhuma alocação ainda")
 		return
 	}
-	writeJSON(w, 200, sess.lastResult)
+	writeJSON(w, 200, resultado)
 }
 
 // GET /api/avisos — a mensagem e os canais configurados nesta sessão.
@@ -465,7 +469,7 @@ func (store *SessionStore) handleGetAvisos(w http.ResponseWriter, r *http.Reques
 		writeError(w, 401, msgSessaoExpirada)
 		return
 	}
-	writeJSON(w, 200, sess.avisos)
+	writeJSON(w, 200, sess.ConfigAtual())
 }
 
 // POST /api/avisos — grava a mensagem e os canais. Pode ser feito na entrada
@@ -481,9 +485,10 @@ func (store *SessionStore) handlePutAvisos(w http.ResponseWriter, r *http.Reques
 		writeError(w, 400, "body inválido: "+err.Error())
 		return
 	}
-	// os envios de teste injetados na sessão não vêm no JSON
-	cfg.enviarEmail, cfg.enviarWhats = sess.avisos.enviarEmail, sess.avisos.enviarWhats
-	sess.avisos = cfg
+	if err := sess.ConfigurarAvisos(cfg); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
@@ -494,7 +499,7 @@ func (store *SessionStore) handleEnviarAvisos(w http.ResponseWriter, r *http.Req
 		writeError(w, 401, msgSessaoExpirada)
 		return
 	}
-	op, err := sess.EnviarAvisosTodos()
+	op, err := sess.operar(sess.enviarAvisosTodosLocked, true)
 	if err != nil {
 		writeError(w, 400, err.Error())
 		return
@@ -525,25 +530,7 @@ func (store *SessionStore) handleRealocar(w http.ResponseWriter, r *http.Request
 		writeError(w, 400, "body inválido: "+err.Error())
 		return
 	}
-	var (
-		op  ResultadoOperacao
-		err error
-	)
-	switch strings.ToLower(strings.TrimSpace(pedido.Tipo)) {
-	case "dia":
-		op, err = sess.RealocarDia(pedido.De, pedido.Para, pedido.Avisar)
-	case "mesa":
-		op, err = sess.RealocarMesa(pedido.MesaID, pedido.Para, pedido.Avisar)
-	case "pessoa":
-		horario := pedido.Horario
-		if horario == "" {
-			horario = pedido.Para
-		}
-		op, err = sess.RealocarPessoa(pedido.Pessoa, horario, pedido.MesaID, pedido.Avisar)
-	default:
-		writeError(w, 400, "tipo deve ser dia, mesa ou pessoa")
-		return
-	}
+	op, err := sess.RealocarAsync(pedido)
 	if err != nil {
 		writeError(w, 400, err.Error())
 		return
@@ -578,14 +565,10 @@ func (store *SessionStore) handleAvaliar(w http.ResponseWriter, r *http.Request)
 	if len(itens) == 0 {
 		itens = []itemAvaliacao{pedido.itemAvaliacao}
 	}
-	var op ResultadoOperacao
-	for _, item := range itens {
-		var err error
-		op, err = sess.Avaliar(item.Pessoa, item.ID, item.Resultado)
-		if err != nil {
-			writeError(w, 400, err.Error())
-			return
-		}
+	op, err := sess.AvaliarLote(itens)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
 	}
 	writeJSON(w, 200, op)
 }
@@ -624,6 +607,11 @@ func buildRouter(store *SessionStore, distFS fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/avisos/enviar", store.handleEnviarAvisos)
 	mux.HandleFunc("POST /api/realocar", store.handleRealocar)
 	mux.HandleFunc("POST /api/avaliar", store.handleAvaliar)
+	mux.HandleFunc("GET /api/realocar/sugestoes", store.handleSugestoes)
+	mux.HandleFunc("GET /api/avisos/historico", store.handleHistorico)
+	mux.HandleFunc("POST /api/avisos/repetir", store.handleRepetir)
+	mux.HandleFunc("POST /api/avisos/testar", store.handleTestar)
+	mux.HandleFunc("POST /api/avisos/previa", store.handlePreviaAvisos)
 	mux.HandleFunc("GET /api/exemplo", handleExemplo)
 	mux.HandleFunc("GET /api/versao", handleVersao)
 	mux.HandleFunc("DELETE /api/session", store.handleReset)

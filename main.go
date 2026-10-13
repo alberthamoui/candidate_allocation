@@ -38,7 +38,14 @@ func main() {
 		port = "8080"
 	}
 
-	store := NewSessionStore()
+	dir := os.Getenv("ALOCACAO_DADOS")
+	if dir == "" {
+		dir = "alocacao-dados"
+	}
+	store, err := NewPersistentSessionStore(dir)
+	if err != nil {
+		log.Fatal(err)
+	}
 	mux := buildRouter(store, distFS)
 
 	log.Printf("Servidor iniciado em http://localhost:%s (branch %q, commit %s)", port, versaoAtual.Branch, versaoAtual.Commit)

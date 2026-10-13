@@ -9,7 +9,7 @@ import {
 	ArrowLeftIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { startAlocacao, downloadExcel, resetSession, getParametrosSalvos, getResultado, consumirNovaAlocacao, AlocacaoResponse } from "../api";
+import { startAlocacao, downloadExcel, resetSession, getParametrosSalvos, getResultado, setSessionId, consumirNovaAlocacao, AlocacaoResponse } from "../api";
 import PainelResultado from "../components/PainelResultado";
 import OperacoesResultado from "../components/OperacoesResultado";
 
@@ -38,6 +38,8 @@ export default function Resultado() {
 	const startTimeRef = useRef<number | null>(null);
 
 	useEffect(() => {
+		const idURL = new URLSearchParams(window.location.search).get("sessao");
+		if (idURL) { setSessionId(idURL); window.history.replaceState(null, "", "/resultado"); }
 		let es: EventSource | null = null;
 		let cancelado = false;
 		const alocar = () => {
@@ -91,7 +93,8 @@ export default function Resultado() {
 						setLoading(false);
 						return;
 					}
-					alocar();
+					if (String(err?.message ?? "").includes("nenhuma alocação")) alocar();
+					else { setError(err.message); setLoading(false); }
 				});
 		}
 		return () => {
@@ -100,10 +103,10 @@ export default function Resultado() {
 		};
 	}, []);
 
-	function handleExport() {
+	async function handleExport() {
 		setExporting(true);
 		try {
-			downloadExcel();
+			await downloadExcel();
 			setExportDone(true);
 			setTimeout(() => setExportDone(false), 2500);
 		} catch (err: any) {

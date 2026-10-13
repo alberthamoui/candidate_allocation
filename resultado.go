@@ -21,6 +21,7 @@ type CandidatoResultado struct {
 	EmailInsper  string   `json:"email_insper"`
 	EmailPessoal string   `json:"email_pessoal,omitempty"`
 	Numero       string   `json:"numero,omitempty"`
+	Telefone     string   `json:"telefone,omitempty"`
 	Curso        string   `json:"curso"`
 	Semestre     int      `json:"semestre"`
 	Avaliacao    string   `json:"avaliacao,omitempty"` // "aprovado", "reprovado" ou vazio
@@ -59,12 +60,13 @@ type candidatoDB struct {
 	EmailInsper  string
 	EmailPessoal string
 	Numero       string
+	Telefone     string
 	Curso        string
 	Semestre     int
 }
 
 func carregarCandidatos(s *Session) ([]candidatoDB, error) {
-	rows, err := s.db.Query(`SELECT id, nome, email_insper, email_pessoal, numero, curso, semestre FROM pessoa`)
+	rows, err := s.db.Query(`SELECT id, nome, email_insper, email_pessoal, numero, telefone, curso, semestre FROM pessoa`)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +74,7 @@ func carregarCandidatos(s *Session) ([]candidatoDB, error) {
 	var cands []candidatoDB
 	for rows.Next() {
 		var c candidatoDB
-		if err := rows.Scan(&c.ID, &c.Nome, &c.EmailInsper, &c.EmailPessoal, &c.Numero, &c.Curso, &c.Semestre); err != nil {
+		if err := rows.Scan(&c.ID, &c.Nome, &c.EmailInsper, &c.EmailPessoal, &c.Numero, &c.Telefone, &c.Curso, &c.Semestre); err != nil {
 			return nil, err
 		}
 		cands = append(cands, c)
@@ -122,7 +124,7 @@ func montarResultado(d dadosAlocacao, cands []candidatoDB, res ResultadoAlocacao
 
 	candidato := func(c candidatoDB) CandidatoResultado {
 		r := CandidatoResultado{
-			ID: c.ID, Nome: c.Nome, EmailInsper: c.EmailInsper, EmailPessoal: c.EmailPessoal, Numero: c.Numero,
+			ID: c.ID, Nome: c.Nome, EmailInsper: c.EmailInsper, EmailPessoal: c.EmailPessoal, Numero: c.Numero, Telefone: c.Telefone,
 			Curso: c.Curso, Semestre: c.Semestre,
 			Opcoes:     []string{},
 			NaoPosso:   nomesAval(naoPosso[c.ID]),

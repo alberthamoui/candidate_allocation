@@ -41,6 +41,8 @@ type ValorColuna struct {
 // PreviaCapacidade calcula quantas mesas e vagas os parâmetros permitem com os
 // dados da sessão. Os parâmetros já devem ter sido validados.
 func (s *Session) PreviaCapacidade(param ParametrosAlocacao) (CapacidadeResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	d, err := s.carregarDados()
 	if err != nil {
 		return CapacidadeResponse{}, err

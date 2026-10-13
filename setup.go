@@ -26,6 +26,7 @@ func setupConn(db *sql.DB) error {
 			"nome" TEXT NOT NULL,
 			"cpf" TEXT UNIQUE,
 			"numero" TEXT NOT NULL,
+			"telefone" TEXT NOT NULL DEFAULT '',
 			"email_insper" TEXT NOT NULL,
 			"email_pessoal" TEXT NOT NULL,
 			"semestre" INTEGER NOT NULL,

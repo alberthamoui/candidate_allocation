@@ -242,8 +242,8 @@ func TestCLIAvaliarRealocarExportar(t *testing.T) {
 	if err := executarCLI([]string{"realocar-pessoa", "-workspace", dir, "-pessoa", "Caio", "-horario", "quarta 14-16"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := executarCLI([]string{"realocar-dia", "-workspace", dir, "-de", "quarta 14-16", "-para", "sexta 9-11", "-avisar"}); err != nil {
-		t.Fatal(err)
+	if err := executarCLI([]string{"realocar-dia", "-workspace", dir, "-de", "quarta 14-16", "-para", "sexta 9-11", "-avisar"}); err == nil {
+		t.Fatal("SMTP sem configuração precisa informar falha, preservando a realocação")
 	}
 	saida := filepath.Join(dir, "saida.xlsx")
 	if err := executarCLI([]string{"exportar", "-workspace", dir, "-saida", saida}); err != nil {

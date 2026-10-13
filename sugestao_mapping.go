@@ -20,7 +20,8 @@ import (
 // aliasesCampo lista outros nomes comuns de coluna para cada campo.
 var aliasesCampo = map[string][]string{
 	"email_insper": {"email institucional", "email corporativo", "email da faculdade"},
-	"numero":       {"telefone", "celular", "whatsapp"},
+	"numero":       {"ra", "matricula"},
+	"telefone":     {"celular", "whatsapp", "telefone whatsapp"},
 	"semestre":     {"periodo"},
 	"candidato":    {"nome"},
 	"naoPosso":     {"nao pode", "impedido"},
@@ -203,6 +204,9 @@ func sugerirMapeamento(cabecalho, campos []string) []MappingItem {
 	// campos sem par por nome: colunas que sobraram, na ordem da planilha
 	livre := 0
 	for i := range campos {
+		if campos[i] == "telefone" {
+			continue
+		}
 		if colunaDe[i] >= 0 {
 			continue
 		}

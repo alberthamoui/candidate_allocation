@@ -66,7 +66,7 @@ export default function Parametros() {
 				const salvos = getParametrosSalvos();
 				setValores(paraTexto(salvos ?? inicial.parametros));
 				setCriterios(salvos?.criterios ?? []);
-				setHorariosTexto((salvos?.horarios_livres ?? []).join("\n"));
+				setHorariosTexto((salvos?.horarios_livres ?? inicial.parametros.horarios_livres ?? []).join("\n"));
 				if (!salvos && !sem) setPrevia(inicial);
 			} catch (err: any) {
 				setErro(err.message);

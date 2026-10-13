@@ -7,6 +7,8 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -15,6 +17,12 @@ import (
 
 // Session guarda o estado de um usuário durante o fluxo de alocação.
 type Session struct {
+	mu          sync.RWMutex
+	id          string
+	persistente bool
+	parametros  ParametrosAlocacao
+	historico   []LoteAvisos
+
 	db              *sql.DB
 	excelData       []byte
 	nOpcoes         int
@@ -28,17 +36,32 @@ type Session struct {
 
 // SaveUsuarios persiste candidatos no banco da sessão.
 func (s *Session) SaveUsuarios(data []Usuario) error {
-	return fillDb(s.db, data)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := fillDb(s.db, data); err != nil {
+		return err
+	}
+	return s.persistirLocked()
 }
 
 // SaveAvaliadores persiste avaliadores no banco da sessão.
 func (s *Session) SaveAvaliadores(data []AvaliadorInfo) error {
-	return fillDb(s.db, data)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := fillDb(s.db, data); err != nil {
+		return err
+	}
+	return s.persistirLocked()
 }
 
 // SaveRestricoes persiste restrições no banco da sessão.
 func (s *Session) SaveRestricoes(data []Restricao) error {
-	return fillDb(s.db, data)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := fillDb(s.db, data); err != nil {
+		return err
+	}
+	return s.persistirLocked()
 }
 
 // ==================================================
@@ -50,6 +73,7 @@ type SessionStore struct {
 	sessions map[string]*Session
 	// vagasAlocacao limita quantas alocações rodam ao mesmo tempo
 	vagasAlocacao chan struct{}
+	dir           string
 }
 
 // errServidorCheio: já há recursos.MaxSessoes sessões abertas.
@@ -74,13 +98,14 @@ func newSessionID() string {
 
 // Create abre um banco :memory: exclusivo para a sessão e inicializa o schema.
 func (s *SessionStore) Create() (string, *Session, error) {
-	s.mu.RLock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	cheio := len(s.sessions) >= recursos.MaxSessoes
-	s.mu.RUnlock()
 	if cheio {
 		return "", nil, errServidorCheio
 	}
-	db, err := sql.Open("sqlite3", ":memory:")
+	id := newSessionID()
+	db, err := s.abrirBanco(id)
 	if err != nil {
 		return "", nil, err
 	}
@@ -92,17 +117,19 @@ func (s *SessionStore) Create() (string, *Session, error) {
 		return "", nil, err
 	}
 
-	id := newSessionID()
 	sess := &Session{
+		id: id, persistente: s.dir != "",
 		db:              db,
 		updatedAt:       time.Now(),
 		usarPreferencia: true,
 		avaliacoes:      map[int]string{},
 	}
 
-	s.mu.Lock()
+	if err := sess.persistirLocked(); err != nil {
+		_ = db.Close()
+		return "", nil, err
+	}
 	s.sessions[id] = sess
-	s.mu.Unlock()
 	return id, sess, nil
 }
 
@@ -110,6 +137,15 @@ func (s *SessionStore) Create() (string, *Session, error) {
 func (s *SessionStore) Get(id string) *Session {
 	s.mu.Lock()
 	sess := s.sessions[id]
+	if sess == nil && s.dir != "" && idValido.MatchString(id) {
+		var err error
+		sess, err = s.carregarSessao(id)
+		if err != nil {
+			log.Printf("[WARN] recuperando sessão: %v", err)
+		} else {
+			s.sessions[id] = sess
+		}
+	}
 	if sess != nil {
 		sess.updatedAt = time.Now()
 	}
@@ -121,8 +157,15 @@ func (s *SessionStore) Get(id string) *Session {
 func (s *SessionStore) Delete(id string) {
 	s.mu.Lock()
 	if sess, ok := s.sessions[id]; ok {
+		sess.mu.Lock()
 		fecharBanco(sess)
+		sess.mu.Unlock()
 		delete(s.sessions, id)
+	}
+	if s.dir != "" && idValido.MatchString(id) {
+		if err := os.Remove(filepath.Join(s.dir, id+".db")); err != nil && !os.IsNotExist(err) {
+			log.Printf("[WARN] removendo sessão: %v", err)
+		}
 	}
 	s.mu.Unlock()
 }
@@ -134,8 +177,10 @@ func (s *SessionStore) cleanup() {
 		cutoff := time.Now().Add(-90 * time.Minute)
 		s.mu.Lock()
 		for id, sess := range s.sessions {
-			if sess.updatedAt.Before(cutoff) {
+			if s.dir == "" && sess.updatedAt.Before(cutoff) {
+				sess.mu.Lock()
 				fecharBanco(sess)
+				sess.mu.Unlock()
 				delete(s.sessions, id)
 			}
 		}

@@ -27,11 +27,11 @@ Ao confirmar os parâmetros, o algoritmo de alocação é executado. A tela de r
 
 Na mesma tela, depois da alocação:
 
-- **Imprevisto** — move um dia inteiro ou uma mesa para outro horário. Se o aviso estiver marcado, o sistema pede confirmação e envia e-mail e WhatsApp para quem foi afetado.
-- **Uma pessoa** — troca o horário de quem pediu outro encaixe. Se o horário ainda não existe, abre uma mesa nele.
+- **Imprevisto** — move um intervalo, um dia inteiro preservando os intervalos, ou uma mesa. Com confirmação, avisa candidatos e avaliadores afetados.
+- **Uma pessoa** — mostra os melhores destinos, ordenados por restrições, avaliadores, vagas, preferência e critérios. A escolha manual é livre, inclusive mesa cheia ou horário novo: exceções aparecem como alertas.
 - **Avaliação** — marca quem passou e quem não passou. A marca aparece na lista e no Excel (`passou` / `não passou`).
 - **Avisos** — edita a mensagem (com `{{nome}}`, `{{data}}`, `{{horario}}`, `{{mesa}}`, `{{email}}`, `{{curso}}`, `{{numero}}`) e dispara o envio para todo mundo alocado.
-- **Exportar Excel** — baixa a planilha já com horário, e-mail, número e avaliação.
+- **Exportar Excel** — baixa a agenda atual com horário, e-mail, matrícula, telefone e avaliação. As duas abas acompanham as mudanças.
 
 ### Algoritmo de alocação
 
@@ -76,7 +76,8 @@ Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos
 | Timestamp | Data/hora do preenchimento (opcional) | — |
 | Nome | Nome completo | — |
 | CPF | Apenas dígitos, sem pontuação. Opcional | Se vier preenchido, 11 dígitos numéricos |
-| Número | RA ou telefone (também reconhecido como telefone, celular ou WhatsApp) | RA com 9 dígitos, ou telefone com 10 a 13 dígitos. Pontos, espaços e parênteses são ignorados |
+| Número | RA ou número de matrícula | 9 dígitos (telefones legados também são aceitos) |
+| Telefone | Telefone/WhatsApp separado da matrícula, opcional | DDD para brasileiros; `+` e código do país para internacionais. RA de 9 dígitos não é enviado ao WhatsApp |
 | Semestre | Semestre atual do candidato | Valor entre 1 e 10 |
 | Curso | Nome do curso | — |
 | Email Institucional | Email institucional do candidato | Deve terminar com o domínio configurado (ex: `@al.insper.edu.br`) |
@@ -87,9 +88,13 @@ Três escolhas são feitas antes do upload:
 
 - **Preferência de horário** (ligada por padrão): se a planilha tiver colunas de opção, informe quantas são (N). A primeira opção tem maior prioridade no algoritmo. Se desligar, a planilha não precisa dessas colunas; os horários são digitados na etapa de parâmetros e todos os candidatos podem ir em qualquer um, com o mesmo custo.
 - **Domínio do email institucional**: sufixo que todos os emails institucionais devem ter (ex: `@al.insper.edu.br`).
-- **Avisos** (opcional): uma mensagem com variáveis e, se quiser, o SMTP e a URL de um webhook de WhatsApp. Nada é enviado nesta etapa. O envio só acontece quando você confirma, na tela de resultado ou pela CLI (`-avisar` / `enviar`).
+- **Avisos** (opcional): uma mensagem com variáveis e, se quiser, o SMTP e a URL de um webhook de WhatsApp. Nada é enviado nesta etapa. Você pode autorizar o envio ao concluir a alocação, ou enviar depois no resultado/CLI (`-avisar` / `enviar`).
 
-O e-mail sai pelo SMTP (porta 587, ou 465 com TLS) para o e-mail institucional e, se ele estiver vazio, para o pessoal. O WhatsApp é um POST JSON `{"to","message","para","mensagem"}` na URL informada, com `Authorization: Bearer` se houver token. O destino é a coluna Número. Sem servidor ou sem URL, a mensagem é montada e mostrada, mas não sai.
+A configuração de e-mail oferece Gmail/Google Workspace (endereço e senha de aplicativo), com o SMTP preenchido automaticamente, ou SMTP avançado. O mesmo formulário completo existe na entrada e no resultado. **Testar conexão** verifica autenticação sem enviar; **Ver prévia** mostra a mensagem preenchida.
+
+O WhatsApp oferece **WhatsApp Business da Meta**: ID do número, token, modelo aprovado e variáveis na ordem desse modelo. Há um guia na tela com links para a conta. A Meta exige um modelo aprovado para esses avisos proativos; o texto livre do editor vale para e-mail e webhook. Um webhook de outro provedor continua como opção avançada. Telefones brasileiros são normalizados com código 55; matrículas nunca são tratadas como telefones.
+
+A checkbox **Autorizar envio automático ao concluir a alocação** é um consentimento separado, desligado por padrão. Realocações mantêm sua própria confirmação. Os envios rodam em segundo plano, com histórico, totais de aceitação/falha e repetição somente das falhas. Mensagens aceitas pelo provedor não são repetidas. Aceitação não significa confirmação de entrega. Após um reinício que interrompa um envio, as pendências ficam visíveis para repetição explícita.
 
 Exemplo de horário: `quarta 14-16`
 
@@ -200,17 +205,18 @@ Os testes de interface compilam o frontend, sobem o servidor Go na porta 8099 (s
 
 ```bash
 docker build -t candidate-allocation .
-docker run -p 8080:8080 candidate-allocation
+docker run -p 8080:8080 -v alocacao-dados:/app/alocacao-dados candidate-allocation
 ```
 
 ### Produção (Render)
 
-O app está publicado no Render, com deploy da branch `main` pelo `Dockerfile` — um merge `main ← dev` publica a versão. O servidor lê quanta CPU o container tem (cota do cgroup) e se ajusta: no plano gratuito (0,1 CPU) cada alocação roda **uma** busca e só **uma** alocação roda por vez; as outras esperam na fila ("Aguardando outra alocação terminar..."). Se o usuário fecha a página, a alocação dele para. No plano gratuito o serviço dorme depois de ~15 min sem uso e as sessões (em memória) se perdem; a tela avisa que a sessão expirou e pede para recomeçar.
+O app está publicado no Render, com deploy da branch `main` pelo `Dockerfile` — um merge `main ← dev` publica a versão. O servidor lê quanta CPU o container tem (cota do cgroup) e se ajusta: no plano gratuito (0,1 CPU) cada alocação roda **uma** busca e só **uma** alocação roda por vez; as outras esperam na fila ("Aguardando outra alocação terminar..."). Se o usuário fecha a página, a alocação dele para. O servidor agora grava as sessões em SQLite no diretório `ALOCACAO_DADOS` (padrão `alocacao-dados/`). Para sobreviver a reinícios/redeploys do Render, esse diretório precisa estar em um disco persistente. O [plano gratuito do Render não suporta discos persistentes](https://render.com/docs/free); nele os arquivos continuam sujeitos à perda pela infraestrutura. Para usar o fluxo completo de entrevistas entre dias, configure um [disco persistente](https://render.com/docs/disks) e aponte `ALOCACAO_DADOS` para o caminho montado. Nenhum deploy ou mudança de plano é realizado pelo código.
 
 Variáveis de ambiente opcionais (no painel do Render):
 
 | Variável | Padrão | O que faz |
 |---|---|---|
+| `ALOCACAO_DADOS` | `alocacao-dados` | diretório dos bancos de sessão; montar em disco persistente em produção |
 | `ALOCACAO_EXECUCOES` | uma por CPU, até 8 | buscas em paralelo por alocação |
 | `ALOCACAO_ITERACOES` | 200000 | movimentos por busca (menos = mais rápido, pode piorar um pouco o resultado) |
 | `ALOCACOES_SIMULTANEAS` | CPUs ÷ buscas (mínimo 1) | alocações ao mesmo tempo |
@@ -293,3 +299,51 @@ candidate_allocation/
 | `DELETE` | `/api/session` | Encerra e limpa a sessão atual |
 
 Todas as rotas de sessão recebem o `sessionId` pelo header `X-Session-Id`.
+
+## Agenda persistida e CLI conectada ao site
+
+O servidor grava candidatos, parâmetros, configuração de canais, agenda atual, avaliações e histórico em um arquivo SQLite por alocação. Os arquivos novos são criados com permissão `0600`, e o diretório com `0700`. O acesso usa o identificador da sessão: trate-o como uma chave privada. O navegador guarda esse identificador e oferece **Retomar última alocação**. **Reiniciar** remove explicitamente os dados da sessão.
+
+As operações usam sincronização por sessão e devolvem snapshots. Envios de rede usam uma cópia da configuração e da agenda; não bloqueiam realocações, leitura ou avaliação. A agenda atual é a fonte para a tela e o Excel; horários são normalizados após cada mudança manual, e qualidade/pontuação são recalculadas. Exceções manuais aparecem na lista de alertas.
+
+Para a CLI trabalhar na **mesma alocação** do site, copie o comando mostrado na aba Avisos:
+
+```bash
+./server mesas -servidor http://localhost:8080 -sessao ID
+./server sugestoes -servidor http://localhost:8080 -sessao ID -pessoa 12
+./server realocar-pessoa -servidor http://localhost:8080 -sessao ID -pessoa 12 -mesa 500
+./server realocar-dia -servidor http://localhost:8080 -sessao ID -de quarta -para sexta -avisar
+./server avaliar -servidor http://localhost:8080 -sessao ID -id 12 -resultado passou
+./server avisos -servidor http://localhost:8080 -sessao ID -config canais.json
+./server avisos -servidor http://localhost:8080 -sessao ID -testar
+./server avisos -servidor http://localhost:8080 -sessao ID -previa
+./server historico -servidor http://localhost:8080 -sessao ID
+./server repetir-falhas -servidor http://localhost:8080 -sessao ID -lote ID_DO_ENVIO
+./server exportar -servidor http://localhost:8080 -sessao ID -saida resultado.xlsx
+```
+
+`mesas` e `resultado` exibem IDs reais, horários, pessoas e alertas em JSON. Para criar uma alocação pelo terminal e abri-la no site:
+
+```bash
+./server alocar -servidor http://localhost:8080 -planilha Excels/teste_oficial.xlsx
+```
+
+O comando devolve o link e o identificador. Sem `-servidor`, continua disponível o modo local com `-workspace`. Nesse modo, `avisos -config canais.json` aceita a configuração completa, incluindo o provedor Meta. A escrita do estado local é atômica. `enviar`, operações com `-avisar` e repetição de falhas retornam código não zero quando algum aviso falha; a realocação já aplicada permanece registrada, e a saída distingue sua conclusão das falhas de comunicação.
+
+Um `canais.json` sem segredos reais pode partir de:
+
+```json
+{
+  "ativo": true,
+  "enviar_ao_alocar": false,
+  "mensagem": "Olá {{nome}}, entrevista em {{data}} às {{horario}}, {{mesa}}.",
+  "email": {"ativo": true, "provedor": "gmail", "host": "smtp.gmail.com", "porta": 587, "usuario": "org@exemplo.com", "remetente": "org@exemplo.com", "senha": ""},
+  "whatsapp": {"ativo": true, "provedor": "meta", "phone_id": "", "token": "", "template": "aviso_entrevista", "idioma": "pt_BR", "variaveis_template": ["nome", "data", "horario", "mesa"]}
+}
+```
+
+`GET /api/avisos` mascara senha/token e informa se há segredo salvo. Ao editar a mensagem, valores vazios preservam credenciais da mesma conta/provedor. Não versione configurações preenchidas com credenciais.
+
+Rotas adicionais: `GET /api/realocar/sugestoes?pessoa=ID`, `GET /api/avisos/historico`, `POST /api/avisos/repetir` (`{"id":"ID_DO_ENVIO"}`), `POST /api/avisos/testar` e `POST /api/avisos/previa` (configuração dos canais). Realocações/envios devolvem `lote_id`; acompanhe o histórico para saber quando terminam.
+
+Referências dos provedores: [modelo WhatsApp da Meta](https://whatsapp.github.io/WhatsApp-Nodejs-SDK/api-reference/messages/template/), [senhas de aplicativo Google](https://support.google.com/accounts/answer/185833). A conta Meta deve ter número e modelo aprovados; use um token permanente autorizado. A configuração não vincula automaticamente uma conta pessoal de WhatsApp.

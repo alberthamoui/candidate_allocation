@@ -28,18 +28,30 @@ const ajudaCLI = `Uso:
   o programa exportar -saida resultado.xlsx
 
 A pasta -workspace (padrão alocacao-cli) guarda a alocação entre os comandos.
+Use -servidor URL -sessao ID para trabalhar na mesma alocação do site.
+Inspeção: mesas, resultado, sugestoes -pessoa ID, historico, repetir-falhas -lote ID.
+Configuração remota: avisos -config arquivo.json; avisos -testar; avisos -previa.
 Variáveis da mensagem: {{nome}} {{data}} {{horario}} {{mesa}} {{email}} {{curso}} {{numero}}
 -avisar e enviar só disparam e-mail/WhatsApp se você configurou avisos e aceitou o envio.
 `
 
 type estadoCLI struct {
-	Resultado       *AlocacaoResponse `json:"resultado,omitempty"`
-	Avisos          ConfigAvisos      `json:"avisos"`
-	UsarPreferencia bool              `json:"usar_preferencia"`
-	Avaliacoes      map[int]string    `json:"avaliacoes,omitempty"`
+	Resultado       *AlocacaoResponse  `json:"resultado,omitempty"`
+	Avisos          ConfigAvisos       `json:"avisos"`
+	UsarPreferencia bool               `json:"usar_preferencia"`
+	Avaliacoes      map[int]string     `json:"avaliacoes,omitempty"`
+	Parametros      ParametrosAlocacao `json:"parametros"`
+	Historico       []LoteAvisos       `json:"historico"`
 }
 
 func executarCLI(args []string) error {
+	args, remoto, err := extrairRemoto(args)
+	if err != nil {
+		return err
+	}
+	if remoto != nil {
+		return executarRemoto(args, remoto)
+	}
 	if len(args) == 0 {
 		fmt.Print(ajudaCLI)
 		return nil
@@ -48,6 +60,8 @@ func executarCLI(args []string) error {
 	case "ajuda", "help", "-h", "--help":
 		fmt.Print(ajudaCLI)
 		return nil
+	case "mesas", "resultado", "sugestoes", "historico", "repetir-falhas":
+		return cmdInspecionar(args)
 	case "alocar":
 		return cmdAlocar(args[1:])
 	case "avisos":
@@ -96,6 +110,8 @@ func caminhoEstado(dir string) string {
 }
 
 func salvarEstado(dir string, s *Session) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -104,13 +120,14 @@ func salvarEstado(dir string, s *Session) error {
 		Avisos:          s.avisos,
 		UsarPreferencia: s.usarPreferencia,
 		Avaliacoes:      s.avaliacoes,
+		Parametros:      s.parametros, Historico: s.historico,
 	}
 	b, err := json.MarshalIndent(est, "", "  ")
 	if err != nil {
 		return err
 	}
 	// 0600: o arquivo pode guardar a senha do SMTP.
-	return os.WriteFile(caminhoEstado(dir), append(b, '\n'), 0o600)
+	return gravarArquivoAtomico(caminhoEstado(dir), append(b, '\n'))
 }
 
 func carregarEstado(dir string) (*Session, error) {
@@ -130,6 +147,7 @@ func carregarEstado(dir string) (*Session, error) {
 		avisos:          est.Avisos,
 		usarPreferencia: est.UsarPreferencia,
 		avaliacoes:      est.Avaliacoes,
+		parametros:      est.Parametros, historico: est.Historico,
 	}
 	s.aplicarAvaliacoes(s.lastResult)
 	return s, nil
@@ -140,7 +158,7 @@ func imprimirOperacao(op ResultadoOperacao) {
 	for _, a := range op.Avisos {
 		estado := "preparado, não enviado"
 		if a.Enviado {
-			estado = "enviado"
+			estado = "aceito pelo provedor"
 		}
 		if a.Erro != "" {
 			estado = "não enviado: " + a.Erro
@@ -291,6 +309,11 @@ func cmdAlocar(args []string) error {
 		return err
 	}
 	s.lastResult = &res
+	for _, l := range s.HistoricoAvisos() {
+		if l.Status == "enviando" {
+			s.executarLote(l.ID, s.avisos)
+		}
+	}
 	if err := salvarEstado(*dir, s); err != nil {
 		return err
 	}
@@ -314,6 +337,7 @@ func cmdAlocar(args []string) error {
 
 func cmdAvisos(args []string) error {
 	fs := novoFlagSet("avisos")
+	config := fs.String("config", "", "arquivo JSON com configuração completa")
 	dir := fs.String("workspace", "alocacao-cli", "pasta da alocação")
 	mensagem := fs.String("mensagem", "", "texto com variáveis, por exemplo {{nome}} e {{data}}")
 	desligado := fs.Bool("desligado", false, "desliga o envio automático")
@@ -335,6 +359,15 @@ func cmdAvisos(args []string) error {
 		s = &Session{usarPreferencia: true, avaliacoes: map[int]string{}}
 	}
 	cfg := s.avisos
+	if *config != "" {
+		b, err := os.ReadFile(*config)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(b, &cfg); err != nil {
+			return err
+		}
+	}
 	if definido["mensagem"] {
 		cfg.Mensagem = *mensagem
 		cfg.Ativo = true
@@ -378,7 +411,9 @@ func cmdAvisos(args []string) error {
 	if !definido["mensagem"] && !definido["email"] && !definido["whatsapp"] && !definido["desligado"] && cfg.Mensagem == "" {
 		return fmt.Errorf("informe -mensagem. Exemplo: Olá {{nome}}, sua entrevista é em {{data}}, horário {{horario}}")
 	}
-	s.avisos = cfg
+	if err := s.ConfigurarAvisos(cfg); err != nil {
+		return err
+	}
 	if err := salvarEstado(*dir, s); err != nil {
 		return err
 	}
@@ -416,7 +451,7 @@ func cmdEnviar(args []string) error {
 		return err
 	}
 	imprimirOperacao(op)
-	return nil
+	return erroEnvio(op)
 }
 
 func cmdRealocarDia(args []string) error {
@@ -492,7 +527,7 @@ func cmdAvaliar(args []string) error {
 		return err
 	}
 	imprimirOperacao(op)
-	return nil
+	return erroEnvio(op)
 }
 
 func imprimirAvaliacoes(s *Session) {
@@ -561,5 +596,5 @@ func comEstado(dir string, fn func(*Session) (ResultadoOperacao, error)) error {
 		return err
 	}
 	imprimirOperacao(op)
-	return nil
+	return erroEnvio(op)
 }

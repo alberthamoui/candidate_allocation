@@ -61,6 +61,10 @@ func aplicarSemPreferencia(d dadosAlocacao, horarios []string) dadosAlocacao {
 // comPreferenciaDaSessao liga SemPreferencia quando o administrador desligou
 // o ranking na entrada. Os horários continuam vindo dos parâmetros.
 func (s *Session) comPreferenciaDaSessao(param ParametrosAlocacao) ParametrosAlocacao {
+	if s != nil {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+	}
 	if s != nil && !s.usarPreferencia {
 		param.SemPreferencia = true
 	}
