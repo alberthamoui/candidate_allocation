@@ -114,12 +114,3 @@ func GetAvaliadorIDBySigla(db Executor, sigla string) (int64, error) {
 	).Scan(&id)
 	return id, err
 }
-
-func GetPessoaIDByName(db Executor, nome string) (int64, error) {
-	var id int64
-	err := db.QueryRow(
-		`SELECT id FROM pessoa WHERE nome = ?`,
-		nome,
-	).Scan(&id)
-	return id, err
-}

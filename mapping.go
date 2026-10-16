@@ -9,6 +9,28 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+// nomesAbas são as abas da planilha, na ordem, para as mensagens de erro.
+var nomesAbas = []string{"candidatos", "avaliadores", "restrições"}
+
+// nomeDaAba devolve o nome da aba de índice aba, ou um erro que diz qual aba
+// falta (o excelize só diria "the sheet name can not be blank").
+func nomeDaAba(file *excelize.File, aba int) (string, error) {
+	if nome := file.GetSheetName(aba); nome != "" {
+		return nome, nil
+	}
+	return "", fmt.Errorf("a planilha não tem a aba de %s (a %dª aba); ela precisa ter as 3 abas, nesta ordem: candidatos, avaliadores e restrições", nomesAbas[aba], aba+1)
+}
+
+// linhaVazia diz se a linha não tem nada nas colunas do mapeamento.
+func linhaVazia(row []string, mappingItems []MappingItem) bool {
+	for _, m := range mappingItems {
+		if m.Indice < len(row) && strings.TrimSpace(row[m.Indice]) != "" {
+			return false
+		}
+	}
+	return true
+}
+
 // lerCabecalho devolve a primeira linha da aba de índice aba do Excel da sessão.
 func (s *Session) lerCabecalho(aba int) ([]string, error) {
 	file, err := excelize.OpenReader(bytes.NewReader(s.excelData))
@@ -17,7 +39,11 @@ func (s *Session) lerCabecalho(aba int) ([]string, error) {
 	}
 	defer file.Close()
 
-	rows, err := file.GetRows(file.GetSheetName(aba))
+	nome, err := nomeDaAba(file, aba)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := file.GetRows(nome)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +107,10 @@ func (s *Session) BuildUsuariosWithMapping(mappingItems []MappingItem) (Usuarios
 	}
 	defer file.Close()
 
-	sheet := file.GetSheetName(0)
+	sheet, err := nomeDaAba(file, 0)
+	if err != nil {
+		return UsuariosResponse{}, err
+	}
 	rows, err := file.GetRows(sheet)
 	if err != nil {
 		return UsuariosResponse{}, fmt.Errorf("erro ao ler excel : %w", err)
@@ -93,6 +122,9 @@ func (s *Session) BuildUsuariosWithMapping(mappingItems []MappingItem) (Usuarios
 	var users []Usuario
 
 	for _, row := range rows[1:] {
+		if linhaVazia(row, mappingItems) {
+			continue // linha em branco no meio da planilha não é candidato
+		}
 		u := Usuario{
 			Opcoes: make([]string, nOpcoes),
 		}
@@ -150,9 +182,9 @@ func (s *Session) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Ava
 	}
 	defer file.Close()
 
-	sheet := file.GetSheetName(1)
-	if sheet == "" {
-		return nil, fmt.Errorf("arquivo não possui uma segunda aba com avaliadores")
+	sheet, err := nomeDaAba(file, 1)
+	if err != nil {
+		return nil, err
 	}
 
 	rows, err := file.GetRows(sheet)
@@ -201,17 +233,21 @@ func (s *Session) BuildRestricoesWithMapping(mappingItems []MappingItem) ([]Rest
 	}
 	defer file.Close()
 
-	sheet := file.GetSheetName(2)
+	sheet, err := nomeDaAba(file, 2)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := file.GetRows(sheet)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao ler excel: %w", err)
 	}
-	if len(rows) < 2 {
-		return nil, fmt.Errorf("arquivo sem dados além do header")
-	}
 
-	var restricoes []Restricao
-	for _, row := range rows[1:] {
+	// só o cabeçalho (ou nem isso): ninguém tem restrição, e tudo bem
+	restricoes := []Restricao{}
+	for _, row := range rows[min(1, len(rows)):] {
+		if linhaVazia(row, mappingItems) {
+			continue
+		}
 		r := Restricao{}
 		for _, m := range mappingItems {
 			if m.Indice >= len(row) {

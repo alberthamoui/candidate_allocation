@@ -49,7 +49,9 @@ Os **critérios adicionais** (até 5, em [criterios.go](criterios.go)) valem par
 
 Eles pesam junto com as preferências de horário: com importância alta, a alocação pode trocar a opção de horário de alguém para cumprir a regra. O resultado mostra, para cada critério, quantas mesas não o atendem.
 
-A busca é um **simulated annealing** sobre a divisão dos candidatos em mesas (mover um candidato de mesa ou trocar dois candidatos). Os avaliadores não são sorteados: para cada divisão, a melhor escolha de avaliadores de um horário é um problema de atribuição, resolvido de forma exata pelo **algoritmo húngaro** a cada movimento. Mesas incompletas e conflitos "não posso" recebem penalidades que começam brandas e endurecem ao longo da busca, para que ela consiga montar mesas aos poucos. Rodam 8 buscas independentes em paralelo (sementes fixas, então a mesma planilha gera o mesmo resultado) e fica a melhor.
+A busca é um **simulated annealing** sobre a divisão dos candidatos em mesas (mover um candidato de mesa ou trocar dois candidatos). Os avaliadores não são sorteados: para cada divisão, a melhor escolha de avaliadores de um horário é um problema de atribuição, resolvido de forma exata pelo **algoritmo húngaro** a cada movimento. Mesas incompletas e conflitos "não posso" recebem penalidades que começam brandas e endurecem ao longo da busca, para que ela consiga montar mesas aos poucos. Rodam 8 buscas independentes em paralelo (sementes fixas e horários em ordem fixa, então a mesma planilha gera o mesmo resultado) e fica a melhor.
+
+Depois da busca, um **reparo** ([reparo.go](reparo.go)) tenta movimentos compostos que a busca não faz sozinha, porque cada passo isolado piora o custo: abrir uma mesa nova com vários candidatos de uma vez (ex.: para quem ficou sem mesa), desfazer uma mesa espalhando os membros em vagas melhores e cadeias de trocas entre mesas. Cada movimento só fica se o custo real cair.
 
 Um limite inferior exato (fluxo de custo mínimo sobre a escolha de horários) encerra a busca antes quando a solução é comprovadamente ótima.
 
@@ -96,11 +98,11 @@ Uma linha por avaliador.
 
 ### Aba 3 — Restricoes
 
-Uma linha por candidato que possui restrição. As siglas devem corresponder exatamente ao campo **Sigla** dos avaliadores. Múltiplas siglas são separadas por vírgula ou espaço.
+Uma linha por candidato que possui restrição; a aba pode ter só o cabeçalho, se ninguém tiver restrição. As siglas devem corresponder exatamente ao campo **Sigla** dos avaliadores. Múltiplas siglas são separadas por vírgula, ponto e vírgula, barra ou espaço.
 
 | Campo | Descrição |
 |---|---|
-| Candidato | Nome do candidato (deve coincidir com o cadastrado) |
+| Candidato | Nome do candidato, como cadastrado (maiúsculas, acentos e espaços a mais não importam) |
 | NaoPosso | Siglas de avaliadores com quem o candidato **não pode** ser alocado (restrição absoluta) |
 | PrefiroNao | Siglas de avaliadores com quem o candidato **prefere não** ser alocado (restrição suave) |
 
@@ -167,7 +169,9 @@ go test ./...
 cd frontend && npm run test:e2e
 ```
 
-Os testes de interface compilam o frontend, sobem o servidor Go na porta 8099 (sem conflitar com um servidor aberto na 8080) e percorrem as telas com as planilhas de `Excels/`: fluxo completo até a exportação, sugestão e troca de colunas no mapeamento, parâmetros e prévia de capacidade, erros de upload e o selo de versão. Na primeira vez, instale o navegador com `npx playwright install chromium`. Para ver o que falhou, `npx playwright show-report` abre um relatório com screenshot e passo a passo de cada teste.
+Os testes de interface compilam o frontend, sobem o servidor Go na porta 8099 (sem conflitar com um servidor aberto na 8080) e percorrem as telas com as planilhas de `Excels/`: fluxo completo até a exportação, sugestão e troca de colunas no mapeamento, parâmetros e prévia de capacidade, erros de upload e o selo de versão. Na primeira vez, instale o navegador com `npx playwright install chromium`.
+
+`cenarios_test.go` gera dezenas de planilhas de teste em `Excels/cenarios/` (fora do git, recriadas a cada execução, com um `LEIAME.md` que descreve cada uma) e passa cada uma pelo fluxo do app: quantidades diferentes de opções, candidatos, horários e avaliadores, cabeçalhos com outros nomes, dados inválidos, duplicados, linhas vazias, restrições difíceis e planilhas incompletas. Dá para abrir essas planilhas e testar à mão pela tela. Para rodar só esse teste: `go test -run TestCenariosPlanilha -v`. Para ver o que falhou, `npx playwright show-report` abre um relatório com screenshot e passo a passo de cada teste.
 
 ### Docker
 
@@ -205,6 +209,7 @@ candidate_allocation/
 ├── carregar.go     -- leitura do banco da sessão para a alocação
 ├── hungaro.go      -- algoritmo húngaro (escolha dos avaliadores de cada horário)
 ├── pontuacao.go    -- pontuação da alocação e impressão no log
+├── reparo.go       -- movimentos compostos depois da busca (abrir/desfazer mesa, cadeias)
 ├── preferencia.go  -- modo sem preferência: horários digitados na tela
 ├── capacidade.go   -- prévia de capacidade para os parâmetros da alocação
 ├── criterios.go    -- critérios adicionais (curso/semestre) usados na alocação
