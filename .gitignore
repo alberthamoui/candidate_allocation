@@ -1,7 +1,4 @@
 # Build output
-build/bin/
-build/darwin/
-build/windows/
 frontend/dist/
 
 # Compiled binaries
@@ -32,8 +29,6 @@ yarn-error.log*
 *.tsbuildinfo
 /package.json
 /package-lock.json
-/package.json.md5
-frontend/package.json.md5
 frontend/playwright-report/
 frontend/test-results/
 
@@ -75,5 +70,10 @@ anotacoes.txt
 teste.ipynb
 alocacao.xlsx
 graveyard.ipynb
-server.exe
-Excels/
+brag-output/
+
+# Planilhas locais. Só estas duas são versionadas: a de exemplo (embutida no
+# servidor) e a oficial (usada nos testes).
+Excels/*
+!Excels/base_exemplo.xlsx
+!Excels/teste_oficial.xlsx
