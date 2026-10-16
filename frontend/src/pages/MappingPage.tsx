@@ -1,7 +1,8 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
-import { ArrowLeftIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, Bars3Icon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import { nomeCampo } from "../nomesCampos";
+import { Aviso, BarraAcoes, BotaoPrimario, BotaoSecundario, CabecalhoPagina, cn, Secao, Selo } from "../components/ui";
 
 interface MappingItem {
 	nomeColuna: string;
@@ -10,18 +11,25 @@ interface MappingItem {
 }
 interface MappingPageProps {
 	mapping: MappingItem[] | null;
-	/** Function that receives the current mapping items and returns a promise with the result. */
+	/** Recebe o mapeamento atual e devolve o resultado da leitura. */
 	buildFn: (items: MappingItem[]) => Promise<any>;
-	/** Called with the build result before navigation. May be async. */
+	/** Chamado com o resultado antes de ir para a próxima tela. */
 	onSuccess: (result: any) => Promise<void> | void;
-	/** Route to navigate to after onSuccess resolves. */
+	/** Rota seguinte. */
 	nextRoute: string;
+	titulo: string;
+	descricao: string;
+	rotuloConfirmar: string;
 }
+
 export default function MappingPage({
 	mapping,
 	buildFn,
 	onSuccess,
 	nextRoute,
+	titulo,
+	descricao,
+	rotuloConfirmar,
 }: MappingPageProps) {
 	const navigate = useNavigate();
 	const [loading, setLoading] = useState(false);
@@ -30,21 +38,17 @@ export default function MappingPage({
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 	const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 	const [items, setItems] = useState<MappingItem[]>([]);
+
 	useEffect(() => {
-		console.log("mapping : ", mapping);
-		if (mapping) {
-			setItems(mapping);
-		} else {
-			setItems([]);
-		}
-		console.log("items: ", items);
+		setItems(mapping ?? []);
 	}, []);
-	// Listener global para autoscroll durante o drag
+
+	// Rolagem automática enquanto arrasta perto das bordas
 	useEffect(() => {
 		const handleAutoScroll = (e: DragEvent) => {
 			if (!dragActiveRef.current) return;
-			const threshold = 50;
-			const scrollSpeed = 4;
+			const threshold = 80;
+			const scrollSpeed = 6;
 			if (e.clientY < threshold) {
 				window.scrollBy(0, -scrollSpeed);
 			} else if (e.clientY > window.innerHeight - threshold) {
@@ -59,23 +63,21 @@ export default function MappingPage({
 		setDraggedIndex(index);
 		dragActiveRef.current = true;
 
-		const ghostElement = document.createElement("div");
-		ghostElement.classList.add("ghost-element");
-		ghostElement.textContent = items[index].nomeColuna;
-		ghostElement.style.width = "200px";
-		ghostElement.style.padding = "10px";
-		ghostElement.style.background = "rgba(59, 130, 246, 0.5)";
-		ghostElement.style.borderRadius = "6px";
-		ghostElement.style.color = "white";
-		ghostElement.style.fontWeight = "bold";
-		ghostElement.style.textAlign = "center";
-
-		document.body.appendChild(ghostElement);
-		e.dataTransfer.setDragImage(ghostElement, 100, 20);
-
-		setTimeout(() => {
-			document.body.removeChild(ghostElement);
-		}, 0);
+		const ghost = document.createElement("div");
+		ghost.textContent = items[index].nomeColuna || "sem coluna";
+		Object.assign(ghost.style, {
+			padding: "8px 14px",
+			background: "#1a1a1a",
+			color: "#fff",
+			borderRadius: "6px",
+			fontSize: "13px",
+			fontWeight: "500",
+			position: "absolute",
+			top: "-1000px",
+		});
+		document.body.appendChild(ghost);
+		e.dataTransfer.setDragImage(ghost, 20, 16);
+		setTimeout(() => document.body.removeChild(ghost), 0);
 	}
 
 	function onDragOver(e: React.DragEvent<HTMLDivElement>, index: number) {
@@ -91,19 +93,11 @@ export default function MappingPage({
 	function onDrop(e: React.DragEvent<HTMLDivElement>, dropIndex: number) {
 		e.preventDefault();
 		if (draggedIndex === null) return;
-		const newMapping = [...items];
-		const temp = newMapping[draggedIndex].nomeColuna;
-		newMapping[draggedIndex].nomeColuna = newMapping[dropIndex].nomeColuna;
-		newMapping[dropIndex].nomeColuna = temp;
-
-		const tempIndice = newMapping[draggedIndex].indice;
-		newMapping[draggedIndex].indice = newMapping[dropIndex].indice;
-		newMapping[dropIndex].indice = tempIndice;
-
-		setItems(newMapping);
-		setDraggedIndex(null);
-		setDragOverIndex(null);
-		dragActiveRef.current = false;
+		const novo = items.map((i) => ({ ...i }));
+		[novo[draggedIndex].nomeColuna, novo[dropIndex].nomeColuna] = [novo[dropIndex].nomeColuna, novo[draggedIndex].nomeColuna];
+		[novo[draggedIndex].indice, novo[dropIndex].indice] = [novo[dropIndex].indice, novo[draggedIndex].indice];
+		setItems(novo);
+		onDragEnd();
 	}
 
 	function onDragEnd() {
@@ -127,126 +121,82 @@ export default function MappingPage({
 		}
 	}
 
+	const comColuna = items.filter((i) => i.nomeColuna).length;
+
 	return (
-		<div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-100 flex flex-col items-center py-12 px-4">
-			<div className="max-w-4xl w-full bg-white rounded-xl shadow-lg p-8 mb-8">
-				<h1 className="text-3xl font-bold mb-2 text-center text-gray-800">
-					Reordenar Mapeamento
-				</h1>
-				<p className="mb-6 text-gray-600 text-center">
-					Arraste as células da coluna direita para reordenar o
-					mapeamento das variáveis
-				</p>
+		<div className="space-y-6">
+			<CabecalhoPagina titulo={titulo} descricao={descricao} />
 
-				<div className="overflow-x-auto">
-					<table className="w-full border-collapse">
-						<thead>
-							<tr className="bg-blue-600 text-white">
-								<th className="px-6 py-3 text-left rounded-tl-lg">
-									Variável
-								</th>
-								<th className="px-6 py-3 text-left rounded-tr-lg">
-									Coluna do Arquivo
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							{items.map((item, index) => (
-								<tr
-									key={index}
-									className={`border-b border-gray-200 transition-colors ${
-										dragOverIndex === index
-											? "bg-blue-100"
-											: ""
-									}`}
-								>
-									<td className="px-6 py-4 font-medium text-gray-700">
-										{item.variavel}
-									</td>
-									<td className="px-6 py-4">
-										<motion.div
-											draggable
-											onDragStart={(
-												e: React.DragEvent<HTMLDivElement>
-											) => onDragStart(e, index)}
-											onDragOver={(
-												e: React.DragEvent<HTMLDivElement>
-											) => onDragOver(e, index)}
-											onDragLeave={(
-												e: React.DragEvent<HTMLDivElement>
-											) => onDragLeave(e)}
-											onDrop={(
-												e: React.DragEvent<HTMLDivElement>
-											) => onDrop(e, index)}
-											onDragEnd={onDragEnd}
-											whileHover={{ scale: 1.02 }}
-											whileTap={{ scale: 0.98 }}
-											className={`
-                                                py-2 px-4
-                                                cursor-move
-                                                text-center
-                                                bg-white
-                                                rounded-lg
-                                                border-2
-                                                shadow-sm
-                                                transition-all
-                                            `}
-										>
-											<div className="flex items-center justify-between">
-												<span>{item.nomeColuna}</span>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													className="h-5 w-5 text-gray-400"
-													fill="none"
-													viewBox="0 0 24 24"
-													stroke="currentColor"
-												>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														strokeWidth={2}
-														d="M4 6h16M4 12h16M4 18h16"
-													/>
-												</svg>
-											</div>
-										</motion.div>
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
+			<Secao
+				titulo="Campos"
+				ajuda="Arraste a coluna de um campo e solte sobre outro campo: as duas colunas trocam de lugar."
+				acoes={
+					<Selo tom={comColuna === items.length ? "sucesso" : "atencao"}>
+						{comColuna} de {items.length} campos com coluna
+					</Selo>
+				}
+			>
+				<div className="hidden grid-cols-[1fr_1.2fr] gap-4 px-4 pb-2 md:grid">
+					<span className="rotulo-caps">Campo do sistema</span>
+					<span className="rotulo-caps">Coluna da planilha</span>
 				</div>
+				<div className="space-y-2">
+					{items.map((item, index) => (
+						<div
+							key={index}
+							data-testid="linha-mapeamento"
+							data-variavel={item.variavel}
+							className={cn(
+								"grid grid-cols-1 items-center gap-2 rounded-[var(--radius-lg)] border px-4 py-3 transition-colors md:grid-cols-[1fr_1.2fr] md:gap-4",
+								dragOverIndex === index ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--line)] bg-white"
+							)}
+						>
+							<div className="min-w-0">
+								<div className="text-sm font-medium">{nomeCampo(item.variavel)}</div>
+								<div className="font-mono text-[11px] text-[var(--text-light)]">{item.variavel}</div>
+							</div>
+							<div
+								draggable
+								onDragStart={(e) => onDragStart(e, index)}
+								onDragOver={(e) => onDragOver(e, index)}
+								onDragLeave={onDragLeave}
+								onDrop={(e) => onDrop(e, index)}
+								onDragEnd={onDragEnd}
+								data-testid="coluna"
+								className={cn(
+									"flex cursor-grab items-center justify-between gap-3 rounded-[var(--radius)] border px-3 py-2 transition-colors active:cursor-grabbing",
+									item.nomeColuna
+										? "border-[var(--line-strong)] bg-[var(--bg-subtle)] hover:border-[var(--accent)]"
+										: "border-dashed border-[rgba(245,166,35,0.5)] bg-[var(--warning-soft)]"
+								)}
+							>
+								{item.nomeColuna ? (
+									<span className="truncate text-sm font-medium">{item.nomeColuna}</span>
+								) : (
+									<span className="text-sm italic text-[var(--warning)]">sem coluna</span>
+								)}
+								<Bars3Icon className="h-4 w-4 flex-shrink-0 text-[var(--text-light)]" />
+							</div>
+						</div>
+					))}
+				</div>
+			</Secao>
 
-				{erro && (
-					<div className="mt-6 flex items-start space-x-2 bg-red-50 border border-red-200 rounded-lg p-3">
-						<ExclamationTriangleIcon className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-						<p className="text-sm text-red-700">{erro}</p>
-					</div>
-				)}
-			</div>
+			{erro && (
+				<Aviso tom="perigo" icone={<ExclamationTriangleIcon className="h-4 w-4" />}>
+					{erro}
+				</Aviso>
+			)}
 
-			<div className="flex items-center space-x-4">
-				<button
-					onClick={() => navigate(-1)}
-					className="flex items-center space-x-2 px-6 py-3 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 font-medium transition-all"
-				>
-					<ArrowLeftIcon className="w-4 h-4" />
-					<span>Voltar</span>
-				</button>
-				<motion.button
-					onClick={onConfirm}
-					disabled={loading}
-					whileHover={{ scale: loading ? 1 : 1.05 }}
-					whileTap={{ scale: loading ? 1 : 0.95 }}
-					className={`px-8 py-3 rounded-lg shadow-md font-medium transition-all text-white ${
-						loading
-							? "bg-blue-400 cursor-not-allowed"
-							: "bg-blue-600 hover:bg-blue-700"
-					}`}
-				>
-					{loading ? "Processando..." : "Confirmar Mudanças"}
-				</motion.button>
-			</div>
+			<BarraAcoes dica="Confira as colunas antes de continuar.">
+				<BotaoSecundario onClick={() => navigate(-1)}>
+					<ArrowLeftIcon className="h-4 w-4" />
+					Voltar
+				</BotaoSecundario>
+				<BotaoPrimario onClick={onConfirm} disabled={loading}>
+					{loading ? "Processando..." : rotuloConfirmar}
+				</BotaoPrimario>
+			</BarraAcoes>
 		</div>
 	);
 }

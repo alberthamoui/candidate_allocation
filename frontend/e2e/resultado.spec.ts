@@ -3,7 +3,7 @@ import { prepararSessao, usarParametros, usarSessao } from "./apoio";
 
 // Candidatos/avaliadores destacados pelos filtros e pela qualidade
 const destacados = (page: Page, lista: "candidatos" | "avaliadores") =>
-	page.getByTestId(lista).locator("button.bg-yellow-100");
+	page.getByTestId(lista).locator("button[data-destacado]");
 const contagem = (page: Page) => page.getByTestId("contagem-filtro");
 const valorDoItem = async (page: Page, codigo: string) =>
 	parseInt((await page.getByTestId(`qualidade-${codigo}`).innerText()).trim());
@@ -121,7 +121,7 @@ test.describe("com os parâmetros padrão", () => {
 	test("detalhes do candidato e do avaliador", async ({ page }) => {
 		const mesa = page.getByTestId("mesa").first();
 		// textContent: o texto sem a capitalização do CSS
-		const nomeMesa = ((await mesa.locator("span.font-bold").first().textContent()) ?? "").trim();
+		const nomeMesa = ((await mesa.getByTestId("nome-mesa").textContent()) ?? "").trim();
 
 		await mesa.getByTestId("candidatos").locator("button").first().click();
 		const dialogo = page.getByRole("dialog");
@@ -162,7 +162,7 @@ test("com pouca capacidade, destaca e detalha quem ficou sem mesa", async ({ pag
 
 	await page.getByTestId("qualidade-nao_alocados").click();
 	await expect(page.getByTestId("mesa")).toHaveCount(0);
-	await expect(tabela.locator("tbody tr.bg-yellow-50")).toHaveCount(semMesa);
+	await expect(tabela.locator("tbody tr[data-destacado]")).toHaveCount(semMesa);
 	await expect(page.getByText("Nenhuma mesa com candidatos")).toHaveCount(0);
 
 	await tabela.locator("tbody tr").first().getByRole("button").click();

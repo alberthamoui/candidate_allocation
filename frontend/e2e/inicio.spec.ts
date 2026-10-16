@@ -33,7 +33,7 @@ test("selo mostra o commit que o servidor está rodando", async ({ page, request
 	expect(versao.commit).toMatch(/^[0-9a-f]{7}$/);
 
 	await page.goto("/");
-	const selo = page.locator("div.fixed.bottom-3.right-3");
+	const selo = page.getByTestId("selo-versao");
 	await expect(selo).toBeVisible();
 	await expect(selo).toContainText(versao.commit);
 	if (versao.branch) await expect(selo).toContainText(versao.branch);

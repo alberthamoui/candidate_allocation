@@ -1,13 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-	CheckCircleIcon,
-	ExclamationTriangleIcon,
-	MagnifyingGlassIcon,
-	TableCellsIcon,
-	UserGroupIcon,
-	XMarkIcon,
-} from "@heroicons/react/24/outline";
+import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ExclamationTriangleIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { AlocacaoResponse, AvaliadorResultado, CandidatoResultado, ItemQualidade, MesaResult } from "../api";
+import { cn, EstadoVazio, Metrica, Secao, Selo } from "./ui";
 
 type Selecao =
 	| { tipo: "candidato"; pessoa: CandidatoResultado; mesa?: MesaResult }
@@ -27,12 +21,15 @@ const distintos = (valores: (string | number)[]) =>
 		a.localeCompare(b, "pt-BR", { numeric: true })
 	);
 
-const TOM: Record<ItemQualidade["tom"], string> = {
-	bom: "border-green-200 bg-green-50 text-green-900",
-	neutro: "border-gray-200 bg-gray-50 text-gray-900",
-	atencao: "border-amber-200 bg-amber-50 text-amber-900",
-	ruim: "border-red-200 bg-red-50 text-red-900",
+const TOM: Record<ItemQualidade["tom"], { cartao: string; valor: string }> = {
+	bom: { cartao: "border-[rgba(31,138,59,0.2)]", valor: "text-[var(--success)]" },
+	neutro: { cartao: "border-[var(--line)]", valor: "text-[var(--text)]" },
+	atencao: { cartao: "border-[rgba(245,166,35,0.35)]", valor: "text-[var(--warning)]" },
+	ruim: { cartao: "border-[rgba(212,32,32,0.25)]", valor: "text-[var(--danger)]" },
 };
+
+// destaque de quem atende aos filtros ou ao item de qualidade ativo
+const DESTACADO = "bg-[var(--warning-soft)] font-semibold text-[var(--text)] ring-1 ring-[rgba(245,166,35,0.45)]";
 
 export default function PainelResultado({ result }: { result: AlocacaoResponse }) {
 	const [busca, setBusca] = useState("");
@@ -98,31 +95,26 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 	}, []);
 
 	const classeCandidato = (c: CandidatoResultado) =>
-		!filtrando
-			? "hover:bg-blue-50"
-			: bate(c)
-				? "bg-yellow-100 ring-1 ring-yellow-300 font-semibold"
-				: "opacity-40";
+		!filtrando ? "hover:bg-[var(--bg-hover)]" : bate(c) ? DESTACADO : "opacity-40";
 
 	return (
-		<div className="space-y-8">
+		<div className="space-y-6">
 			{/* ── Resumo ─────────────────────────────────────────────────── */}
-			<div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="resumo">
-				<Numero valor={mesas.length} rotulo="mesas" />
-				<Numero valor={horarios.length} rotulo="horários com mesa" />
-				<Numero valor={result.total_alocados} rotulo="candidatos alocados" />
-				<Numero
+			<div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="resumo">
+				<Metrica rotulo="Mesas" valor={mesas.length} />
+				<Metrica rotulo="Horários com mesa" valor={horarios.length} />
+				<Metrica rotulo="Candidatos alocados" valor={result.total_alocados} tom="sucesso" />
+				<Metrica
+					rotulo="Pontuação"
 					valor={result.pontuacao}
-					rotulo="pontuação"
-					dica={'Começa em 100 e perde pontos: 2ª opção −1, 3ª −3, 4ª −5, 5ª −7; cada avaliador "prefiro não" na mesa −5; cada candidato sem mesa −1000; critérios adicionais descontam pela importância.'}
+					tom="destaque"
+					ajuda={'Começa em 100 e perde pontos: 2ª opção −1, 3ª −3, 4ª −5, 5ª −7; cada avaliador "prefiro não" na mesa −5; cada candidato sem mesa −1000; critérios adicionais descontam pela importância.'}
 				/>
 			</div>
 
 			{/* ── Qualidade ──────────────────────────────────────────────── */}
-			<section>
-				<h2 className="text-lg font-bold text-gray-900">Qualidade da alocação</h2>
-				<p className="text-sm text-gray-500 mb-3">Clique em um item para destacar os candidatos dele.</p>
-				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+			<Secao titulo="Qualidade da alocação" subtitulo="Clique em um item para destacar os candidatos dele.">
+				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
 					{qualidade.map((q) => {
 						const ativo = itemAtivo === q.codigo;
 						return (
@@ -134,47 +126,55 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 								disabled={q.valor === 0}
 								onClick={() => setItemAtivo(ativo ? "" : q.codigo)}
 								title={q.descricao}
-								className={`rounded-xl border p-4 text-left transition-all ${TOM[q.tom]} ${
-									q.valor === 0 ? "cursor-default" : "hover:shadow-md"
-								} ${ativo ? "ring-2 ring-blue-500 ring-offset-2" : ""}`}
+								className={cn(
+									"rounded-[var(--radius-lg)] border bg-white p-4 text-left transition-all",
+									TOM[q.tom].cartao,
+									q.valor === 0 ? "cursor-default" : "hover:shadow-[var(--shadow-md)]",
+									ativo && "border-[var(--accent)] bg-[var(--accent-soft)] ring-1 ring-[var(--accent)]"
+								)}
 							>
-								<div className="text-2xl font-bold">{q.valor}</div>
-								<div className="text-sm font-semibold">{q.titulo}</div>
+								<div className={cn("text-2xl font-semibold tabular-nums", TOM[q.tom].valor)}>{q.valor}</div>
+								<div className="text-sm font-medium">{q.titulo}</div>
 							</button>
 						);
 					})}
 				</div>
-			</section>
+			</Secao>
 
 			{/* ── Busca e filtros ────────────────────────────────────────── */}
-			<section className="bg-white rounded-2xl shadow p-5 space-y-4">
+			<section className="painel space-y-4 p-5" aria-label="Busca e filtros">
 				<div className="relative">
-					<MagnifyingGlassIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+					<MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-light)]" />
 					<input
 						type="search"
 						aria-label="Buscar"
 						placeholder="Buscar candidato (nome, email, curso) ou avaliador (nome, sigla)..."
 						value={busca}
 						onChange={(e) => setBusca(e.target.value)}
-						className="w-full border border-gray-300 rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-300"
+						className="campo pl-9"
 					/>
 				</div>
-				<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+				<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
 					<Filtro rotulo="Horário" valor={horario} opcoes={horarios} onChange={setHorario} />
 					<Filtro rotulo="Curso" valor={curso} opcoes={cursos} onChange={setCurso} />
 					<Filtro rotulo="Semestre" valor={semestre} opcoes={semestres} onChange={setSemestre} formatar={(s) => `${s}º`} />
 				</div>
 				{(filtrando || horario) && (
-					<div className="flex items-center justify-between text-sm">
-						<span className="text-gray-600" data-testid="contagem-filtro">
+					<div className="flex items-center justify-between gap-3 border-t border-[var(--line)] pt-3 text-sm">
+						<span className="text-[var(--text-muted)]" data-testid="contagem-filtro">
 							{filtrando
 								? qtd(encontrados, "candidato", "candidatos") +
 								  (avaliadoresEncontrados ? ` e ${qtd(avaliadoresEncontrados, "avaliador", "avaliadores")}` : "") +
 								  (encontrados + avaliadoresEncontrados === 1 ? " encontrado" : " encontrados")
 								: `${qtd(mesasVisiveis.length, "mesa", "mesas")} no horário`}
-							{item && <> · destaque: <b>{item.titulo}</b></>}
+							{item && (
+								<>
+									{" "}
+									· destaque: <b className="text-[var(--text)]">{item.titulo}</b>
+								</>
+							)}
 						</span>
-						<button type="button" onClick={limpar} className="text-blue-600 font-semibold hover:underline">
+						<button type="button" onClick={limpar} className="font-medium text-[var(--accent)] hover:underline">
 							Limpar filtros
 						</button>
 					</div>
@@ -182,138 +182,138 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 			</section>
 
 			{/* ── Mesas por horário ──────────────────────────────────────── */}
-			{mesasVisiveis.length === 0 && (filtrando || horario) ? (
-				// com "sem mesa" em destaque, é esperado não haver mesas: a tabela abaixo basta
-				item?.codigo !== "nao_alocados" && (
-					<div className="bg-white rounded-2xl shadow p-8 text-center text-gray-500">
-						Nenhuma mesa com candidatos que atendam aos filtros.
-					</div>
-				)
-			) : (
-				Object.entries(porHorario).map(([hor, ms]) => (
-					<section key={hor} aria-label={`Mesas de ${hor}`}>
-						<h2 className="text-lg font-bold text-gray-900 capitalize mb-3">{hor}</h2>
-						<div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-							{ms.map((mesa) => (
-								<div key={mesa.id} data-testid="mesa" className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-									<div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-3 flex items-center justify-between">
-										<div className="flex items-center space-x-2">
-											<TableCellsIcon className="w-5 h-5" />
-											<span className="font-bold capitalize">{mesa.descricao}</span>
+			{mesasVisiveis.length === 0 && (filtrando || horario)
+				? // com "sem mesa" em destaque, é esperado não haver mesas: a tabela abaixo basta
+				  item?.codigo !== "nao_alocados" && (
+						<EstadoVazio titulo="Nenhuma mesa com candidatos que atendam aos filtros." descricao="Mude a busca ou limpe os filtros." />
+				  )
+				: Object.entries(porHorario).map(([hor, ms]) => (
+						<section key={hor} aria-label={`Mesas de ${hor}`} className="space-y-3">
+							<div className="flex items-center gap-2">
+								<h2 className="text-base font-semibold capitalize">{hor}</h2>
+								<Selo>{qtd(ms.length, "mesa", "mesas")}</Selo>
+							</div>
+							<div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+								{ms.map((mesa) => (
+									<div key={mesa.id} data-testid="mesa" className="painel overflow-hidden">
+										<div className="flex items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--bg-subtle)] px-4 py-2.5">
+											<span data-testid="nome-mesa" className="truncate text-sm font-semibold capitalize">
+												{mesa.descricao}
+											</span>
+											<Selo>
+												{mesa.candidatos.length} candidato{mesa.candidatos.length !== 1 ? "s" : ""}
+											</Selo>
 										</div>
-										<span className="bg-white/20 px-3 py-0.5 rounded-full text-sm font-semibold">
-											{mesa.candidatos.length} candidato{mesa.candidatos.length !== 1 ? "s" : ""}
-										</span>
+										<div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+											<div>
+												<div className="rotulo-caps mb-1.5">Candidatos</div>
+												<ul className="space-y-0.5" data-testid="candidatos">
+													{mesa.candidatos.map((c) => (
+														<li key={c.id}>
+															<button
+																type="button"
+																data-destacado={filtrando && bate(c) ? true : undefined}
+																onClick={() => setSelecao({ tipo: "candidato", pessoa: c, mesa })}
+																className={cn(
+																	"flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left text-sm",
+																	classeCandidato(c)
+																)}
+															>
+																<span className="truncate">{c.nome}</span>
+																{c.opcao > 1 && (
+																	<Selo tom="atencao" className="px-1.5 text-[10px]">
+																		{c.opcao}ª opção
+																	</Selo>
+																)}
+																{c.conflitos.length > 0 && (
+																	<ExclamationTriangleIcon
+																		className="h-4 w-4 flex-shrink-0 text-[var(--warning)]"
+																		aria-label="avaliador prefiro não na mesa"
+																	/>
+																)}
+															</button>
+														</li>
+													))}
+												</ul>
+											</div>
+											<div>
+												<div className="rotulo-caps mb-1.5">Avaliadores</div>
+												<ul className="space-y-0.5" data-testid="avaliadores">
+													{mesa.avaliadores.map((a) => (
+														<li key={a.id}>
+															<button
+																type="button"
+																data-destacado={bateAvaliador(a) ? true : undefined}
+																onClick={() => setSelecao({ tipo: "avaliador", pessoa: a })}
+																className={cn(
+																	"w-full rounded-md px-1.5 py-0.5 text-left text-sm",
+																	bateAvaliador(a) ? DESTACADO : "hover:bg-[var(--bg-hover)]"
+																)}
+															>
+																{a.nome} <span className="font-mono text-[11px] text-[var(--text-light)]">{a.sigla}</span>
+															</button>
+														</li>
+													))}
+												</ul>
+											</div>
+										</div>
 									</div>
-									<div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
-										<div>
-											<Titulo icone={<UserGroupIcon className="w-4 h-4 text-blue-500" />} texto="Candidatos" />
-											<ul className="space-y-1" data-testid="candidatos">
-												{mesa.candidatos.map((c) => (
-													<li key={c.id}>
-														<button
-															type="button"
-															onClick={() => setSelecao({ tipo: "candidato", pessoa: c, mesa })}
-															className={`w-full text-left text-sm text-gray-700 rounded-md px-1.5 py-0.5 flex items-center gap-1.5 ${classeCandidato(c)}`}
-														>
-															<span className="truncate">{c.nome}</span>
-															{c.opcao > 1 && (
-																<span className="text-[10px] font-semibold text-amber-800 bg-amber-100 px-1.5 rounded-full whitespace-nowrap">
-																	{c.opcao}ª opção
-																</span>
-															)}
-															{c.conflitos.length > 0 && (
-																<ExclamationTriangleIcon className="w-4 h-4 text-amber-500 flex-shrink-0" aria-label="avaliador prefiro não na mesa" />
-															)}
-														</button>
-													</li>
-												))}
-											</ul>
-										</div>
-										<div>
-											<Titulo icone={<CheckCircleIcon className="w-4 h-4 text-green-500" />} texto="Avaliadores" />
-											<ul className="space-y-1" data-testid="avaliadores">
-												{mesa.avaliadores.map((a) => (
-													<li key={a.id}>
-														<button
-															type="button"
-															onClick={() => setSelecao({ tipo: "avaliador", pessoa: a })}
-															className={`w-full text-left text-sm text-gray-700 rounded-md px-1.5 py-0.5 ${
-																bateAvaliador(a) ? "bg-yellow-100 ring-1 ring-yellow-300 font-semibold" : "hover:bg-green-50"
-															}`}
-														>
-															{a.nome} <span className="text-gray-400 text-xs">{a.sigla}</span>
-														</button>
-													</li>
-												))}
-											</ul>
-										</div>
-									</div>
-								</div>
-							))}
-						</div>
-					</section>
-				))
-			)}
+								))}
+							</div>
+						</section>
+				  ))}
 
 			{/* ── Não alocados ───────────────────────────────────────────── */}
 			{naoAlocados.length > 0 && !horario && (
-				<section className="bg-white rounded-2xl shadow-lg border border-red-200 overflow-hidden" aria-label="Candidatos não alocados">
-					<div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-4 flex items-center justify-between">
-						<div className="flex items-center space-x-3">
-							<ExclamationTriangleIcon className="w-5 h-5" />
-							<span className="font-bold text-lg">Candidatos Não Alocados</span>
-						</div>
-						<span className="bg-white/20 px-3 py-1 rounded-full text-sm font-semibold">
+				<Secao
+					rotulo="Candidatos não alocados"
+					titulo="Candidatos Não Alocados"
+					subtitulo="Não couberam em nenhum dos horários que escolheram."
+					acoes={
+						<Selo tom="perigo">
 							{naoAlocados.length} candidato{naoAlocados.length !== 1 ? "s" : ""}
-						</span>
-					</div>
-					<div className="overflow-x-auto">
+						</Selo>
+					}
+					className="border-[rgba(212,32,32,0.25)]"
+				>
+					<div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--line)]">
 						<table className="w-full text-sm">
-							<thead className="bg-red-50 text-red-800">
+							<thead className="bg-[var(--bg-subtle)] text-left">
 								<tr>
-									<th className="text-left px-6 py-3 font-semibold">Nome</th>
-									<th className="text-left px-6 py-3 font-semibold">Curso</th>
-									<th className="text-left px-6 py-3 font-semibold">Semestre</th>
-									<th className="text-left px-6 py-3 font-semibold">Horários que escolheu</th>
+									<th className="rotulo-caps px-4 py-2">Nome</th>
+									<th className="rotulo-caps px-4 py-2">Curso</th>
+									<th className="rotulo-caps px-4 py-2">Semestre</th>
+									<th className="rotulo-caps px-4 py-2">Horários que escolheu</th>
 								</tr>
 							</thead>
-							<tbody className="divide-y divide-red-100">
+							<tbody className="divide-y divide-[var(--line)]">
 								{naoAlocados.map((c) => (
-									<tr key={c.id} className={filtrando && !bate(c) ? "opacity-40" : filtrando ? "bg-yellow-50" : ""}>
-										<td className="px-6 py-3">
+									<tr
+										key={c.id}
+										data-destacado={filtrando && bate(c) ? true : undefined}
+										className={filtrando && !bate(c) ? "opacity-40" : filtrando ? "bg-[var(--warning-soft)]" : ""}
+									>
+										<td className="px-4 py-2.5">
 											<button
 												type="button"
 												onClick={() => setSelecao({ tipo: "candidato", pessoa: c })}
-												className="font-medium text-gray-900 hover:text-blue-700 hover:underline text-left"
+												className="text-left font-medium hover:text-[var(--accent)] hover:underline"
 											>
 												{c.nome}
 											</button>
 										</td>
-										<td className="px-6 py-3 text-gray-600">{c.curso}</td>
-										<td className="px-6 py-3 text-gray-600">{c.semestre ? `${c.semestre}º` : ""}</td>
-										<td className="px-6 py-3 text-gray-600">{c.opcoes.join(" · ")}</td>
+										<td className="px-4 py-2.5 text-[var(--text-muted)]">{c.curso}</td>
+										<td className="px-4 py-2.5 text-[var(--text-muted)]">{c.semestre ? `${c.semestre}º` : ""}</td>
+										<td className="px-4 py-2.5 capitalize text-[var(--text-muted)]">{c.opcoes.join(" · ")}</td>
 									</tr>
 								))}
 							</tbody>
 						</table>
 					</div>
-				</section>
+				</Secao>
 			)}
 
 			<Detalhes selecao={selecao} mesas={mesas} onFechar={() => setSelecao(null)} />
-		</div>
-	);
-}
-
-function Numero({ valor, rotulo, dica }: { valor: number; rotulo: string; dica?: string }) {
-	return (
-		<div className="bg-white rounded-xl shadow p-4" title={dica}>
-			<div className="text-2xl font-bold text-gray-900">{valor}</div>
-			<div className="text-xs font-semibold text-gray-500">
-				{rotulo}
-				{dica && <span className="ml-1 text-blue-500 cursor-help">(?)</span>}
-			</div>
 		</div>
 	);
 }
@@ -333,12 +333,8 @@ function Filtro({
 }) {
 	return (
 		<label className="block">
-			<span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{rotulo}</span>
-			<select
-				value={valor}
-				onChange={(e) => onChange(e.target.value)}
-				className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 bg-white capitalize focus:outline-none focus:ring-2 focus:ring-blue-300"
-			>
+			<span className="rotulo-caps block">{rotulo}</span>
+			<select value={valor} onChange={(e) => onChange(e.target.value)} className="campo mt-1 capitalize">
 				<option value="">Todos</option>
 				{opcoes.map((o) => (
 					<option key={o} value={o}>
@@ -350,15 +346,6 @@ function Filtro({
 	);
 }
 
-function Titulo({ icone, texto }: { icone: React.ReactNode; texto: string }) {
-	return (
-		<div className="flex items-center space-x-2 mb-2">
-			{icone}
-			<span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{texto}</span>
-		</div>
-	);
-}
-
 // Painel lateral com os dados de quem foi clicado.
 function Detalhes({ selecao, mesas, onFechar }: { selecao: Selecao; mesas: MesaResult[]; onFechar: () => void }) {
 	if (!selecao) return null;
@@ -367,21 +354,24 @@ function Detalhes({ selecao, mesas, onFechar }: { selecao: Selecao; mesas: MesaR
 		<aside
 			role="dialog"
 			aria-label={`Detalhes de ${pessoa.nome}`}
-			className="fixed top-4 right-4 bottom-4 z-40 w-[min(380px,calc(100vw-2rem))] bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 overflow-y-auto"
+			className="painel fixed bottom-4 right-4 top-4 z-50 w-[min(380px,calc(100vw-2rem))] overflow-y-auto p-6 shadow-[var(--shadow-lg)]"
 		>
-			<div className="flex items-start justify-between gap-3">
+			<div className="flex items-start justify-between gap-3 border-b border-[var(--line)] pb-4">
 				<div>
-					<div className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-						{tipo === "candidato" ? "Candidato" : "Avaliador"}
-					</div>
-					<h3 className="text-xl font-bold text-gray-900">{pessoa.nome}</h3>
+					<div className="rotulo-caps">{tipo === "candidato" ? "Candidato" : "Avaliador"}</div>
+					<h3 className="mt-1 text-xl font-semibold">{pessoa.nome}</h3>
 				</div>
-				<button type="button" onClick={onFechar} aria-label="Fechar detalhes" className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
-					<XMarkIcon className="w-5 h-5" />
+				<button
+					type="button"
+					onClick={onFechar}
+					aria-label="Fechar detalhes"
+					className="rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-hover)]"
+				>
+					<XMarkIcon className="h-5 w-5" />
 				</button>
 			</div>
 
-			<div className="mt-5 space-y-5 text-sm text-gray-700">
+			<div className="mt-5 space-y-5 text-sm">
 				{tipo === "candidato" ? (
 					<DetalhesCandidato c={selecao.pessoa} mesa={selecao.mesa} />
 				) : (
@@ -395,14 +385,21 @@ function Detalhes({ selecao, mesas, onFechar }: { selecao: Selecao; mesas: MesaR
 function DetalhesCandidato({ c, mesa }: { c: CandidatoResultado; mesa?: MesaResult }) {
 	return (
 		<>
-			<div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-xl p-3">
+			<div className="grid grid-cols-2 gap-3 rounded-[var(--radius-lg)] bg-[var(--bg-subtle)] p-3">
 				<Campo rotulo="Curso" valor={c.curso} />
 				<Campo rotulo="Semestre" valor={c.semestre ? `${c.semestre}º` : ""} />
 				<div className="col-span-2">
 					<Campo rotulo="Email" valor={c.email_insper} />
 				</div>
 			</div>
-			<div className={`rounded-xl p-3 ${mesa ? "bg-blue-50 text-blue-900" : "bg-red-50 text-red-900"}`}>
+			<div
+				className={cn(
+					"rounded-[var(--radius-lg)] border p-3",
+					mesa
+						? "border-[rgba(94,106,210,0.2)] bg-[var(--accent-soft)] text-[#3b449a]"
+						: "border-[rgba(212,32,32,0.2)] bg-[var(--danger-soft)] text-[#a51818]"
+				)}
+			>
 				{mesa ? (
 					<>
 						Alocado em <b className="capitalize">{mesa.descricao}</b>, a sua <b>{c.opcao}ª opção</b>.
@@ -411,22 +408,25 @@ function DetalhesCandidato({ c, mesa }: { c: CandidatoResultado; mesa?: MesaResu
 					<>Sem mesa: não coube em nenhum dos horários que escolheu.</>
 				)}
 			</div>
-			<div>
-				<div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Horários que escolheu</div>
+			<Bloco rotulo="Horários que escolheu">
 				{c.opcoes.length ? (
 					<ol className="space-y-1">
-						{c.opcoes.map((o, i) => (
-							<li key={i} className={`capitalize ${mesa && i + 1 === c.opcao ? "font-bold text-blue-700" : ""}`}>
-								{i + 1}. {o} {mesa && i + 1 === c.opcao && <span className="normal-case">← alocado</span>}
-							</li>
-						))}
+						{c.opcoes.map((o, i) => {
+							const alocado = mesa && i + 1 === c.opcao;
+							return (
+								<li key={i} className={cn("capitalize", alocado ? "font-semibold text-[var(--accent)]" : "text-[var(--text-muted)]")}>
+									<span className="text-[var(--text-light)]">{i + 1}.</span> {o}{" "}
+									{alocado && <span className="normal-case">← alocado</span>}
+								</li>
+							);
+						})}
 					</ol>
 				) : (
-					<p className="text-gray-500">Nenhum horário informado.</p>
+					<p className="text-[var(--text-muted)]">Nenhum horário informado.</p>
 				)}
-			</div>
+			</Bloco>
 			{c.conflitos.length > 0 && (
-				<div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
+				<div className="rounded-[var(--radius-lg)] border border-[rgba(245,166,35,0.3)] bg-[var(--warning-soft)] p-3 text-[#8a5a12]">
 					Ficou na mesa de <b>{c.conflitos.join(", ")}</b>, que marcou "prefiro não" para ele.
 				</div>
 			)}
@@ -439,44 +439,49 @@ function DetalhesCandidato({ c, mesa }: { c: CandidatoResultado; mesa?: MesaResu
 function DetalhesAvaliador({ a, mesas }: { a: AvaliadorResultado; mesas: MesaResult[] }) {
 	return (
 		<>
-			<div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-xl p-3">
+			<div className="grid grid-cols-2 gap-3 rounded-[var(--radius-lg)] bg-[var(--bg-subtle)] p-3">
 				<Campo rotulo="Sigla" valor={a.sigla} />
 				<div className="col-span-2">
 					<Campo rotulo="Email" valor={a.email} />
 				</div>
 			</div>
-			<div>
-				<div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Mesas ({mesas.length})</div>
+			<Bloco rotulo={`Mesas (${mesas.length})`}>
 				<ul className="space-y-1">
 					{mesas.map((m) => (
-						<li key={m.id} className="capitalize">
+						<li key={m.id} className="capitalize text-[var(--text-muted)]">
 							{m.descricao}
 						</li>
 					))}
 				</ul>
-			</div>
+			</Bloco>
 			<Lista rotulo="Não pode avaliar" nomes={a.nao_posso} />
 			<Lista rotulo="Prefere não avaliar" nomes={a.prefiro_nao} />
 		</>
 	);
 }
 
+function Bloco({ rotulo, children }: { rotulo: string; children: ReactNode }) {
+	return (
+		<div>
+			<div className="rotulo-caps mb-1.5">{rotulo}</div>
+			{children}
+		</div>
+	);
+}
+
 function Campo({ rotulo, valor }: { rotulo: string; valor: string }) {
 	return (
 		<div className="break-words">
-			<span className="block text-xs text-gray-500">{rotulo}</span>
-			<b>{valor || "—"}</b>
+			<span className="block text-xs text-[var(--text-muted)]">{rotulo}</span>
+			<span className="font-medium">{valor || "—"}</span>
 		</div>
 	);
 }
 
 function Lista({ rotulo, nomes }: { rotulo: string; nomes: string[] }) {
 	return (
-		<div>
-			<div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
-				{rotulo} ({nomes.length})
-			</div>
-			{nomes.length ? <p>{nomes.join(", ")}</p> : <p className="text-gray-400">ninguém</p>}
-		</div>
+		<Bloco rotulo={`${rotulo} (${nomes.length})`}>
+			{nomes.length ? <p>{nomes.join(", ")}</p> : <p className="text-[var(--text-light)]">ninguém</p>}
+		</Bloco>
 	);
 }

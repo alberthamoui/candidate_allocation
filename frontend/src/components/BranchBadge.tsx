@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getVersao, VersaoInfo } from "../api";
 
-// Selo no canto da tela com a branch e o commit que o servidor está rodando.
+// Selo (no topo da tela) com a branch e o commit que o servidor está rodando.
 export function BranchBadge() {
 	const [versao, setVersao] = useState<VersaoInfo | null>(null);
 
@@ -19,10 +19,11 @@ export function BranchBadge() {
 	return (
 		<div
 			title={avisos.length ? avisos.join("\n") : "Branch e commit do servidor"}
-			className={`fixed bottom-3 right-3 z-50 flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-xs shadow-sm ${
+			data-testid="selo-versao"
+			className={`hidden sm:flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[11px] ${
 				versao.desatualizado
 					? "border-red-300 bg-red-50 text-red-700"
-					: "border-gray-200 bg-white/90 text-gray-600"
+					: "border-[var(--line)] bg-[var(--bg-subtle)] text-[var(--text-muted)]"
 			}`}
 		>
 			<span className="font-semibold">{versao.branch || "sem branch"}</span>
