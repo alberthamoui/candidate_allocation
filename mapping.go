@@ -27,16 +27,25 @@ func (s *Session) lerCabecalho(aba int) ([]string, error) {
 	return rows[0], nil
 }
 
+// OPCOES_AUTOMATICO pede a SuggestMapping que conte as colunas de opção de
+// horário pelo cabeçalho.
+const OPCOES_AUTOMATICO = -1
+
 // SuggestMapping guarda o Excel na sessão, lê o cabeçalho da primeira aba e
 // sugere o mapeamento entre colunas e campos de Usuario pelo nome das colunas.
 func (s *Session) SuggestMapping(data []byte, quantidade_opcoes int, emailDomain string) ([]MappingItem, error) {
 	s.excelData = data
-	s.nOpcoes = quantidade_opcoes
 	s.emailDomain = emailDomain
 	header, err := s.lerCabecalho(0)
 	if err != nil {
 		return nil, err
 	}
+	if quantidade_opcoes == OPCOES_AUTOMATICO {
+		if quantidade_opcoes = contarOpcoes(header); quantidade_opcoes == 0 {
+			return nil, fmt.Errorf(`não encontrei as colunas de opção de horário na aba de candidatos (nomes como "Opção 1" ou "Primeira Opção"); renomeie as colunas ou escolha "Eu defino" nos horários`)
+		}
+	}
+	s.nOpcoes = quantidade_opcoes
 	return sugerirMapeamento(header, getUsuarioFields(quantidade_opcoes)), nil
 }
 

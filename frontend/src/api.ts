@@ -178,17 +178,16 @@ function paramsQuery(p: ParametrosAlocacao | null): string {
 // =================== ENDPOINTS ====================
 // ==================================================
 
-// Etapa 1: upload do arquivo + criação de sessão. Com horarios, os
-// candidatos não escolhem horário: todos podem ir em qualquer um deles.
+// Etapa 1: upload do arquivo + criação de sessão. O servidor conta as
+// colunas de opção de horário pelo cabeçalho. Com horarios, os candidatos
+// não escolhem horário: todos podem ir em qualquer um deles.
 export async function upload(
   file: File,
-  nOpcoes: number,
   emailDomain: string,
   horarios?: string[]
 ): Promise<MappingItem[]> {
   const form = new FormData();
   form.append('file', file);
-  form.append('nOpcoes', String(nOpcoes));
   form.append('emailDomain', emailDomain);
   if (horarios) {
     form.append('semPreferencia', '1');

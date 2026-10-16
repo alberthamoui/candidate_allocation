@@ -232,3 +232,32 @@ func contem(lista []string, s string) bool {
 	}
 	return false
 }
+
+// Sem nOpcoes, o upload conta as colunas de opção pelo cabeçalho.
+func TestUploadContaOpcoes(t *testing.T) {
+	router := novoRouter(NewSessionStore())
+	com3, err := createMockExcelFile([][]interface{}{
+		{"Nome", "Primeira Opção", "Segunda Opção", "Terceira Opção", "Observações"},
+		{"Ana", "segunda 8-10", "", "", "nada"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := uploadComCampos(t, router, com3.Bytes(), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, corpo %s", rec.Code, rec.Body.String())
+	}
+	corpo := rec.Body.String()
+	if !strings.Contains(corpo, `"opcao 3"`) || strings.Contains(corpo, `"opcao 4"`) {
+		t.Errorf("esperado opcao 1 a 3: %s", corpo)
+	}
+
+	semOpcoes, err := createMockExcelFile([][]interface{}{{"Nome", "Observações"}, {"Ana", "nada"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = uploadComCampos(t, router, semOpcoes.Bytes(), nil)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "colunas de opção") {
+		t.Errorf("sem colunas de opção: status %d, corpo %s", rec.Code, rec.Body.String())
+	}
+}

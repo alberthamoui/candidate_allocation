@@ -61,7 +61,7 @@ O arquivo `.xlsx` deve ter exatamente **3 abas**, nesta ordem. Um arquivo de exe
 
 ### Aba 1 — Candidatos
 
-Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos — o app sugere o mapeamento pelo nome de cada coluna (ignorando maiúsculas, acentos e pontuação, e entendendo variações como "Primeira Opção" ou "E-mail institucional"), ajustável na interface. Campos sem correspondência pelo nome recebem as colunas que sobraram, na ordem da planilha.
+Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos — o app sugere o mapeamento pelo nome de cada coluna (ignorando maiúsculas, acentos e pontuação, e entendendo variações como "Primeira Opção" ou "E-mail institucional"), ajustável na interface. Campos sem correspondência pelo nome recebem as colunas que sobraram, na ordem da planilha, exceto as opções de horário: uma opção só é ligada a uma coluna com nome de opção, nunca a uma que sobrou.
 
 | Campo | Descrição | Validação |
 |---|---|---|
@@ -73,12 +73,12 @@ Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos
 | Curso | Nome do curso | — |
 | Email Institucional | Email institucional do candidato | Deve terminar com o domínio configurado (ex: `@al.insper.edu.br`) |
 | Email Pessoal | Email pessoal | Qualquer email válido |
-| Opção 1 … Opção N | Horários disponíveis em ordem de preferência | Uma coluna por opção (só no modo "Candidatos escolhem") |
+| Opção 1 … Opção N | Horários disponíveis em ordem de preferência | Uma coluna por opção, até 10 (só no modo "Candidatos escolhem"). O nome precisa ter "opção", "horário", "disponibilidade" ou "preferência" e o número, que pode vir por extenso: `Opção 1`, `Primeira Opção`, `Horário 2` |
 
 Antes do upload, a tela inicial pede:
 
 - **Horários**, com dois modos:
-  - **Candidatos escolhem** (padrão): a planilha tem as colunas de opção e informa-se o **número de opções** (N). A primeira opção tem maior prioridade no algoritmo.
+  - **Candidatos escolhem** (padrão): a planilha tem as colunas de opção, e o app conta quantas são pelo cabeçalho (N é a maior opção encontrada; se faltar uma no meio, ela fica vazia). A primeira opção tem maior prioridade no algoritmo. Sem nenhuma coluna de opção, o upload avisa e pede para renomear as colunas ou usar "Eu defino".
   - **Eu defino**: quem organiza digita os horários das mesas (um por linha). Todo candidato pode ir em qualquer um deles, e só as restrições dos avaliadores e os critérios adicionais pesam. Colunas de opção na planilha, se houver, são ignoradas; as outras abas não mudam.
 - **Domínio do email institucional**: sufixo que todos os emails institucionais devem ter (ex: `@al.insper.edu.br`).
 
