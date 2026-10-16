@@ -142,7 +142,12 @@ export default function Parametros() {
 					)}
 
 					{valores && (
-						<EditorCriterios criterios={criterios} onChange={setCriterios} valoresColunas={previa?.valores_colunas ?? {}} />
+						<EditorCriterios
+							criterios={criterios}
+							onChange={setCriterios}
+							valoresColunas={previa?.valores_colunas ?? {}}
+							semPreferencia={previa?.sem_preferencia}
+						/>
 					)}
 				</div>
 
@@ -188,7 +193,7 @@ export default function Parametros() {
 										testId="previa-cabem"
 										rotulo="Cabem no máximo"
 										valor={previa.max_alocaveis}
-										detalhe="pelos horários escolhidos"
+										detalhe={previa.sem_preferencia ? "nos horários definidos" : "pelos horários escolhidos"}
 										tom={todosCabem ? "sucesso" : "atencao"}
 									/>
 								</div>
@@ -203,7 +208,9 @@ export default function Parametros() {
 									</div>
 								) : (
 									<Aviso tom="sucesso" icone={<CheckCircleIcon className="h-4 w-4" />}>
-										Há mesas e vagas para todos os candidatos nos horários que escolheram.
+										{previa.sem_preferencia
+											? "Há mesas e vagas para todos os candidatos nos horários definidos."
+											: "Há mesas e vagas para todos os candidatos nos horários que escolheram."}
 									</Aviso>
 								)}
 
@@ -212,10 +219,15 @@ export default function Parametros() {
 										<thead className="bg-[var(--bg-subtle)] text-left">
 											<tr>
 												<th className="rotulo-caps px-3 py-2">Horário</th>
-												<th className="rotulo-caps px-3 py-2 text-right">1ª opção</th>
-												<th className="rotulo-caps px-3 py-2 text-right" title="Escolheram em qualquer opção">
-													Escolheram
-												</th>
+												{/* sem preferência, todos podem ir em qualquer horário */}
+												{!previa.sem_preferencia && (
+													<>
+														<th className="rotulo-caps px-3 py-2 text-right">1ª opção</th>
+														<th className="rotulo-caps px-3 py-2 text-right" title="Escolheram em qualquer opção">
+															Escolheram
+														</th>
+													</>
+												)}
 												<th className="rotulo-caps px-3 py-2 text-right">Vagas</th>
 											</tr>
 										</thead>
@@ -225,16 +237,20 @@ export default function Parametros() {
 												return (
 													<tr key={h.descricao} className="hover:bg-[var(--bg-subtle)]">
 														<td className="px-3 py-2 capitalize">{h.descricao}</td>
-														<td
-															className={cn(
-																"px-3 py-2 text-right tabular-nums",
-																lotado ? "font-semibold text-[var(--warning)]" : "text-[var(--text-muted)]"
-															)}
-															title={lotado ? "Mais gente quer este horário como 1ª opção do que há vagas" : undefined}
-														>
-															{h.primeira_opcao}
-														</td>
-														<td className="px-3 py-2 text-right tabular-nums text-[var(--text-muted)]">{h.interessados}</td>
+														{!previa.sem_preferencia && (
+															<>
+																<td
+																	className={cn(
+																		"px-3 py-2 text-right tabular-nums",
+																		lotado ? "font-semibold text-[var(--warning)]" : "text-[var(--text-muted)]"
+																	)}
+																	title={lotado ? "Mais gente quer este horário como 1ª opção do que há vagas" : undefined}
+																>
+																	{h.primeira_opcao}
+																</td>
+																<td className="px-3 py-2 text-right tabular-nums text-[var(--text-muted)]">{h.interessados}</td>
+															</>
+														)}
 														<td className="px-3 py-2 text-right tabular-nums text-[var(--text-muted)]">
 															{previa.capacidade_por_horario}
 														</td>

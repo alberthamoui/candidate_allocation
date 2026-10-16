@@ -146,6 +146,9 @@ type ParametrosAlocacao struct {
 	AvaliadoresPorMesa int `json:"avaliadores_por_mesa"`
 	// Criterios são regras opcionais sobre curso/semestre (criterios.go).
 	Criterios []CriterioAlocacao `json:"criterios"`
+	// semPreferencia vem da sessão, não da tela: qualquer horário escolhido
+	// tem o mesmo custo (preferencia.go).
+	semPreferencia bool
 }
 
 func parametrosAlocacaoPadrao() ParametrosAlocacao {
@@ -257,7 +260,11 @@ func montarProblema(param ParametrosAlocacao, horarios map[int]*Horario, avals [
 			if p.custoPref[c*p.nSlot+s] >= 0 {
 				continue // horário repetido: vale a melhor opção
 			}
-			p.custoPref[c*p.nSlot+s] = -pontosOpcao(nivel)
+			if param.semPreferencia {
+				p.custoPref[c*p.nSlot+s] = 0 // qualquer horário serve igual
+			} else {
+				p.custoPref[c*p.nSlot+s] = -pontosOpcao(nivel)
+			}
 			p.prefs[c] = append(p.prefs[c], s)
 		}
 	}
@@ -908,7 +915,7 @@ esperar:
 
 	aloc, mesas := p.montarMesas(melhor)
 	res := ResultadoAlocacao{Alocacao: aloc, Alocados: len(aloc)}
-	score, penalidades, _ := pontuarResultado(res, mesas, prefs, hard, soft)
+	score, penalidades, _ := pontuarResultado(res, mesas, prefs, hard, soft, param.semPreferencia)
 	if len(p.criterios) > 0 {
 		penalidades["criterios"] = p.penalidadeCriterios(melhor)
 		score -= penalidades["criterios"]

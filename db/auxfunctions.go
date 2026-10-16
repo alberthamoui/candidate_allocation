@@ -34,12 +34,17 @@ func AddHorario(db Executor, opcao string) (int64, error) {
 	return existing, err
 }
 
-// AddPessoa insere um novo registro em pessoa
+// AddPessoa insere um novo registro em pessoa. CPF vazio é gravado como NULL,
+// para vários candidatos sem CPF não esbarrarem no UNIQUE.
 func AddPessoa(db Executor, nome, cpf, numero, emailInsper, emailPessoal string, semestre int, curso string) (int64, error) {
+	var cpfOuNulo any
+	if cpf = strings.TrimSpace(cpf); cpf != "" {
+		cpfOuNulo = cpf
+	}
 	res, err := db.Exec(`
         INSERT INTO pessoa (nome,cpf, numero, email_insper, email_pessoal,  semestre, curso)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, nome, cpf, numero, emailInsper, emailPessoal, semestre, curso)
+    `, nome, cpfOuNulo, numero, emailInsper, emailPessoal, semestre, curso)
 	if err != nil {
 		return 0, err
 	}

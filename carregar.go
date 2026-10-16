@@ -18,12 +18,14 @@ type dadosAlocacao struct {
 	avals      []*Avaliador
 	hard, soft map[int]map[int]bool      // avaliador_id → candidato_id → restrição
 	atributos  map[int]map[string]string // pessoa_id → coluna (curso, semestre) → valor
+	// semPreferencia: a ordem de prefs não vale nada (preferencia.go)
+	semPreferencia bool
 }
 
 // carregarDados lê do banco da sessão os dados da alocação. Um erro aqui
 // falha só a requisição desta sessão, nunca o servidor.
 func (s *Session) carregarDados() (dadosAlocacao, error) {
-	var d dadosAlocacao
+	d := dadosAlocacao{semPreferencia: s.semPreferencia()}
 	var err error
 	if d.horarios, err = carregarHorarios(s.db); err != nil {
 		return d, fmt.Errorf("carregando horários: %w", err)

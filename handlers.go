@@ -65,7 +65,17 @@ func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	nOpcoes := 5
-	if v := r.FormValue("nOpcoes"); v != "" {
+	// modo sem preferência: os horários vêm digitados e a planilha não
+	// precisa de colunas de opção (se tiver, são ignoradas)
+	var horariosLivres []string
+	if r.FormValue("semPreferencia") == "1" {
+		h, err := lerHorariosLivres(r.FormValue("horarios"))
+		if err != nil {
+			writeError(w, 400, "horários inválidos: "+err.Error())
+			return
+		}
+		horariosLivres, nOpcoes = h, 0
+	} else if v := r.FormValue("nOpcoes"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 10 {
 			writeError(w, 400, fmt.Sprintf("número de opções inválido: %q (esperado de 1 a 10)", v))
@@ -87,6 +97,7 @@ func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) 
 		writeError(w, 500, "erro ao criar a sessão: "+err.Error())
 		return
 	}
+	sess.horariosLivres = horariosLivres
 	mapping, err := sess.SuggestMapping(data, nOpcoes, emailDomain)
 	if err != nil {
 		store.Delete(id)

@@ -124,7 +124,11 @@ func montarResultado(d dadosAlocacao, cands []candidatoDB, res ResultadoAlocacao
 			Conflitos:  []string{},
 		}
 		m := mesaDe[c.ID]
-		for i, hid := range d.prefs[c.ID] {
+		opcoes := d.prefs[c.ID]
+		if d.semPreferencia {
+			opcoes = nil // não escolheu horário: não há opções para mostrar
+		}
+		for i, hid := range opcoes {
 			if h := d.horarios[hid]; h != nil {
 				r.Opcoes = append(r.Opcoes, h.Descricao)
 			}
@@ -207,6 +211,7 @@ func montarResultado(d dadosAlocacao, cands []candidatoDB, res ResultadoAlocacao
 
 	resultado.TotalAlocados = res.Alocados
 	resultado.Pontuacao = res.Pontuacao
+	resultado.SemPreferencia = d.semPreferencia
 	resultado.Qualidade = relatorioQualidade(resultado, criterios)
 	return resultado
 }
@@ -229,6 +234,9 @@ func relatorioQualidade(r AlocacaoResponse, criterios []CriterioAlocacao) []Item
 	}
 
 	var itens []ItemQualidade
+	if r.SemPreferencia {
+		maiorOpcao = 0 // sem opções de horário, não há "Na 1ª opção"
+	}
 	for k := 1; k <= maiorOpcao; k++ {
 		ids := porOpcao[k]
 		if k > 1 && len(ids) == 0 {
@@ -276,10 +284,14 @@ func relatorioQualidade(r AlocacaoResponse, criterios []CriterioAlocacao) []Item
 		itens = append(itens, itemCriterio(r, i, c))
 	}
 
+	descricaoSemMesa := "Candidatos que não couberam em nenhuma mesa dos horários que escolheram."
+	if r.SemPreferencia {
+		descricaoSemMesa = "Candidatos que não couberam em nenhuma mesa."
+	}
 	itens = append(itens, ItemQualidade{
 		Codigo:     "nao_alocados",
 		Titulo:     "Sem mesa",
-		Descricao:  "Candidatos que não couberam em nenhuma mesa dos horários que escolheram.",
+		Descricao:  descricaoSemMesa,
 		Valor:      len(semMesa),
 		Tom:        tomSemMesa,
 		Candidatos: nuncaNil(semMesa),
