@@ -1,5 +1,6 @@
 import { PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { CriterioAlocacao, TipoCriterio, ValorColuna } from "../api";
+import { BotaoSecundario, cn, Secao, Selo } from "./ui";
 
 const MAX_CRITERIOS = 5;
 
@@ -53,132 +54,137 @@ export default function EditorCriterios({
 		onChange(criterios.map((c, j) => (j === i ? { ...c, ...mudanca } : c)));
 
 	return (
-		<section aria-label="Critérios adicionais" className="space-y-3">
-			<div>
-				<h2 className="text-lg font-bold text-gray-800">Critérios adicionais <span className="text-sm font-normal text-gray-400">(opcional)</span></h2>
-				<p className="text-sm text-gray-500">
-					Regras sobre curso ou semestre. Elas pesam junto com as preferências de horário: com importância alta, a
-					alocação pode colocar alguém numa opção de horário pior para cumprir a regra.
-				</p>
-			</div>
-
-			{criterios.map((c, i) => {
-				const def = TIPOS.find((t) => t.tipo === c.tipo)!;
-				const valores = valoresColunas[c.coluna] ?? [];
-				return (
-					<div key={i} data-testid="criterio" className="border border-purple-200 bg-purple-50/40 rounded-xl p-4 space-y-3">
-						<div className="flex flex-wrap items-end gap-3">
-							<label className="block">
-								<span className="text-xs font-semibold text-gray-600">Regra</span>
-								<select
-									value={c.tipo}
-									onChange={(e) => alterar(i, { tipo: e.target.value as TipoCriterio })}
-									className="mt-1 block border border-gray-300 rounded-lg px-2 py-1.5 bg-white"
-								>
-									{TIPOS.map((t) => (
-										<option key={t.tipo} value={t.tipo}>
-											{t.nome}
-										</option>
-									))}
-								</select>
-							</label>
-							<label className="block">
-								<span className="text-xs font-semibold text-gray-600">Coluna</span>
-								<select
-									value={c.coluna}
-									onChange={(e) => alterar(i, { coluna: e.target.value as CriterioAlocacao["coluna"], valores: [] })}
-									className="mt-1 block border border-gray-300 rounded-lg px-2 py-1.5 bg-white"
-								>
-									{COLUNAS.map((x) => (
-										<option key={x.coluna} value={x.coluna}>
-											{x.nome}
-										</option>
-									))}
-								</select>
-							</label>
-							{def.usaLimite && (
+		<Secao
+			rotulo="Critérios adicionais"
+			titulo={
+				<>
+					Critérios adicionais <Selo className="ml-1 align-middle">opcional</Selo>
+				</>
+			}
+			subtitulo="Regras sobre curso ou semestre. Elas pesam junto com as preferências de horário: com importância alta, a alocação pode colocar alguém numa opção de horário pior para cumprir a regra."
+		>
+			<div className="space-y-3">
+				{criterios.map((c, i) => {
+					const def = TIPOS.find((t) => t.tipo === c.tipo)!;
+					const valores = valoresColunas[c.coluna] ?? [];
+					return (
+						<div
+							key={i}
+							data-testid="criterio"
+							className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--bg-subtle)] p-4"
+						>
+							<div className="flex flex-wrap items-end gap-3">
 								<label className="block">
-									<span className="text-xs font-semibold text-gray-600">N por mesa</span>
-									<input
-										type="number"
-										min={1}
-										value={c.limite || ""}
-										onChange={(e) => alterar(i, { limite: Number(e.target.value) })}
-										className="mt-1 block w-24 border border-gray-300 rounded-lg px-2 py-1.5"
-									/>
+									<span className="rotulo-caps block">Regra</span>
+									<select
+										value={c.tipo}
+										onChange={(e) => alterar(i, { tipo: e.target.value as TipoCriterio })}
+										className="campo mt-1 w-auto py-1.5"
+									>
+										{TIPOS.map((t) => (
+											<option key={t.tipo} value={t.tipo}>
+												{t.nome}
+											</option>
+										))}
+									</select>
 								</label>
-							)}
-							<label className="block">
-								<span className="text-xs font-semibold text-gray-600">Importância</span>
-								<select
-									value={c.peso}
-									onChange={(e) => alterar(i, { peso: Number(e.target.value) })}
-									className="mt-1 block border border-gray-300 rounded-lg px-2 py-1.5 bg-white"
+								<label className="block">
+									<span className="rotulo-caps block">Coluna</span>
+									<select
+										value={c.coluna}
+										onChange={(e) => alterar(i, { coluna: e.target.value as CriterioAlocacao["coluna"], valores: [] })}
+										className="campo mt-1 w-auto py-1.5"
+									>
+										{COLUNAS.map((x) => (
+											<option key={x.coluna} value={x.coluna}>
+												{x.nome}
+											</option>
+										))}
+									</select>
+								</label>
+								{def.usaLimite && (
+									<label className="block">
+										<span className="rotulo-caps block">N por mesa</span>
+										<input
+											type="number"
+											min={1}
+											value={c.limite || ""}
+											onChange={(e) => alterar(i, { limite: Number(e.target.value) })}
+											className="campo mt-1 w-20 py-1.5 tabular-nums"
+										/>
+									</label>
+								)}
+								<label className="block">
+									<span className="rotulo-caps block">Importância</span>
+									<select
+										value={c.peso}
+										onChange={(e) => alterar(i, { peso: Number(e.target.value) })}
+										className="campo mt-1 w-auto py-1.5"
+									>
+										{PESOS.map((p) => (
+											<option key={p.peso} value={p.peso}>
+												{p.nome}
+											</option>
+										))}
+									</select>
+								</label>
+								<button
+									type="button"
+									onClick={() => onChange(criterios.filter((_, j) => j !== i))}
+									aria-label="Remover critério"
+									className="ml-auto rounded-md p-1.5 text-[var(--text-light)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
 								>
-									{PESOS.map((p) => (
-										<option key={p.peso} value={p.peso}>
-											{p.nome}
-										</option>
-									))}
-								</select>
-							</label>
-							<button
-								type="button"
-								onClick={() => onChange(criterios.filter((_, j) => j !== i))}
-								aria-label="Remover critério"
-								className="ml-auto p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full"
-							>
-								<XMarkIcon className="w-5 h-5" />
-							</button>
-						</div>
-
-						{def.usaValores && (
-							<div>
-								<div className="text-xs font-semibold text-gray-600 mb-1">
-									{def.usaValores === "opcional" ? "Valores (nenhum marcado = todos)" : "Valores"}
-								</div>
-								<div className="flex flex-wrap gap-1.5">
-									{valores.map((v) => {
-										const marcado = c.valores.includes(v.valor);
-										return (
-											<button
-												key={v.valor}
-												type="button"
-												aria-pressed={marcado}
-												onClick={() =>
-													alterar(i, {
-														valores: marcado ? c.valores.filter((x) => x !== v.valor) : [...c.valores, v.valor],
-													})
-												}
-												className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-													marcado
-														? "bg-purple-600 border-purple-600 text-white"
-														: "bg-white border-gray-300 text-gray-700 hover:border-purple-400"
-												}`}
-											>
-												{c.coluna === "semestre" ? `${v.valor}º` : v.valor}{" "}
-												<span className={marcado ? "text-purple-200" : "text-gray-400"}>{v.quantidade}</span>
-											</button>
-										);
-									})}
-								</div>
+									<XMarkIcon className="h-4 w-4" />
+								</button>
 							</div>
-						)}
 
-						<p className="text-sm text-purple-900">{explicar(c)}</p>
-					</div>
-				);
-			})}
+							{def.usaValores && (
+								<div>
+									<div className="rotulo-caps mb-1.5">
+										{def.usaValores === "opcional" ? "Valores (nenhum marcado = todos)" : "Valores"}
+									</div>
+									<div className="flex flex-wrap gap-1.5">
+										{valores.map((v) => {
+											const marcado = c.valores.includes(v.valor);
+											return (
+												<button
+													key={v.valor}
+													type="button"
+													aria-pressed={marcado}
+													onClick={() =>
+														alterar(i, {
+															valores: marcado ? c.valores.filter((x) => x !== v.valor) : [...c.valores, v.valor],
+														})
+													}
+													className={cn(
+														"rounded-full border px-2.5 py-1 text-xs transition-colors",
+														marcado
+															? "border-[var(--text)] bg-[var(--text)] text-white"
+															: "border-[var(--line-strong)] bg-white hover:border-[var(--text-muted)]"
+													)}
+												>
+													{c.coluna === "semestre" ? `${v.valor}º` : v.valor}{" "}
+													<span className={marcado ? "text-white/60" : "text-[var(--text-light)]"}>{v.quantidade}</span>
+												</button>
+											);
+										})}
+									</div>
+								</div>
+							)}
 
-			<button
-				type="button"
-				disabled={criterios.length >= MAX_CRITERIOS}
-				onClick={() => onChange([...criterios, { tipo: "misturar", coluna: "curso", valores: [], limite: 2, peso: 3 }])}
-				className="flex items-center gap-1.5 text-sm font-semibold text-purple-700 hover:text-purple-900 disabled:text-gray-400 disabled:cursor-not-allowed"
-			>
-				<PlusIcon className="w-4 h-4" />
-				Adicionar critério {criterios.length >= MAX_CRITERIOS && `(máximo ${MAX_CRITERIOS})`}
-			</button>
-		</section>
+							<p className="text-sm text-[var(--text-muted)]">{explicar(c)}</p>
+						</div>
+					);
+				})}
+
+				<BotaoSecundario
+					disabled={criterios.length >= MAX_CRITERIOS}
+					onClick={() => onChange([...criterios, { tipo: "misturar", coluna: "curso", valores: [], limite: 2, peso: 3 }])}
+				>
+					<PlusIcon className="h-4 w-4" />
+					Adicionar critério {criterios.length >= MAX_CRITERIOS && `(máximo ${MAX_CRITERIOS})`}
+				</BotaoSecundario>
+			</div>
+		</Secao>
 	);
 }

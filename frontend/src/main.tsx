@@ -9,7 +9,7 @@ import Resultado from "./pages/Resultado";
 import Parametros from "./pages/Parametros";
 import "./index.css";
 import VerifyUserPage from "./pages/VerifyUsers";
-import { BranchBadge } from "./components/BranchBadge";
+import Layout from "./components/Layout";
 import {
   buildUsuarios,
   buildAvaliadores,
@@ -31,6 +31,7 @@ function Root() {
     <React.StrictMode>
       <BrowserRouter>
         <Routes>
+          <Route element={<Layout />}>
           <Route
             path="/"
             element={<Home setMapping={setMappingData} />}
@@ -48,6 +49,9 @@ function Root() {
                   setDuplicatas(result.duplicates);
                 }}
                 nextRoute="/verify"
+                titulo="Mapeamento de candidatos"
+                descricao="Confira qual coluna da planilha alimenta cada campo. A sugestão é feita pelo nome das colunas; arraste para trocar."
+                rotuloConfirmar="Continuar para a revisão"
               />
             }
           />
@@ -76,6 +80,9 @@ function Root() {
                   await saveAvaliadores(result);
                 }}
                 nextRoute="/upload-restricao"
+                titulo="Mapeamento de avaliadores"
+                descricao="Confira as colunas de nome, email e sigla da aba de avaliadores. Ao confirmar, os avaliadores são salvos."
+                rotuloConfirmar="Salvar avaliadores"
               />
             }
           />
@@ -95,6 +102,9 @@ function Root() {
                   await saveRestricoes(result);
                 }}
                 nextRoute="/parametros"
+                titulo="Mapeamento de restrições"
+                descricao="Confira as colunas da aba de restrições: o candidato e as siglas dos avaliadores que não podem ou preferem não avaliá-lo."
+                rotuloConfirmar="Salvar restrições"
               />
             }
           />
@@ -106,8 +116,8 @@ function Root() {
             path="/resultado"
             element={<Resultado />}
           />
+          </Route>
         </Routes>
-        <BranchBadge />
       </BrowserRouter>
     </React.StrictMode>
   );

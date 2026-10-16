@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { statSync } from "node:fs";
-import { PLANILHA_OFICIAL, linhaMapeamento } from "./apoio";
+import { PLANILHA_OFICIAL, colunaMapeada } from "./apoio";
 
 // O caminho inteiro pela interface, com a planilha oficial e as sugestões
 // aceitas como vieram: upload → 3 abas → parâmetros → resultado → exportação.
@@ -11,28 +11,28 @@ test("fluxo completo com a planilha oficial", async ({ page }) => {
 
 	// Etapa 1: mapeamento de candidatos sugerido pelo nome das colunas
 	await expect(page).toHaveURL(/\/mapping$/);
-	await expect(linhaMapeamento(page, "nome")).toContainText("Nome");
-	await expect(linhaMapeamento(page, "email_insper")).toContainText("Email Institucional");
-	await expect(linhaMapeamento(page, "opcao 5")).toContainText("Opcao 5");
-	await page.getByRole("button", { name: "Confirmar Mudanças" }).click();
+	await expect(colunaMapeada(page, "nome")).toHaveText("Nome");
+	await expect(colunaMapeada(page, "email_insper")).toHaveText("Email Institucional");
+	await expect(colunaMapeada(page, "opcao 5")).toHaveText("Opcao 5");
+	await page.getByRole("button", { name: "Continuar para a revisão" }).click();
 
 	// Revisão: 98 candidatos, nenhum com erro
 	await expect(page).toHaveURL(/\/verify$/);
-	await expect(page.getByText(/^ID: \d+$/)).toHaveCount(98);
+	await expect(page.getByTestId("cartao-candidato")).toHaveCount(98);
 	await expect(page.getByText(/\d+ erros?$/)).toHaveCount(0);
 	await page.getByRole("button", { name: "Salvar Candidatos" }).first().click();
 
 	// Etapa 2: avaliadores
 	await expect(page).toHaveURL(/\/upload-avaliador$/);
 	await page.getByRole("button", { name: "Processar Avaliadores" }).click();
-	await expect(linhaMapeamento(page, "sigla")).toContainText("Sigla");
-	await page.getByRole("button", { name: "Confirmar Mudanças" }).click();
+	await expect(colunaMapeada(page, "sigla")).toHaveText("Sigla");
+	await page.getByRole("button", { name: "Salvar avaliadores" }).click();
 
 	// Etapa 3: restrições
 	await expect(page).toHaveURL(/\/upload-restricao$/);
 	await page.getByRole("button", { name: "Processar Restrições" }).click();
-	await expect(linhaMapeamento(page, "naoPosso")).toContainText("NaoPosso");
-	await page.getByRole("button", { name: "Confirmar Mudanças" }).click();
+	await expect(colunaMapeada(page, "naoPosso")).toHaveText("NaoPosso");
+	await page.getByRole("button", { name: "Salvar restrições" }).click();
 
 	// Etapa 4: parâmetros padrão
 	await expect(page).toHaveURL(/\/parametros$/);

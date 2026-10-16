@@ -1,16 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import {
-	PencilIcon,
-	ExclamationTriangleIcon,
-	CheckCircleIcon,
-	XMarkIcon,
-	TrashIcon,
-	ArrowLeftIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, CheckCircleIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { UserCard } from "../components/UserCard";
 import { saveUsuarios } from "../api";
+import { Aviso, BarraAcoes, BotaoPrimario, BotaoSecundario, CabecalhoPagina, Metrica, Modal, Secao, Selo } from "../components/ui";
 
 interface ErrorItem {
 	field: string;
@@ -37,7 +30,7 @@ export default function VerifyUserPage({
 }: VerifyUserPageProps) {
 	const makeEditableCopy = () =>
 		Object.fromEntries(
-			Object.entries(usuarios).map(([id, u]) => [id, { ...u.usuario }])
+			Object.entries(usuarios ?? {}).map(([id, u]) => [id, { ...u.usuario }])
 		);
 
 	const navigate = useNavigate();
@@ -45,10 +38,12 @@ export default function VerifyUserPage({
 	const [editedUsers, setEditedUsers] = useState<Record<number, Usuario>>(
 		makeEditableCopy()
 	);
-	const [dupGroups, setDupGroups] = useState<number[][]>(duplicates);
+	const [dupGroups, setDupGroups] = useState<number[][]>(duplicates ?? []);
 	const [acceptedIds, setAcceptedIds] = useState<Set<number>>(new Set());
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
 	const [saveSuccess, setSaveSuccess] = useState(false);
+	const [busca, setBusca] = useState("");
+	const [soErros, setSoErros] = useState(false);
 
 	const getGroup = (id: number) =>
 		dupGroups.find((g) => g.includes(id)) || [];
@@ -183,245 +178,119 @@ export default function VerifyUserPage({
 		);
 	};
 
+	const unicos = Object.keys(editedUsers).map(Number).filter((id) => !isDuplicate(id));
+	const comErro = (id: number) => (usuarios?.[id]?.erros?.length ?? 0) > 0;
+	const nErros = unicos.filter(comErro).length;
+	const termo = busca.trim().toLowerCase();
+	const visiveis = unicos.filter(
+		(id) =>
+			(!soErros || comErro(id)) &&
+			(!termo || JSON.stringify(editedUsers[id]).toLowerCase().includes(termo))
+	);
+	const bloqueado = dupGroups.length > 0 || saveSuccess;
+
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-			{/* Success Banner */}
-			{saveSuccess && (
-				<motion.div
-					initial={{ opacity: 0, y: -20 }}
-					animate={{ opacity: 1, y: 0 }}
-					className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-8 py-4 rounded-xl shadow-2xl flex items-center space-x-3"
-				>
-					<CheckCircleIcon className="w-6 h-6" />
-					<span className="font-semibold">
-						Candidatos salvos! Indo para avaliadores...
-					</span>
-				</motion.div>
-			)}
-
-			{/* Error Modal */}
+		<div className="space-y-6">
 			{errorMsg && (
-				<div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-					<motion.div
-						initial={{ scale: 0.9, opacity: 0 }}
-						animate={{ scale: 1, opacity: 1 }}
-						className="bg-white p-6 rounded-xl shadow-2xl max-w-md mx-4"
-					>
-						<div className="flex items-center space-x-3 mb-4">
-							<ExclamationTriangleIcon className="w-6 h-6 text-red-500" />
-							<h3 className="font-semibold text-gray-900">
-								Erro de Validação
-							</h3>
-						</div>
-						<p className="text-gray-700 mb-6">{errorMsg}</p>
-						<button
-							className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-							onClick={() => setErrorMsg(null)}
-						>
-							Entendido
-						</button>
-					</motion.div>
-				</div>
+				<Modal titulo="Não foi possível salvar" onFechar={() => setErrorMsg(null)} acoes={<BotaoPrimario onClick={() => setErrorMsg(null)}>Entendido</BotaoPrimario>}>
+					{errorMsg}
+				</Modal>
 			)}
 
-			{/* Header */}
-			<div className="bg-white shadow-sm border-b">
-				<div className="max-w-7xl mx-auto px-6 py-6">
-					<div className="flex items-center justify-between gap-4 flex-wrap">
-						<div className="flex items-center space-x-4">
-							<button
-								onClick={() => navigate(-1)}
-								className="flex items-center space-x-1 text-gray-500 hover:text-gray-800 transition-colors text-sm font-medium"
-							>
-								<ArrowLeftIcon className="w-4 h-4" />
-								<span>Voltar</span>
-							</button>
-							<div>
-								<h1 className="text-3xl font-bold text-gray-900">
-									Verificação de Usuários
-								</h1>
-								<p className="text-gray-600 mt-1">
-									Revise e corrija os dados importados. Clique em
-									qualquer campo para editar.
-								</p>
-							</div>
-						</div>
+			<CabecalhoPagina
+				titulo="Revisão de candidatos"
+				descricao="Confira os dados lidos da planilha. Clique em qualquer campo para corrigir. Duplicidades precisam ser resolvidas antes de salvar."
+			/>
 
-						<div className="flex items-center space-x-3 text-sm flex-wrap gap-y-2">
-							<div className="flex items-center space-x-2 bg-red-100 px-3 py-2 rounded-lg">
-								<div className="w-3 h-3 bg-red-500 rounded-full"></div>
-								<span>
-									{dupGroups.length} grupos duplicados
-								</span>
-							</div>
-							<div className="flex items-center space-x-2 bg-blue-100 px-3 py-2 rounded-lg">
-								<div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-								<span>
-									{
-										Object.keys(editedUsers).filter(
-											(id) => !isDuplicate(Number(id))
-										).length
-									}{" "}
-									únicos
-								</span>
-							</div>
-							<motion.button
-								whileHover={{ scale: dupGroups.length === 0 && !saveSuccess ? 1.02 : 1 }}
-								whileTap={{ scale: dupGroups.length === 0 && !saveSuccess ? 0.98 : 1 }}
-								onClick={saveCandidates}
-								disabled={dupGroups.length > 0 || saveSuccess}
-								className={`flex items-center space-x-2 px-5 py-2 rounded-xl font-semibold shadow transition-all ${
-									dupGroups.length > 0 || saveSuccess
-										? "bg-gray-300 text-gray-400 cursor-not-allowed"
-										: "bg-gradient-to-r from-green-600 to-green-700 text-white hover:shadow-lg cursor-pointer"
-								}`}
-							>
-								<CheckCircleIcon className="w-4 h-4" />
-								<span>
-									{dupGroups.length > 0
-										? `Resolva ${dupGroups.length} duplicado${dupGroups.length > 1 ? "s" : ""}`
-										: "Salvar Candidatos"}
-								</span>
-							</motion.button>
-						</div>
-					</div>
-				</div>
+			<div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+				<Metrica rotulo="Candidatos" valor={Object.keys(editedUsers).length} />
+				<Metrica rotulo="Sem conflito" valor={unicos.length} tom="sucesso" />
+				<Metrica rotulo="Com erro de validação" valor={nErros} tom={nErros ? "atencao" : "neutro"} ajuda="Erros não impedem salvar, mas vale corrigir." />
+				<Metrica rotulo="Grupos duplicados" valor={dupGroups.length} tom={dupGroups.length ? "perigo" : "neutro"} />
 			</div>
 
-			<div className="max-w-7xl mx-auto px-6 py-8 space-y-12">
-				{/* Duplicate Groups */}
-				{dupGroups.length > 0 && (
-					<div className="space-y-8">
-						<h2 className="text-2xl font-bold text-gray-900 flex items-center space-x-3">
-							<ExclamationTriangleIcon className="w-8 h-8 text-red-500" />
-							<span>Grupos Duplicados - Ação Necessária</span>
-						</h2>
+			{saveSuccess && (
+				<Aviso tom="sucesso" icone={<CheckCircleIcon className="h-4 w-4" />}>
+					Candidatos salvos! Indo para avaliadores...
+				</Aviso>
+			)}
 
-						{dupGroups.map((group, idx) => (
-							<motion.div
-								key={idx}
-								initial={{ opacity: 0, y: 20 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ delay: idx * 0.1 }}
-								className="border-2 border-red-300 rounded-2xl shadow-xl bg-white overflow-hidden"
-							>
-								<div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-6">
-									<div className="flex justify-between items-center">
-										<div>
-											<h3 className="text-xl font-bold">
-												Grupo Duplicado #{idx + 1}
-											</h3>
-											<p className="text-red-100 mt-1">
-												IDs conflitantes:{" "}
-												{group.join(", ")} • Escolha uma
-												ação
-											</p>
-										</div>
-										<div className="flex space-x-3">
-											<motion.button
-												whileHover={{ scale: 1.02 }}
-												whileTap={{ scale: 0.98 }}
-												className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-xl font-semibold transition-colors shadow-lg"
-												onClick={() => acceptAll(group)}
-											>
-												<CheckCircleIcon className="w-5 h-5 inline mr-2" />
-												Aceitar Todos
-											</motion.button>
-											<motion.button
-												whileHover={{ scale: 1.02 }}
-												whileTap={{ scale: 0.98 }}
-												className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-xl font-semibold transition-colors shadow-lg"
-												onClick={() => rejectAll(group)}
-											>
-												<XMarkIcon className="w-5 h-5 inline mr-2" />
-												Recusar Todos
-											</motion.button>
-										</div>
-									</div>
-								</div>
-
-								<div className="p-8">
-									<div className="flex flex-wrap gap-6 justify-center">
-										{group.map((id) =>
-											renderUserCard(
-												id,
-												<motion.button
-													whileHover={{ scale: 1.02 }}
-													whileTap={{ scale: 0.98 }}
-													className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all"
-													onClick={() =>
-														acceptOne(group, id)
-													}
-												>
-													<CheckCircleIcon className="w-5 h-5 inline mr-2" />
-													Aceitar Este Usuário
-												</motion.button>
-											)
-										)}
-									</div>
-								</div>
-							</motion.div>
-						))}
+			{dupGroups.map((group, idx) => (
+				<Secao
+					key={idx}
+					titulo={`Grupo duplicado #${idx + 1}`}
+					subtitulo={`Mesmo CPF ou email nos candidatos ${group.join(", ")}. Aceite um, aceite todos (se forem pessoas diferentes) ou recuse o grupo.`}
+					className="border-[rgba(245,166,35,0.5)]"
+					acoes={
+						<>
+							<BotaoSecundario onClick={() => acceptAll(group)}>
+								<CheckCircleIcon className="h-4 w-4" />
+								Aceitar Todos
+							</BotaoSecundario>
+							<BotaoSecundario onClick={() => rejectAll(group)}>
+								<XMarkIcon className="h-4 w-4" />
+								Recusar Todos
+							</BotaoSecundario>
+						</>
+					}
+				>
+					<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+						{group.map((id) =>
+							renderUserCard(
+								id,
+								<BotaoPrimario className="w-full" onClick={() => acceptOne(group, id)}>
+									<CheckCircleIcon className="h-4 w-4" />
+									Aceitar Este Usuário
+								</BotaoPrimario>
+							)
+						)}
 					</div>
+				</Secao>
+			))}
+
+			<Secao
+				titulo="Candidatos"
+				acoes={
+					<>
+						<label className="relative">
+							<MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-light)]" />
+							<input
+								type="search"
+								aria-label="Buscar candidato"
+								placeholder="Buscar..."
+								value={busca}
+								onChange={(e) => setBusca(e.target.value)}
+								className="campo w-56 pl-8"
+							/>
+						</label>
+						<button
+							type="button"
+							aria-pressed={soErros}
+							onClick={() => setSoErros(!soErros)}
+							className={soErros ? "btn-primario" : "btn-secundario"}
+						>
+							Só com erro <Selo tom={nErros ? "atencao" : "neutro"}>{nErros}</Selo>
+						</button>
+					</>
+				}
+			>
+				{visiveis.length === 0 ? (
+					<p className="py-6 text-center text-sm text-[var(--text-muted)]">Nenhum candidato com esses filtros.</p>
+				) : (
+					<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">{visiveis.map((id) => renderUserCard(id))}</div>
 				)}
+			</Secao>
 
-				{/* Non-duplicate users */}
-				<div className="space-y-6">
-					<h2 className="text-2xl font-bold text-gray-900 flex items-center space-x-3">
-						<CheckCircleIcon className="w-8 h-8 text-green-500" />
-						<span>Usuários Únicos</span>
-					</h2>
-
-					<div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-						<div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-6">
-							<h3 className="text-xl font-semibold">
-								Dados Validados
-							</h3>
-							<p className="text-blue-100 mt-1">
-								{
-									Object.keys(editedUsers).filter(
-										(id) => !isDuplicate(Number(id))
-									).length
-								}{" "}
-								usuários sem conflitos
-							</p>
-						</div>
-
-						<div className="p-8">
-							<div className="flex flex-wrap gap-6 justify-center">
-								{Object.keys(editedUsers)
-									.map(Number)
-									.filter((id) => !isDuplicate(id))
-									.map((id) => renderUserCard(id))}
-							</div>
-						</div>
-					</div>
-				</div>
-
-				{/* Save button at the bottom */}
-				<div className="flex justify-center pt-8">
-					<motion.button
-						whileHover={{
-							scale: dupGroups.length === 0 ? 1.02 : 1,
-						}}
-						whileTap={{ scale: dupGroups.length === 0 ? 0.98 : 1 }}
-						onClick={saveCandidates}
-						disabled={dupGroups.length > 0 || saveSuccess}
-						className={`px-12 py-4 rounded-xl font-bold text-lg shadow-xl transition-all ${
-							dupGroups.length > 0 || saveSuccess
-								? "bg-gray-400 text-gray-200 cursor-not-allowed"
-								: "bg-gradient-to-r from-green-600 to-green-700 text-white hover:shadow-2xl cursor-pointer"
-						}`}
-					>
-						<CheckCircleIcon className="w-6 h-6 inline mr-3" />
-						{dupGroups.length > 0
-							? `Resolva ${dupGroups.length} grupo${
-									dupGroups.length > 1 ? "s" : ""
-							  } duplicado${dupGroups.length > 1 ? "s" : ""}`
-							: "Salvar Candidatos"}
-					</motion.button>
-				</div>
-			</div>
+			<BarraAcoes dica={dupGroups.length > 0 ? `Resolva ${dupGroups.length} grupo(s) duplicado(s) para salvar.` : `${Object.keys(editedUsers).length} candidatos serão salvos.`}>
+				<BotaoSecundario onClick={() => navigate(-1)}>
+					<ArrowLeftIcon className="h-4 w-4" />
+					Voltar
+				</BotaoSecundario>
+				<BotaoPrimario onClick={saveCandidates} disabled={bloqueado}>
+					<CheckCircleIcon className="h-4 w-4" />
+					Salvar Candidatos
+				</BotaoPrimario>
+			</BarraAcoes>
 		</div>
 	);
 }

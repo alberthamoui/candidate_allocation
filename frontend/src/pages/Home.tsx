@@ -1,118 +1,154 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, DocumentArrowUpIcon } from "@heroicons/react/24/outline";
 import { upload } from "../api";
+import { Aviso, BotaoPrimario, cn, IconeAjuda } from "../components/ui";
 
 interface AppProps {
-  setMapping: (data: any) => void;
+	setMapping: (data: any) => void;
 }
 
 function Home({ setMapping }: AppProps) {
-  const [file, setFile] = useState<File | null>(null);
-  const [nOpcoes, setNOpcoes] = useState(5);
-  const [emailDomain, setEmailDomain] = useState("@al.insper.edu.br");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const navigate = useNavigate();
+	const [file, setFile] = useState<File | null>(null);
+	const [nOpcoes, setNOpcoes] = useState(5);
+	const [emailDomain, setEmailDomain] = useState("@al.insper.edu.br");
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState("");
+	const [arrastando, setArrastando] = useState(false);
+	const inputRef = useRef<HTMLInputElement>(null);
+	const navigate = useNavigate();
 
-  async function handleUpload() {
-    if (!file) {
-      setError("Por favor, selecione um arquivo .xlsx.");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    try {
-      const mapping = await upload(file, nOpcoes, emailDomain);
-      setMapping(mapping);
-      navigate("/mapping");
-    } catch (err: any) {
-      setError("Erro ao processar o arquivo: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+	async function handleUpload() {
+		if (!file) {
+			setError("Por favor, selecione um arquivo .xlsx.");
+			return;
+		}
+		setLoading(true);
+		setError("");
+		try {
+			const mapping = await upload(file, nOpcoes, emailDomain);
+			setMapping(mapping);
+			navigate("/mapping");
+		} catch (err: any) {
+			setError("Erro ao processar o arquivo: " + err.message);
+		} finally {
+			setLoading(false);
+		}
+	}
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-100 flex flex-col items-center justify-center py-8">
-      <div className="bg-white shadow-xl rounded-2xl p-10 w-full max-w-md flex flex-col items-center space-y-8">
-        <h1 className="text-3xl font-bold text-blue-700 text-center">
-          Candidate Allocator
-        </h1>
-        <p className="text-gray-500 text-sm text-center">
-          Faça upload do arquivo Excel com os dados de candidatos, avaliadores e restrições para iniciar a alocação.
-        </p>
+	function escolher(f: File | undefined) {
+		if (!f) return;
+		setFile(f);
+		setError("");
+	}
 
-        <div className="flex flex-col space-y-4 w-full">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Número de opções de horário por candidato
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={10}
-              value={nOpcoes}
-              onChange={(e) =>
-                setNOpcoes(Math.max(1, Math.min(10, Number(e.target.value))))
-              }
-              className="border border-gray-300 p-2 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-300 transition"
-            />
-          </div>
+	return (
+		<div className="mx-auto flex min-h-[65vh] w-full max-w-lg flex-col justify-center">
+			<div className="painel p-8">
+				<div className="mb-8 text-center">
+					<h1 className="text-2xl font-semibold">Candidate Allocator</h1>
+					<p className="mt-2 text-sm text-[var(--text-muted)]">
+						Envie a planilha com candidatos, avaliadores e restrições para montar as mesas de avaliação.
+					</p>
+				</div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Domínio do email institucional
-            </label>
-            <input
-              type="text"
-              value={emailDomain}
-              onChange={(e) => setEmailDomain(e.target.value)}
-              placeholder="@al.insper.edu.br"
-              className="border border-gray-300 p-2 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-300 transition font-mono text-sm"
-            />
-          </div>
+				<div className="space-y-5">
+					{/* área de arquivo: clicar ou soltar */}
+					<div
+						role="button"
+						tabIndex={0}
+						onClick={() => inputRef.current?.click()}
+						onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && inputRef.current?.click()}
+						onDragOver={(e) => {
+							e.preventDefault();
+							setArrastando(true);
+						}}
+						onDragLeave={() => setArrastando(false)}
+						onDrop={(e) => {
+							e.preventDefault();
+							setArrastando(false);
+							escolher(e.dataTransfer.files?.[0]);
+						}}
+						className={cn(
+							"flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-lg)] border border-dashed px-4 py-8 text-center transition-colors",
+							arrastando
+								? "border-[var(--accent)] bg-[var(--accent-soft)]"
+								: file
+									? "border-[rgba(31,138,59,0.35)] bg-[var(--success-soft)]"
+									: "border-[var(--line-strong)] bg-[var(--bg-subtle)] hover:border-[var(--accent)]"
+						)}
+					>
+						<DocumentArrowUpIcon className={cn("h-8 w-8", file ? "text-[var(--success)]" : "text-[var(--text-light)]")} />
+						{file ? (
+							<>
+								<span className="text-sm font-medium">{file.name}</span>
+								<span className="text-xs text-[var(--text-muted)]">Clique para trocar o arquivo</span>
+							</>
+						) : (
+							<>
+								<span className="text-sm font-medium">Clique ou arraste a planilha aqui</span>
+								<span className="text-xs text-[var(--text-muted)]">Arquivo .xlsx com 3 abas</span>
+							</>
+						)}
+						<input
+							ref={inputRef}
+							type="file"
+							accept=".xlsx"
+							aria-label="Arquivo Excel (.xlsx)"
+							onChange={(e) => escolher(e.target.files?.[0])}
+							className="hidden"
+						/>
+					</div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Arquivo Excel (.xlsx)
-            </label>
-            <input
-              type="file"
-              accept=".xlsx"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="border border-gray-300 p-2 rounded-lg w-full bg-gray-50"
-            />
-          </div>
-        </div>
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<label className="block">
+							<span className="rotulo flex items-center gap-1.5">
+								Opções de horário
+								<IconeAjuda texto="Quantas colunas de horário (1ª opção, 2ª opção...) cada candidato preencheu." />
+							</span>
+							<input
+								type="number"
+								min={1}
+								max={10}
+								value={nOpcoes}
+								onChange={(e) => setNOpcoes(Math.max(1, Math.min(10, Number(e.target.value))))}
+								className="campo"
+							/>
+						</label>
+						<label className="block">
+							<span className="rotulo flex items-center gap-1.5">
+								Domínio do email
+								<IconeAjuda texto="Usado para validar o email institucional dos candidatos." />
+							</span>
+							<input
+								type="text"
+								value={emailDomain}
+								onChange={(e) => setEmailDomain(e.target.value)}
+								placeholder="@al.insper.edu.br"
+								className="campo font-mono"
+							/>
+						</label>
+					</div>
 
-        {error && (
-          <div className="w-full bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
+					{error && <Aviso tom="perigo">{error}</Aviso>}
 
-        <button
-          onClick={handleUpload}
-          disabled={loading}
-          className={`w-full py-3 rounded-xl font-semibold text-white shadow-lg transition-all ${
-            loading
-              ? "bg-blue-300 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
-          }`}
-        >
-          {loading ? "Processando..." : "Iniciar →"}
-        </button>
+					<BotaoPrimario onClick={handleUpload} disabled={loading} className="w-full py-2.5">
+						<ArrowUpTrayIcon className="h-4 w-4" />
+						{loading ? "Processando..." : "Iniciar →"}
+					</BotaoPrimario>
+				</div>
+			</div>
 
-        <a
-          href="/api/exemplo"
-          download="base_exemplo.xlsx"
-          className="w-full py-2 rounded-xl font-medium text-blue-600 border border-blue-300 bg-blue-50 hover:bg-blue-100 transition-all text-center text-sm"
-        >
-          Baixar planilha de exemplo
-        </a>
-      </div>
-    </div>
-  );
+			<a
+				href="/api/exemplo"
+				download="base_exemplo.xlsx"
+				className="mx-auto mt-4 inline-flex items-center gap-1.5 text-sm text-[var(--text-muted)] hover:text-[var(--accent)]"
+			>
+				<ArrowDownTrayIcon className="h-4 w-4" />
+				Baixar planilha de exemplo
+			</a>
+		</div>
+	);
 }
 
 export default Home;
