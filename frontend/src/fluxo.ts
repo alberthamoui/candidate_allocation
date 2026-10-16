@@ -32,6 +32,10 @@ const PAGINAS: Record<string, InfoPagina> = {
 		ajuda: {
 			resumo: "Envie o arquivo .xlsx com três abas, nesta ordem: candidatos, avaliadores e restrições.",
 			topicos: [
+				{
+					titulo: "Horários",
+					texto: "Candidatos escolhem: a planilha tem colunas de opção e a 1ª opção tem prioridade. Eu defino: você digita os horários das mesas, todo candidato pode ir em qualquer um e só as restrições dos avaliadores (e os critérios adicionais) pesam.",
+				},
 				{ titulo: "Opções de horário", texto: "Quantas colunas de horário (1ª opção, 2ª opção...) cada candidato preencheu. A 1ª opção tem prioridade na alocação." },
 				{ titulo: "Domínio do email", texto: "Usado para validar o email institucional dos candidatos na revisão." },
 				{ titulo: "Planilha de exemplo", texto: "Baixe o exemplo para ver o formato esperado das três abas." },

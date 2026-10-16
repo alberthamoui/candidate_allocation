@@ -45,10 +45,12 @@ export default function EditorCriterios({
 	criterios,
 	onChange,
 	valoresColunas,
+	semPreferencia = false,
 }: {
 	criterios: CriterioAlocacao[];
 	onChange: (c: CriterioAlocacao[]) => void;
 	valoresColunas: Record<string, ValorColuna[]>;
+	semPreferencia?: boolean;
 }) {
 	const alterar = (i: number, mudanca: Partial<CriterioAlocacao>) =>
 		onChange(criterios.map((c, j) => (j === i ? { ...c, ...mudanca } : c)));
@@ -61,7 +63,11 @@ export default function EditorCriterios({
 					Critérios adicionais <Selo className="ml-1 align-middle">opcional</Selo>
 				</>
 			}
-			subtitulo="Regras sobre curso ou semestre. Elas pesam junto com as preferências de horário: com importância alta, a alocação pode colocar alguém numa opção de horário pior para cumprir a regra."
+			subtitulo={
+				semPreferencia
+					? "Regras sobre curso ou semestre. Elas pesam junto com as restrições dos avaliadores: com importância alta, a alocação pode aceitar um avaliador \"prefiro não\" para cumprir a regra."
+					: "Regras sobre curso ou semestre. Elas pesam junto com as preferências de horário: com importância alta, a alocação pode colocar alguém numa opção de horário pior para cumprir a regra."
+			}
 		>
 			<div className="space-y-3">
 				{criterios.map((c, i) => {

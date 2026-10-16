@@ -27,6 +27,7 @@ func (s *Session) RunAlocacao(ctx context.Context, param ParametrosAlocacao, emi
 		return AlocacaoResponse{}, err
 	}
 	prefs := d.prefs
+	param.semPreferencia = d.semPreferencia
 
 	emit(progressEvent{Step: "Iniciando algoritmo...", Pct: 25, Total: recursos.Execucoes * recursos.Iteracoes})
 

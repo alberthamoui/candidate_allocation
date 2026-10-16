@@ -62,6 +62,7 @@ export interface AlocacaoResponse {
   nao_alocados_info: CandidatoResultado[];
   pontuacao: number;
   qualidade: ItemQualidade[];
+  sem_preferencia: boolean; // candidatos não escolheram horário: sem "Nª opção"
 }
 
 export interface MesaResult {
@@ -145,6 +146,7 @@ export interface CapacidadeResponse {
   horarios: HorarioCapacidade[];
   avisos: string[];
   valores_colunas: Record<string, ValorColuna[]>;
+  sem_preferencia: boolean; // candidatos não escolheram horário: sem "1ª opção"
 }
 
 // Parâmetros escolhidos na tela de parâmetros; ficam no sessionStorage para
@@ -176,16 +178,22 @@ function paramsQuery(p: ParametrosAlocacao | null): string {
 // =================== ENDPOINTS ====================
 // ==================================================
 
-// Etapa 1: upload do arquivo + criação de sessão
+// Etapa 1: upload do arquivo + criação de sessão. Com horarios, os
+// candidatos não escolhem horário: todos podem ir em qualquer um deles.
 export async function upload(
   file: File,
   nOpcoes: number,
-  emailDomain: string
+  emailDomain: string,
+  horarios?: string[]
 ): Promise<MappingItem[]> {
   const form = new FormData();
   form.append('file', file);
   form.append('nOpcoes', String(nOpcoes));
   form.append('emailDomain', emailDomain);
+  if (horarios) {
+    form.append('semPreferencia', '1');
+    form.append('horarios', horarios.join('\n'));
+  }
 
   const res = await fetch('/api/upload', { method: 'POST', body: form });
   const data = await checkOk(res);

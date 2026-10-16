@@ -283,7 +283,7 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 									<th className="rotulo-caps px-4 py-2">Nome</th>
 									<th className="rotulo-caps px-4 py-2">Curso</th>
 									<th className="rotulo-caps px-4 py-2">Semestre</th>
-									<th className="rotulo-caps px-4 py-2">Horários que escolheu</th>
+									{!result.sem_preferencia && <th className="rotulo-caps px-4 py-2">Horários que escolheu</th>}
 								</tr>
 							</thead>
 							<tbody className="divide-y divide-[var(--line)]">
@@ -304,7 +304,9 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 										</td>
 										<td className="px-4 py-2.5 text-[var(--text-muted)]">{c.curso}</td>
 										<td className="px-4 py-2.5 text-[var(--text-muted)]">{c.semestre ? `${c.semestre}º` : ""}</td>
-										<td className="px-4 py-2.5 capitalize text-[var(--text-muted)]">{c.opcoes.join(" · ")}</td>
+										{!result.sem_preferencia && (
+											<td className="px-4 py-2.5 capitalize text-[var(--text-muted)]">{c.opcoes.join(" · ")}</td>
+										)}
 									</tr>
 								))}
 							</tbody>
@@ -313,7 +315,7 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 				</Secao>
 			)}
 
-			<Detalhes selecao={selecao} mesas={mesas} onFechar={() => setSelecao(null)} />
+			<Detalhes selecao={selecao} mesas={mesas} semPreferencia={result.sem_preferencia} onFechar={() => setSelecao(null)} />
 		</div>
 	);
 }
@@ -347,7 +349,17 @@ function Filtro({
 }
 
 // Painel lateral com os dados de quem foi clicado.
-function Detalhes({ selecao, mesas, onFechar }: { selecao: Selecao; mesas: MesaResult[]; onFechar: () => void }) {
+function Detalhes({
+	selecao,
+	mesas,
+	semPreferencia,
+	onFechar,
+}: {
+	selecao: Selecao;
+	mesas: MesaResult[];
+	semPreferencia: boolean;
+	onFechar: () => void;
+}) {
 	if (!selecao) return null;
 	const { tipo, pessoa } = selecao;
 	return (
@@ -373,7 +385,7 @@ function Detalhes({ selecao, mesas, onFechar }: { selecao: Selecao; mesas: MesaR
 
 			<div className="mt-5 space-y-5 text-sm">
 				{tipo === "candidato" ? (
-					<DetalhesCandidato c={selecao.pessoa} mesa={selecao.mesa} />
+					<DetalhesCandidato c={selecao.pessoa} mesa={selecao.mesa} semPreferencia={semPreferencia} />
 				) : (
 					<DetalhesAvaliador a={selecao.pessoa} mesas={mesas.filter((m) => m.avaliadores.some((x) => x.id === pessoa.id))} />
 				)}
@@ -382,7 +394,7 @@ function Detalhes({ selecao, mesas, onFechar }: { selecao: Selecao; mesas: MesaR
 	);
 }
 
-function DetalhesCandidato({ c, mesa }: { c: CandidatoResultado; mesa?: MesaResult }) {
+function DetalhesCandidato({ c, mesa, semPreferencia }: { c: CandidatoResultado; mesa?: MesaResult; semPreferencia: boolean }) {
 	return (
 		<>
 			<div className="grid grid-cols-2 gap-3 rounded-[var(--radius-lg)] bg-[var(--bg-subtle)] p-3">
@@ -400,31 +412,40 @@ function DetalhesCandidato({ c, mesa }: { c: CandidatoResultado; mesa?: MesaResu
 						: "border-[rgba(212,32,32,0.2)] bg-[var(--danger-soft)] text-[#a51818]"
 				)}
 			>
-				{mesa ? (
+				{mesa && semPreferencia ? (
+					<>
+						Alocado em <b className="capitalize">{mesa.descricao}</b>.
+					</>
+				) : mesa ? (
 					<>
 						Alocado em <b className="capitalize">{mesa.descricao}</b>, a sua <b>{c.opcao}ª opção</b>.
 					</>
+				) : semPreferencia ? (
+					<>Sem mesa: não coube em nenhum dos horários.</>
 				) : (
 					<>Sem mesa: não coube em nenhum dos horários que escolheu.</>
 				)}
 			</div>
-			<Bloco rotulo="Horários que escolheu">
-				{c.opcoes.length ? (
-					<ol className="space-y-1">
-						{c.opcoes.map((o, i) => {
-							const alocado = mesa && i + 1 === c.opcao;
-							return (
-								<li key={i} className={cn("capitalize", alocado ? "font-semibold text-[var(--accent)]" : "text-[var(--text-muted)]")}>
-									<span className="text-[var(--text-light)]">{i + 1}.</span> {o}{" "}
-									{alocado && <span className="normal-case">← alocado</span>}
-								</li>
-							);
-						})}
-					</ol>
-				) : (
-					<p className="text-[var(--text-muted)]">Nenhum horário informado.</p>
-				)}
-			</Bloco>
+			{/* sem preferência, o candidato não escolheu horário */}
+			{!semPreferencia && (
+				<Bloco rotulo="Horários que escolheu">
+					{c.opcoes.length ? (
+						<ol className="space-y-1">
+							{c.opcoes.map((o, i) => {
+								const alocado = mesa && i + 1 === c.opcao;
+								return (
+									<li key={i} className={cn("capitalize", alocado ? "font-semibold text-[var(--accent)]" : "text-[var(--text-muted)]")}>
+										<span className="text-[var(--text-light)]">{i + 1}.</span> {o}{" "}
+										{alocado && <span className="normal-case">← alocado</span>}
+									</li>
+								);
+							})}
+						</ol>
+					) : (
+						<p className="text-[var(--text-muted)]">Nenhum horário informado.</p>
+					)}
+				</Bloco>
+			)}
 			{c.conflitos.length > 0 && (
 				<div className="rounded-[var(--radius-lg)] border border-[rgba(245,166,35,0.3)] bg-[var(--warning-soft)] p-3 text-[#8a5a12]">
 					Ficou na mesa de <b>{c.conflitos.join(", ")}</b>, que marcou "prefiro não" para ele.

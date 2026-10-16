@@ -150,7 +150,7 @@ func TestCriteriosMudamAAlocacao(t *testing.T) {
 		c     CriterioAlocacao
 	}{{resAgrupar, agrupar, CriterioAlocacao{Tipo: CRITERIO_AGRUPAR, Coluna: COLUNA_CURSO, Peso: 10}},
 		{resMisturar, misturar, CriterioAlocacao{Tipo: CRITERIO_MISTURAR, Coluna: COLUNA_SEMESTRE, Peso: 10}}} {
-		base, _, _ := pontuarResultado(caso.res, caso.mesas, d.prefs, d.hard, d.soft)
+		base, _, _ := pontuarResultado(caso.res, caso.mesas, d.prefs, d.hard, d.soft, false)
 		pares, _ := metricas(caso.mesas, d.atributos, caso.c.Coluna)
 		penal := 10 * pares // misturar: pares iguais
 		if caso.c.Tipo == CRITERIO_AGRUPAR {

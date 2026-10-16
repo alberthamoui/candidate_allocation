@@ -60,4 +60,7 @@ type AlocacaoResponse struct {
 	NaoAlocadosInfo []CandidatoResultado `json:"nao_alocados_info"`
 	Pontuacao       int                  `json:"pontuacao"`
 	Qualidade       []ItemQualidade      `json:"qualidade"`
+	// SemPreferencia: os candidatos não escolheram horário (preferencia.go);
+	// Opcoes e Opcao dos candidatos ficam vazios.
+	SemPreferencia bool `json:"sem_preferencia"`
 }

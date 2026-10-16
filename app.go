@@ -19,12 +19,24 @@ type Session struct {
 	excelData   []byte
 	nOpcoes     int
 	emailDomain string
-	lastResult  *AlocacaoResponse
-	updatedAt   time.Time
+	// horariosLivres são os horários digitados no modo sem preferência
+	// (preferencia.go); nil quando os candidatos escolhem horário.
+	horariosLivres []string
+	lastResult     *AlocacaoResponse
+	updatedAt      time.Time
 }
 
-// SaveUsuarios persiste candidatos no banco da sessão.
+// SaveUsuarios persiste candidatos no banco da sessão. No modo sem
+// preferência, todo candidato fica disponível em todos os horários digitados.
 func (s *Session) SaveUsuarios(data []Usuario) error {
+	if s.semPreferencia() {
+		todos := make([]Usuario, len(data))
+		for i, u := range data {
+			u.Opcoes = s.horariosLivres
+			todos[i] = u
+		}
+		data = todos
+	}
 	return fillDb(s.db, data)
 }
 

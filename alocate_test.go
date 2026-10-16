@@ -15,11 +15,19 @@ import (
 // sugerido → build → save) e devolve a sessão com o banco preenchido.
 func carregarSessaoXLSX(t testing.TB, path string, nOpcoes int) *Session {
 	t.Helper()
+	s := setupSession()
+	preencherSessaoXLSX(t, s, path, nOpcoes)
+	return s
+}
+
+// preencherSessaoXLSX faz o fluxo da tela (mapeamento sugerido e gravação das
+// três abas) numa sessão já criada.
+func preencherSessaoXLSX(t testing.TB, s *Session, path string, nOpcoes int) {
+	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("lendo %s: %v", path, err)
 	}
-	s := setupSession()
 
 	mapping, err := s.SuggestMapping(data, nOpcoes, s.emailDomain)
 	if err != nil {
@@ -60,7 +68,6 @@ func carregarSessaoXLSX(t testing.TB, path string, nOpcoes int) *Session {
 	if err := s.SaveRestricoes(restricoes); err != nil {
 		t.Fatal(err)
 	}
-	return s
 }
 
 // dadosDaSessao lê os dados da alocação do banco da sessão.
@@ -143,7 +150,7 @@ func TestAlocacaoTesteOficial(t *testing.T) {
 	res, mesas := fazerMelhorAlocacaoMesas(context.Background(), param, horarios, avals, prefs, hard, soft, nil, nil)
 	validarAlocacao(t, param, res, mesas, prefs, hard)
 
-	score, pen, _ := pontuarResultado(res, mesas, prefs, hard, soft)
+	score, pen, _ := pontuarResultado(res, mesas, prefs, hard, soft, false)
 	if score != res.Pontuacao {
 		t.Errorf("Pontuacao %d difere de pontuarResultado %d", res.Pontuacao, score)
 	}
@@ -178,7 +185,7 @@ func TestAlocacaoParametrosEditaveis(t *testing.T) {
 	for _, param := range casos {
 		res, mesas := fazerMelhorAlocacaoMesas(context.Background(), param, horarios, avals, prefs, hard, soft, nil, nil)
 		validarAlocacao(t, param, res, mesas, prefs, hard)
-		score, _, _ := pontuarResultado(res, mesas, prefs, hard, soft)
+		score, _, _ := pontuarResultado(res, mesas, prefs, hard, soft, false)
 		if score != res.Pontuacao {
 			t.Errorf("%+v: Pontuacao %d difere de pontuarResultado %d", param, res.Pontuacao, score)
 		}

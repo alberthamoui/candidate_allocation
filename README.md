@@ -31,7 +31,7 @@ Cada candidato vai para uma mesa de um dos horários que escolheu. Por padrão, 
 
 | Situação | Pontos |
 |---|---|
-| Alocado na 1ª / 2ª / 3ª / 4ª / 5ª opção | 0 / −1 / −3 / −5 / −7 (−2 a cada opção seguinte) |
+| Alocado na 1ª / 2ª / 3ª / 4ª / 5ª opção | 0 / −1 / −3 / −5 / −7 (−2 a cada opção seguinte); no modo "Eu defino", qualquer horário vale 0 |
 | Avaliador "prefiro não" na mesa | −5 por avaliador |
 | Candidato sem mesa | −1000 |
 | Avaliador "não posso" na mesa | proibido |
@@ -67,17 +67,19 @@ Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos
 |---|---|---|
 | Timestamp | Data/hora do preenchimento (opcional) | — |
 | Nome | Nome completo | — |
-| CPF | Apenas dígitos, sem pontuação | 11 dígitos numéricos |
-| Número | RA ou número de matrícula | 9 dígitos numéricos |
+| CPF | Opcional (pode ficar vazio ou sem coluna) | 11 dígitos, com ou sem pontuação (`123.456.789-01`) |
+| Número | Telefone (ou RA) | 9 a 13 dígitos, em qualquer formato (`(11) 98888-7777`, `+55 11 98888-7777`); fica guardado só com os números |
 | Semestre | Semestre atual do candidato | Valor entre 1 e 10 |
 | Curso | Nome do curso | — |
 | Email Institucional | Email institucional do candidato | Deve terminar com o domínio configurado (ex: `@al.insper.edu.br`) |
 | Email Pessoal | Email pessoal | Qualquer email válido |
-| Opção 1 … Opção N | Horários disponíveis em ordem de preferência | Uma coluna por opção |
+| Opção 1 … Opção N | Horários disponíveis em ordem de preferência | Uma coluna por opção (só no modo "Candidatos escolhem") |
 
-Dois parâmetros são configurados antes do upload:
+Antes do upload, a tela inicial pede:
 
-- **Número de opções de horário** (N): quantas colunas de disponibilidade existem na planilha. A primeira opção tem maior prioridade no algoritmo.
+- **Horários**, com dois modos:
+  - **Candidatos escolhem** (padrão): a planilha tem as colunas de opção e informa-se o **número de opções** (N). A primeira opção tem maior prioridade no algoritmo.
+  - **Eu defino**: quem organiza digita os horários das mesas (um por linha). Todo candidato pode ir em qualquer um deles, e só as restrições dos avaliadores e os critérios adicionais pesam. Colunas de opção na planilha, se houver, são ignoradas; as outras abas não mudam.
 - **Domínio do email institucional**: sufixo que todos os emails institucionais devem ter (ex: `@al.insper.edu.br`).
 
 Exemplo de horário: `quarta 14-16`
@@ -203,6 +205,7 @@ candidate_allocation/
 ├── carregar.go     -- leitura do banco da sessão para a alocação
 ├── hungaro.go      -- algoritmo húngaro (escolha dos avaliadores de cada horário)
 ├── pontuacao.go    -- pontuação da alocação e impressão no log
+├── preferencia.go  -- modo sem preferência: horários digitados na tela
 ├── capacidade.go   -- prévia de capacidade para os parâmetros da alocação
 ├── criterios.go    -- critérios adicionais (curso/semestre) usados na alocação
 ├── recursos.go     -- limites do servidor conforme a CPU disponível (produção)

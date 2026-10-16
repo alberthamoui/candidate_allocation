@@ -16,9 +16,27 @@ import (
 var (
 	reEmailPessoal = regexp.MustCompile(`^[^@]+@[^@]+\.[^@]+$`)
 	reCPF          = regexp.MustCompile(`^\d{11}$`)
-	reNumero       = regexp.MustCompile(`^\d{9}$`)
-	reSemestre     = regexp.MustCompile(`^([1-9]|10)$`)
+	// 9 dígitos (como sempre foi) ou um telefone com DDD, com ou sem DDI
+	reNumero   = regexp.MustCompile(`^(\d{9}|\d{10,13})$`)
+	reSemestre = regexp.MustCompile(`^([1-9]|10)$`)
 )
+
+// soDigitos tira a pontuação de CPF e telefone ("123.456.789-01",
+// "(11) 98888-7777", "+55 11 98888-7777"). Se houver qualquer outro caractere
+// (letras, por exemplo), devolve ok = false e o valor não deve ser trocado.
+func soDigitos(s string, permitidos string) (digitos string, ok bool) {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case strings.ContainsRune(permitidos, r) || unicode.IsSpace(r):
+		default:
+			return "", false
+		}
+	}
+	return b.String(), true
+}
 
 func getUsuarioFields(quantidade_opcoes int) []string {
 	t := reflect.TypeOf(Candidato{})
@@ -94,11 +112,18 @@ func processData(data []Candidato, emailDomain string) (map[int]ValidationResult
 		entrada.Numero = strings.TrimSpace(entrada.Numero)
 
 		// --- validações por regex (e zera o campo quando inválido) ---
-		if !reCPF.MatchString(entrada.CPF) {
-			errs = append(errs, ErrorEntry{"cpf", "cpf inválido"})
+		// CPF é opcional; se vier, aceita com ou sem pontuação
+		if entrada.CPF != "" {
+			if d, ok := soDigitos(entrada.CPF, ".-"); ok && reCPF.MatchString(d) {
+				entrada.CPF = d
+			} else {
+				errs = append(errs, ErrorEntry{"cpf", "cpf inválido (11 dígitos, ou deixe vazio)"})
+			}
 		}
-		if !reNumero.MatchString(entrada.Numero) {
-			errs = append(errs, ErrorEntry{"numero", "numero inválido"})
+		if d, ok := soDigitos(entrada.Numero, "()+-."); ok && reNumero.MatchString(d) {
+			entrada.Numero = d
+		} else {
+			errs = append(errs, ErrorEntry{"numero", "telefone inválido (9 a 13 dígitos)"})
 		}
 		if !reSemestre.MatchString(entrada.Semestre) {
 			errs = append(errs, ErrorEntry{"semestre", "semestre inválido"})

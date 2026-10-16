@@ -8,9 +8,25 @@ interface AppProps {
 	setMapping: (data: any) => void;
 }
 
+// Separa os horários digitados como o servidor faz (preferencia.go): um por
+// linha, ou separados por vírgula ou ponto e vírgula, sem repetidos.
+function lerHorarios(texto: string): string[] {
+	const vistos = new Set<string>();
+	for (const parte of texto.split(/[\n\r,;]+/)) {
+		const h = parte.trim().toLowerCase();
+		if (h) vistos.add(h);
+	}
+	return [...vistos];
+}
+
 function Home({ setMapping }: AppProps) {
 	const [file, setFile] = useState<File | null>(null);
 	const [nOpcoes, setNOpcoes] = useState(5);
+	// "candidatos": cada um escolhe horários em ordem de preferência (colunas
+	// de opção); "definidos": quem organiza digita os horários e todos podem
+	// ir em qualquer um
+	const [modoHorario, setModoHorario] = useState<"candidatos" | "definidos">("candidatos");
+	const [textoHorarios, setTextoHorarios] = useState("");
 	const [emailDomain, setEmailDomain] = useState("@al.insper.edu.br");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
@@ -23,10 +39,15 @@ function Home({ setMapping }: AppProps) {
 			setError("Por favor, selecione um arquivo .xlsx.");
 			return;
 		}
+		const horarios = modoHorario === "definidos" ? lerHorarios(textoHorarios) : undefined;
+		if (horarios && horarios.length === 0) {
+			setError("Informe pelo menos um horário para as mesas.");
+			return;
+		}
 		setLoading(true);
 		setError("");
 		try {
-			const mapping = await upload(file, nOpcoes, emailDomain);
+			const mapping = await upload(file, nOpcoes, emailDomain, horarios);
 			setMapping(mapping);
 			navigate("/mapping");
 		} catch (err: any) {
@@ -100,21 +121,73 @@ function Home({ setMapping }: AppProps) {
 						/>
 					</div>
 
-					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<div>
+						<span className="rotulo flex items-center gap-1.5">
+							Horários
+							<IconeAjuda texto="Candidatos escolhem: a planilha tem colunas de opção (1ª, 2ª...) e a 1ª opção tem prioridade. Eu defino: você digita os horários das mesas, todo candidato pode ir em qualquer um e só as restrições dos avaliadores pesam." />
+						</span>
+						<div role="radiogroup" aria-label="Horários" className="grid grid-cols-2 gap-1 rounded-[var(--radius)] border border-[color:var(--line-strong)] bg-[color:var(--bg-subtle)] p-1">
+							{(
+								[
+									["candidatos", "Candidatos escolhem"],
+									["definidos", "Eu defino"],
+								] as const
+							).map(([modo, rotulo]) => (
+								<button
+									key={modo}
+									type="button"
+									role="radio"
+									aria-checked={modoHorario === modo}
+									onClick={() => setModoHorario(modo)}
+									className={cn(
+										"rounded-[calc(var(--radius)-2px)] px-3 py-1.5 text-sm transition-colors",
+										modoHorario === modo
+											? "bg-[color:var(--text)] font-medium text-white"
+											: "text-[color:var(--text-muted)] hover:bg-white hover:text-[color:var(--text)]"
+									)}
+								>
+									{rotulo}
+								</button>
+							))}
+						</div>
+					</div>
+
+					{modoHorario === "definidos" && (
 						<label className="block">
 							<span className="rotulo flex items-center gap-1.5">
-								Opções de horário
-								<IconeAjuda texto="Quantas colunas de horário (1ª opção, 2ª opção...) cada candidato preencheu." />
+								Horários das mesas
+								<IconeAjuda texto="Um por linha (ou separados por vírgula). Colunas de opção na planilha, se houver, são ignoradas." />
 							</span>
-							<input
-								type="number"
-								min={1}
-								max={10}
-								value={nOpcoes}
-								onChange={(e) => setNOpcoes(Math.max(1, Math.min(10, Number(e.target.value))))}
-								className="campo"
+							<textarea
+								rows={4}
+								value={textoHorarios}
+								onChange={(e) => setTextoHorarios(e.target.value)}
+								placeholder={"segunda 14-16\nterça 10-12\nquarta 16-18"}
+								className="campo resize-y"
 							/>
+							<span className="mt-1 block text-xs text-[color:var(--text-muted)]">
+								{lerHorarios(textoHorarios).length} horário(s)
+							</span>
 						</label>
+					)}
+
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						{modoHorario === "candidatos" && (
+							<label className="block">
+								<span className="rotulo flex items-center gap-1.5">
+									Opções de horário
+									<IconeAjuda texto="Quantas colunas de horário (1ª opção, 2ª opção...) cada candidato preencheu." />
+								</span>
+								<input
+									type="number"
+									min={1}
+									max={10}
+									value={nOpcoes}
+									onChange={(e) => setNOpcoes(Math.max(1, Math.min(10, Number(e.target.value))))}
+									className="campo"
+								/>
+							</label>
+						)}
 						<label className="block">
 							<span className="rotulo flex items-center gap-1.5">
 								Domínio do email
