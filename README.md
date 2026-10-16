@@ -215,20 +215,31 @@ candidate_allocation/
 ├── Dockerfile      -- build multi-stage (Node → Go → Alpine)
 ├── Makefile        -- atalhos: rodar, testar, lint...
 ├── .golangci.yml   -- regras do golangci-lint
-├── Excels/         -- arquivo de exemplo para download
+├── Excels/         -- planilha de exemplo (download) e planilha oficial (testes)
 └── frontend/       -- app React/TypeScript (Vite + Tailwind)
     ├── e2e/                -- testes de interface (Playwright)
     ├── playwright.config.ts
     └── src/
         ├── main.tsx            -- roteamento e estado global
         ├── api.ts              -- cliente HTTP/SSE e gestão do sessionId
-        ├── components/         -- UserCard, EditableCell, PainelResultado (conteúdo da tela de resultado), EditorCriterios
+        ├── fluxo.ts            -- etapas do fluxo e textos de cada tela (título e ajuda "?")
+        ├── nomesCampos.ts      -- nomes legíveis dos campos no mapeamento e na revisão
+        ├── index.css           -- variáveis de cor e classes base do visual
+        ├── components/
+        │   ├── Layout.tsx          -- moldura das telas: topo com etapa e ajuda, etapas no rodapé
+        │   ├── ui.tsx              -- peças visuais compartilhadas (botões, cartões, barra de ações...)
+        │   ├── EtapaAba.tsx        -- lê uma aba da planilha (avaliadores ou restrições) e segue para o mapeamento
+        │   ├── BranchBadge.tsx     -- selo com a branch e o commit no topo da tela
+        │   ├── PainelResultado.tsx -- conteúdo da tela de resultado
+        │   ├── EditorCriterios.tsx -- critérios adicionais nos parâmetros
+        │   ├── UserCard.tsx        -- cartão de candidato na revisão
+        │   └── EditableCell.tsx    -- valor editável com um clique
         └── pages/
             ├── Home.tsx            -- tela inicial e upload
             ├── MappingPage.tsx     -- mapeamento de colunas (reutilizado nas 3 etapas)
             ├── VerifyUsers.tsx     -- revisão de candidatos
-            ├── UploadAvaliador.tsx
-            ├── UploadRestricao.tsx
+            ├── UploadAvaliador.tsx -- etapa de avaliadores (usa EtapaAba)
+            ├── UploadRestricao.tsx -- etapa de restrições (usa EtapaAba)
             ├── Parametros.tsx      -- parâmetros da alocação e prévia de capacidade
             └── Resultado.tsx       -- resultado da alocação e exportação
 ```
