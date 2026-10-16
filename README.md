@@ -27,7 +27,7 @@ Ao confirmar os parâmetros, o algoritmo de alocação é executado. A tela de r
 
 ### Algoritmo de alocação
 
-Cada candidato vai para uma mesa de um dos horários que escolheu. Por padrão, cada horário tem até 5 mesas (limitado por `avaliadores / avaliadores por mesa`, pois cada avaliador fica em uma mesa por horário), cada mesa tem 5 avaliadores distintos e só é formada com 5 a 8 candidatos. Esses quatro valores são editáveis na etapa de parâmetros. A pontuação (em [alocate.go](alocate.go)) penaliza:
+Cada candidato vai para uma mesa de um dos horários que escolheu. Por padrão, cada horário tem até 5 mesas (limitado por `avaliadores / avaliadores por mesa`, pois cada avaliador fica em uma mesa por horário), cada mesa tem 5 avaliadores distintos e só é formada com 5 a 8 candidatos. Esses quatro valores são editáveis na etapa de parâmetros. A pontuação (pesos em [alocate.go](alocate.go), cálculo em [pontuacao.go](pontuacao.go)) penaliza:
 
 | Situação | Pontos |
 |---|---|
@@ -199,7 +199,10 @@ candidate_allocation/
 ├── main.go         -- entrypoint: servidor HTTP, roteamento
 ├── handlers.go     -- handlers das rotas HTTP e router
 ├── app.go          -- SessionStore e lógica de sessão
-├── alocate.go      -- algoritmo de alocação
+├── alocate.go      -- algoritmo de alocação (parâmetros e simulated annealing)
+├── carregar.go     -- leitura do banco da sessão para a alocação
+├── hungaro.go      -- algoritmo húngaro (escolha dos avaliadores de cada horário)
+├── pontuacao.go    -- pontuação da alocação e impressão no log
 ├── capacidade.go   -- prévia de capacidade para os parâmetros da alocação
 ├── criterios.go    -- critérios adicionais (curso/semestre) usados na alocação
 ├── recursos.go     -- limites do servidor conforme a CPU disponível (produção)
