@@ -132,3 +132,53 @@ func TestSugestaoCabecalhoVazio(t *testing.T) {
 		}
 	}
 }
+
+func TestNumeroDaOpcao(t *testing.T) {
+	casos := map[string]int{ // 0 = não é coluna de opção
+		"Opcao 1": 1, "Primeira Opção": 1, "1ª opção": 1, "Opção1": 1,
+		"Quinta Opção": 5, "Horário 2": 2, "Disponibilidade 3": 3, "Preferência 4": 4,
+		"Opção de horário 6": 6, "Décima Opção": 10,
+		"Opção": 0, "Opção 11": 0, "Segunda-feira": 0, "Nome": 0, "Observações": 0,
+		"Email 2": 0, "Opção 1 ou 2": 0,
+	}
+	for col, want := range casos {
+		got, ok := numeroDaOpcao(col)
+		if (want == 0 && ok) || (want != 0 && (!ok || got != want)) {
+			t.Errorf("numeroDaOpcao(%q) = %d, %v; esperado %d", col, got, ok, want)
+		}
+	}
+}
+
+func TestContarOpcoes(t *testing.T) {
+	base := []string{"TimeStamp", "Nome", "CPF", "Numero"}
+	casos := []struct {
+		extras []string
+		want   int
+	}{
+		{[]string{"Primeira Opção", "Segunda Opção", "Terceira Opção"}, 3},
+		{[]string{"Primeira Opção", "Segunda Opção", "Terceira Opção", "Quarta Opção", "Quinta Opção"}, 5},
+		{[]string{"Opção 1", "Opção 2", "Opção 4"}, 4}, // a 3 falta: fica sem coluna
+		{[]string{"Observações"}, 0},
+	}
+	for _, c := range casos {
+		if got := contarOpcoes(append(append([]string{}, base...), c.extras...)); got != c.want {
+			t.Errorf("contarOpcoes(%q) = %d, esperado %d", c.extras, got, c.want)
+		}
+	}
+}
+
+// Uma coluna que sobrou nunca vira opção de horário.
+func TestOpcaoNaoPegaColunaQueSobrou(t *testing.T) {
+	cabecalho := []string{"Nome", "CPF", "Primeira Opção", "Segunda Opção", "Observações"}
+	got := colunasSugeridas(cabecalho, getUsuarioFields(4))
+	if got["opcao 1"] != "Primeira Opção" || got["opcao 2"] != "Segunda Opção" {
+		t.Errorf("opções 1 e 2 = %q, %q", got["opcao 1"], got["opcao 2"])
+	}
+	if got["opcao 3"] != "" || got["opcao 4"] != "" {
+		t.Errorf("opções sem coluna de opção ficaram com %q e %q", got["opcao 3"], got["opcao 4"])
+	}
+	// os outros campos continuam pegando o que sobrou, como antes
+	if got["timestamp"] != "Observações" {
+		t.Errorf("timestamp = %q, esperado a coluna que sobrou", got["timestamp"])
+	}
+}

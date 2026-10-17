@@ -8,6 +8,7 @@ import (
 	"log"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -214,12 +215,16 @@ func getHorarios(data []Candidato) []string {
 	for horario := range horariosMap {
 		horariosUnicos = append(horariosUnicos, horario)
 	}
-
+	// ordem fixa: os ids dos horários decidem a ordem da busca, e a mesma
+	// planilha tem que dar o mesmo resultado a cada upload
+	sort.Strings(horariosUnicos)
 	return horariosUnicos
 }
 
+// normalizaOpcao deixa o horário num formato só: minúsculas e um espaço entre
+// as palavras ("SEGUNDA  14-16 " = "segunda 14-16").
 func normalizaOpcao(op string) string {
-	return strings.TrimSpace(strings.ToLower(op))
+	return strings.Join(strings.Fields(strings.ToLower(op)), " ")
 }
 
 // fillDb grava candidatos, avaliadores ou restrições numa transação: se um
@@ -303,18 +308,49 @@ func gravarAvaliadores(tx *sql.Tx, avaliadores []AvaliadorInfo) error {
 	return nil
 }
 
+// chaveNome compara nomes sem diferenciar caixa, acento e espaços a mais
+// ("  ANA  Souza" = "ana souza" = "Ána Souza").
+func chaveNome(nome string) string {
+	return strings.Join(strings.Fields(strings.ToLower(semAcento.Replace(nome))), " ")
+}
+
+// idsPorNome indexa os candidatos gravados por chaveNome; com nomes repetidos
+// fica o primeiro (menor id).
+func idsPorNome(tx *sql.Tx) (map[string]int64, error) {
+	rows, err := tx.Query(`SELECT id, nome FROM pessoa ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := map[string]int64{}
+	for rows.Next() {
+		var id int64
+		var nome string
+		if err := rows.Scan(&id, &nome); err != nil {
+			return nil, err
+		}
+		if k := chaveNome(nome); ids[k] == 0 {
+			ids[k] = id
+		}
+	}
+	return ids, rows.Err()
+}
+
 func gravarRestricoes(tx *sql.Tx, restricoes []Restricao) error {
+	// siglas separadas por vírgula, ponto e vírgula, barra, "|" ou espaço
 	siglas := func(s string) []string {
-		return strings.FieldsFunc(s, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
+		return strings.FieldsFunc(s, func(r rune) bool { return strings.ContainsRune(",;/|", r) || unicode.IsSpace(r) })
+	}
+	ids, err := idsPorNome(tx)
+	if err != nil {
+		return fmt.Errorf("lendo os candidatos: %w", err)
 	}
 	gravadas := 0
 	for _, restricao := range restricoes {
-		candidatoID, err := dbpkg.GetPessoaIDByName(tx, restricao.Candidato)
-		if errors.Is(err, sql.ErrNoRows) {
+		candidatoID, ok := ids[chaveNome(restricao.Candidato)]
+		if !ok {
 			log.Printf("[WARN] restrição ignorada: candidato %q não encontrado", restricao.Candidato)
 			continue
-		} else if err != nil {
-			return fmt.Errorf("restrição do candidato %q: %w", restricao.Candidato, err)
 		}
 
 		tipos := []struct {

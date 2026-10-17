@@ -2,6 +2,7 @@ package main
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -16,6 +17,10 @@ import (
 // entende ordinais ("Primeira Opção" = "opcao 1"). Campos sem par por nome
 // recebem as colunas que sobraram, na ordem da planilha (como era antes, por
 // posição); se não sobrar coluna, ficam sem coluna.
+//
+// As opções de horário são a exceção: "opcao N" só fica com uma coluna que
+// numeroDaOpcao reconhece como a opção N, nunca com uma que sobrou (senão
+// uma coluna como "Observações" viraria horário).
 
 // aliasesCampo lista outros nomes comuns de coluna para cada campo.
 var aliasesCampo = map[string][]string{
@@ -139,6 +144,60 @@ func similaridadeNomes(campo, cabecalho string) int {
 	return max(pontos, 0)
 }
 
+// LIMITE_OPCOES é o máximo de opções de horário por candidato.
+const LIMITE_OPCOES = 10
+
+// palavrasOpcao são as palavras que, junto com um número, marcam uma coluna
+// de opção de horário: "Opção 1", "Primeira Opção", "Horário 2"...
+var palavrasOpcao = map[string]bool{
+	"opcao": true, "opcoes": true, "horario": true, "horarios": true,
+	"disponibilidade": true, "preferencia": true,
+}
+
+// numeroDaOpcao diz se o cabeçalho é de uma opção de horário e qual (1 a
+// LIMITE_OPCOES): precisa de uma palavra de palavrasOpcao e de um número só.
+func numeroDaOpcao(cabecalho string) (int, bool) {
+	temPalavra, numero := false, 0
+	for _, t := range tokensNome(cabecalho) {
+		switch {
+		case palavrasOpcao[t]:
+			temPalavra = true
+		case ehNumero(t):
+			if numero != 0 {
+				return 0, false // dois números: não dá para saber qual opção é
+			}
+			n, err := strconv.Atoi(t)
+			if err != nil || n < 1 || n > LIMITE_OPCOES {
+				return 0, false
+			}
+			numero = n
+		}
+	}
+	return numero, temPalavra && numero > 0
+}
+
+// contarOpcoes devolve quantas opções de horário o cabeçalho tem: a maior
+// opção encontrada (se faltar uma no meio, ela fica sem coluna).
+func contarOpcoes(cabecalho []string) int {
+	n := 0
+	for _, col := range cabecalho {
+		if k, ok := numeroDaOpcao(col); ok {
+			n = max(n, k)
+		}
+	}
+	return n
+}
+
+// opcaoDoCampo diz se o campo é "opcao N" e qual N.
+func opcaoDoCampo(campo string) (int, bool) {
+	numero, ok := strings.CutPrefix(campo, "opcao ")
+	if !ok {
+		return 0, false
+	}
+	n, err := strconv.Atoi(numero)
+	return n, err == nil
+}
+
 func palavrasEmComum(a, b []string) int {
 	restantes := make(map[string]int, len(b))
 	for _, t := range b {
@@ -166,6 +225,14 @@ func sugerirMapeamento(cabecalho, campos []string) []MappingItem {
 	type par struct{ campo, coluna, pontos int }
 	var pares []par
 	for i, campo := range campos {
+		if k, ehOpcao := opcaoDoCampo(campo); ehOpcao {
+			for j, col := range cabecalho {
+				if n, ok := numeroDaOpcao(col); ok && n == k {
+					pares = append(pares, par{i, j, 10_000})
+				}
+			}
+			continue
+		}
 		nomes := append([]string{campo}, aliasesCampo[campo]...)
 		for j, col := range cabecalho {
 			melhor := 0
@@ -202,8 +269,8 @@ func sugerirMapeamento(cabecalho, campos []string) []MappingItem {
 
 	// campos sem par por nome: colunas que sobraram, na ordem da planilha
 	livre := 0
-	for i := range campos {
-		if colunaDe[i] >= 0 {
+	for i, campo := range campos {
+		if _, ehOpcao := opcaoDoCampo(campo); colunaDe[i] >= 0 || ehOpcao {
 			continue
 		}
 		for livre < len(cabecalho) && usada[livre] {

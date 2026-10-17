@@ -607,6 +607,27 @@ func (e *estado) passo(temp float64) {
 // novoEstado aloca os candidatos de forma gulosa (quem tem menos opções
 // primeiro, na primeira mesa com vaga) e escolhe os melhores avaliadores.
 func (p *problema) novoEstado(semente int64) *estado {
+	e := p.estadoVazio(semente)
+	ordem := e.rng.Perm(p.nCand)
+	sort.SliceStable(ordem, func(i, j int) bool { return len(p.prefs[ordem[i]]) < len(p.prefs[ordem[j]]) })
+	for _, c := range ordem {
+	busca:
+		for _, s := range p.prefs[c] {
+			for k := 0; k < p.nMesas; k++ {
+				if m := s*p.nMesas + k; len(e.membros[m]) < p.maxPessoas {
+					e.mover(c, -1, m)
+					break busca
+				}
+			}
+		}
+	}
+	e.definirPesos(0)
+	return e
+}
+
+// estadoVazio cria um estado com todos sem mesa e os buffers prontos; os
+// custos só valem depois de definirPesos.
+func (p *problema) estadoVazio(semente int64) *estado {
 	nM := p.nSlot * p.nMesas
 	e := &estado{
 		p:         p,
@@ -643,20 +664,6 @@ func (p *problema) novoEstado(semente int64) *estado {
 	for c := range e.mesaDe {
 		e.mesaDe[c] = -1
 	}
-	ordem := e.rng.Perm(p.nCand)
-	sort.SliceStable(ordem, func(i, j int) bool { return len(p.prefs[ordem[i]]) < len(p.prefs[ordem[j]]) })
-	for _, c := range ordem {
-	busca:
-		for _, s := range p.prefs[c] {
-			for k := 0; k < p.nMesas; k++ {
-				if m := s*p.nMesas + k; len(e.membros[m]) < p.maxPessoas {
-					e.mover(c, -1, m)
-					break busca
-				}
-			}
-		}
-	}
-	e.definirPesos(0)
 	return e
 }
 
@@ -911,6 +918,10 @@ esperar:
 		if r.custo < melhor.custo {
 			melhor = r
 		}
+	}
+	// movimentos compostos que a busca não faz sozinha (reparo.go)
+	if melhor.custo > alvo {
+		melhor = p.reparar(melhor)
 	}
 
 	aloc, mesas := p.montarMesas(melhor)

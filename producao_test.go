@@ -165,7 +165,7 @@ func TestLimitesDeUploadESessoes(t *testing.T) {
 		t.Errorf("upload grande: status %d, corpo %s", rec.Code, rec.Body.String())
 	}
 
-	planilha, err := createMockExcelFile([][]interface{}{{"Nome"}, {"Ana"}})
+	planilha, err := createMockExcelFile([][]interface{}{{"Nome", "Opção 1"}, {"Ana", "segunda 8-10"}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,9 +21,8 @@ function lerHorarios(texto: string): string[] {
 
 function Home({ setMapping }: AppProps) {
 	const [file, setFile] = useState<File | null>(null);
-	const [nOpcoes, setNOpcoes] = useState(5);
 	// "candidatos": cada um escolhe horários em ordem de preferência (colunas
-	// de opção); "definidos": quem organiza digita os horários e todos podem
+	// de opção, contadas pelo servidor); "definidos": quem organiza digita os horários e todos podem
 	// ir em qualquer um
 	const [modoHorario, setModoHorario] = useState<"candidatos" | "definidos">("candidatos");
 	const [textoHorarios, setTextoHorarios] = useState("");
@@ -47,7 +46,7 @@ function Home({ setMapping }: AppProps) {
 		setLoading(true);
 		setError("");
 		try {
-			const mapping = await upload(file, nOpcoes, emailDomain, horarios);
+			const mapping = await upload(file, emailDomain, horarios);
 			setMapping(mapping);
 			navigate("/mapping");
 		} catch (err: any) {
@@ -124,7 +123,7 @@ function Home({ setMapping }: AppProps) {
 					<div>
 						<span className="rotulo flex items-center gap-1.5">
 							Horários
-							<IconeAjuda texto="Candidatos escolhem: a planilha tem colunas de opção (1ª, 2ª...) e a 1ª opção tem prioridade. Eu defino: você digita os horários das mesas, todo candidato pode ir em qualquer um e só as restrições dos avaliadores pesam." />
+							<IconeAjuda texto="Candidatos escolhem: a planilha tem colunas de opção (“Opção 1”, “Primeira Opção”...), contadas automaticamente, e a 1ª opção tem prioridade. Eu defino: você digita os horários das mesas, todo candidato pode ir em qualquer um e só as restrições dos avaliadores pesam." />
 						</span>
 						<div role="radiogroup" aria-label="Horários" className="grid grid-cols-2 gap-1 rounded-[var(--radius)] border border-[color:var(--line-strong)] bg-[color:var(--bg-subtle)] p-1">
 							{(
@@ -172,22 +171,6 @@ function Home({ setMapping }: AppProps) {
 					)}
 
 					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-						{modoHorario === "candidatos" && (
-							<label className="block">
-								<span className="rotulo flex items-center gap-1.5">
-									Opções de horário
-									<IconeAjuda texto="Quantas colunas de horário (1ª opção, 2ª opção...) cada candidato preencheu." />
-								</span>
-								<input
-									type="number"
-									min={1}
-									max={10}
-									value={nOpcoes}
-									onChange={(e) => setNOpcoes(Math.max(1, Math.min(10, Number(e.target.value))))}
-									className="campo"
-								/>
-							</label>
-						)}
 						<label className="block">
 							<span className="rotulo flex items-center gap-1.5">
 								Domínio do email

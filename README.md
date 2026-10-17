@@ -49,7 +49,9 @@ Os **critérios adicionais** (até 5, em [criterios.go](criterios.go)) valem par
 
 Eles pesam junto com as preferências de horário: com importância alta, a alocação pode trocar a opção de horário de alguém para cumprir a regra. O resultado mostra, para cada critério, quantas mesas não o atendem.
 
-A busca é um **simulated annealing** sobre a divisão dos candidatos em mesas (mover um candidato de mesa ou trocar dois candidatos). Os avaliadores não são sorteados: para cada divisão, a melhor escolha de avaliadores de um horário é um problema de atribuição, resolvido de forma exata pelo **algoritmo húngaro** a cada movimento. Mesas incompletas e conflitos "não posso" recebem penalidades que começam brandas e endurecem ao longo da busca, para que ela consiga montar mesas aos poucos. Rodam 8 buscas independentes em paralelo (sementes fixas, então a mesma planilha gera o mesmo resultado) e fica a melhor.
+A busca é um **simulated annealing** sobre a divisão dos candidatos em mesas (mover um candidato de mesa ou trocar dois candidatos). Os avaliadores não são sorteados: para cada divisão, a melhor escolha de avaliadores de um horário é um problema de atribuição, resolvido de forma exata pelo **algoritmo húngaro** a cada movimento. Mesas incompletas e conflitos "não posso" recebem penalidades que começam brandas e endurecem ao longo da busca, para que ela consiga montar mesas aos poucos. Rodam 8 buscas independentes em paralelo (sementes fixas e horários em ordem fixa, então a mesma planilha gera o mesmo resultado) e fica a melhor.
+
+Depois da busca, um **reparo** ([reparo.go](reparo.go)) tenta movimentos compostos que a busca não faz sozinha, porque cada passo isolado piora o custo: abrir uma mesa nova com vários candidatos de uma vez (ex.: para quem ficou sem mesa), desfazer uma mesa espalhando os membros em vagas melhores e cadeias de trocas entre mesas. Cada movimento só fica se o custo real cair.
 
 Um limite inferior exato (fluxo de custo mínimo sobre a escolha de horários) encerra a busca antes quando a solução é comprovadamente ótima.
 
@@ -61,7 +63,7 @@ O arquivo `.xlsx` deve ter exatamente **3 abas**, nesta ordem. Um arquivo de exe
 
 ### Aba 1 — Candidatos
 
-Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos — o app sugere o mapeamento pelo nome de cada coluna (ignorando maiúsculas, acentos e pontuação, e entendendo variações como "Primeira Opção" ou "E-mail institucional"), ajustável na interface. Campos sem correspondência pelo nome recebem as colunas que sobraram, na ordem da planilha.
+Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos — o app sugere o mapeamento pelo nome de cada coluna (ignorando maiúsculas, acentos e pontuação, e entendendo variações como "Primeira Opção" ou "E-mail institucional"), ajustável na interface. Campos sem correspondência pelo nome recebem as colunas que sobraram, na ordem da planilha, exceto as opções de horário: uma opção só é ligada a uma coluna com nome de opção, nunca a uma que sobrou.
 
 | Campo | Descrição | Validação |
 |---|---|---|
@@ -73,12 +75,12 @@ Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos
 | Curso | Nome do curso | — |
 | Email Institucional | Email institucional do candidato | Deve terminar com o domínio configurado (ex: `@al.insper.edu.br`) |
 | Email Pessoal | Email pessoal | Qualquer email válido |
-| Opção 1 … Opção N | Horários disponíveis em ordem de preferência | Uma coluna por opção (só no modo "Candidatos escolhem") |
+| Opção 1 … Opção N | Horários disponíveis em ordem de preferência | Uma coluna por opção, até 10 (só no modo "Candidatos escolhem"). O nome precisa ter "opção", "horário", "disponibilidade" ou "preferência" e o número, que pode vir por extenso: `Opção 1`, `Primeira Opção`, `Horário 2` |
 
 Antes do upload, a tela inicial pede:
 
 - **Horários**, com dois modos:
-  - **Candidatos escolhem** (padrão): a planilha tem as colunas de opção e informa-se o **número de opções** (N). A primeira opção tem maior prioridade no algoritmo.
+  - **Candidatos escolhem** (padrão): a planilha tem as colunas de opção, e o app conta quantas são pelo cabeçalho (N é a maior opção encontrada; se faltar uma no meio, ela fica vazia). A primeira opção tem maior prioridade no algoritmo. Sem nenhuma coluna de opção, o upload avisa e pede para renomear as colunas ou usar "Eu defino".
   - **Eu defino**: quem organiza digita os horários das mesas (um por linha). Todo candidato pode ir em qualquer um deles, e só as restrições dos avaliadores e os critérios adicionais pesam. Colunas de opção na planilha, se houver, são ignoradas; as outras abas não mudam.
 - **Domínio do email institucional**: sufixo que todos os emails institucionais devem ter (ex: `@al.insper.edu.br`).
 
@@ -96,11 +98,11 @@ Uma linha por avaliador.
 
 ### Aba 3 — Restricoes
 
-Uma linha por candidato que possui restrição. As siglas devem corresponder exatamente ao campo **Sigla** dos avaliadores. Múltiplas siglas são separadas por vírgula ou espaço.
+Uma linha por candidato que possui restrição; a aba pode ter só o cabeçalho, se ninguém tiver restrição. As siglas devem corresponder exatamente ao campo **Sigla** dos avaliadores. Múltiplas siglas são separadas por vírgula, ponto e vírgula, barra ou espaço.
 
 | Campo | Descrição |
 |---|---|
-| Candidato | Nome do candidato (deve coincidir com o cadastrado) |
+| Candidato | Nome do candidato, como cadastrado (maiúsculas, acentos e espaços a mais não importam) |
 | NaoPosso | Siglas de avaliadores com quem o candidato **não pode** ser alocado (restrição absoluta) |
 | PrefiroNao | Siglas de avaliadores com quem o candidato **prefere não** ser alocado (restrição suave) |
 
@@ -167,7 +169,11 @@ go test ./...
 cd frontend && npm run test:e2e
 ```
 
-Os testes de interface compilam o frontend, sobem o servidor Go na porta 8099 (sem conflitar com um servidor aberto na 8080) e percorrem as telas com as planilhas de `Excels/`: fluxo completo até a exportação, sugestão e troca de colunas no mapeamento, parâmetros e prévia de capacidade, erros de upload e o selo de versão. Na primeira vez, instale o navegador com `npx playwright install chromium`. Para ver o que falhou, `npx playwright show-report` abre um relatório com screenshot e passo a passo de cada teste.
+Os testes de interface compilam o frontend, sobem o servidor Go na porta 8099 (sem conflitar com um servidor aberto na 8080) e percorrem as telas com as planilhas de `Excels/`: fluxo completo até a exportação, sugestão e troca de colunas no mapeamento, parâmetros e prévia de capacidade, erros de upload e o selo de versão. Na primeira vez, instale o navegador com `npx playwright install chromium`.
+
+`cenarios_test.go` gera dezenas de planilhas de teste em `Excels/cenarios/` (fora do git, recriadas a cada execução, com um `LEIAME.md` que descreve cada uma) e passa cada uma pelo fluxo do app: quantidades diferentes de opções, candidatos, horários e avaliadores, cabeçalhos com outros nomes, dados inválidos, duplicados, linhas vazias, restrições difíceis e planilhas incompletas. Dá para abrir essas planilhas e testar à mão pela tela. Para rodar só esse teste: `go test -run TestCenariosPlanilha -v`.
+
+**CI:** o GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) roda em todo PR e em todo push na `dev` e na `main`, com três jobs em paralelo: lint e testes do Go (com os cenários), testes de interface (Playwright, com o relatório anexado se falhar) e o build da imagem do `Dockerfile`, a mesma que o Render usa. Para ver o que falhou, `npx playwright show-report` abre um relatório com screenshot e passo a passo de cada teste.
 
 ### Docker
 
@@ -205,6 +211,7 @@ candidate_allocation/
 ├── carregar.go     -- leitura do banco da sessão para a alocação
 ├── hungaro.go      -- algoritmo húngaro (escolha dos avaliadores de cada horário)
 ├── pontuacao.go    -- pontuação da alocação e impressão no log
+├── reparo.go       -- movimentos compostos depois da busca (abrir/desfazer mesa, cadeias)
 ├── preferencia.go  -- modo sem preferência: horários digitados na tela
 ├── capacidade.go   -- prévia de capacidade para os parâmetros da alocação
 ├── criterios.go    -- critérios adicionais (curso/semestre) usados na alocação
@@ -220,6 +227,7 @@ candidate_allocation/
 ├── db/             -- funções auxiliares de banco
 ├── Dockerfile      -- build multi-stage (Node → Go → Alpine)
 ├── Makefile        -- atalhos: rodar, testar, lint...
+├── .github/workflows/ci.yml -- CI: lint, testes e build da imagem em cada PR
 ├── .golangci.yml   -- regras do golangci-lint
 ├── Excels/         -- planilha de exemplo (download) e planilha oficial (testes)
 └── frontend/       -- app React/TypeScript (Vite + Tailwind)

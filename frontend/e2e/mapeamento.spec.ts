@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
-import { PLANILHA_EXEMPLO, PLANILHA_OFICIAL, colunaMapeada } from "./apoio";
+import { PLANILHA_EXEMPLO, PLANILHA_OFICIAL, colunaMapeada, linhaMapeamento } from "./apoio";
 
 async function enviar(page: import("@playwright/test").Page, planilha: string) {
 	await page.goto("/");
@@ -15,8 +15,8 @@ test("sugestão pelo nome com cabeçalhos diferentes dos campos", async ({ page 
 	await expect(colunaMapeada(page, "email_insper")).toContainText("Email Insper");
 	await expect(colunaMapeada(page, "opcao 1")).toContainText("Primeira Opção");
 	await expect(colunaMapeada(page, "opcao 4")).toContainText("Quarta Opção");
-	// a planilha só tem 4 opções: a 5ª fica sem coluna
-	await expect(colunaMapeada(page, "opcao 5")).toHaveText("sem coluna");
+	// a planilha tem 4 opções e o app conta pelo cabeçalho: não pede a 5ª
+	await expect(linhaMapeamento(page, "opcao 5")).toHaveCount(0);
 });
 
 test("arrastar troca as colunas entre dois campos", async ({ page }) => {

@@ -64,7 +64,8 @@ func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	nOpcoes := 5
+	// sem nOpcoes, as colunas de opção são contadas pelo cabeçalho
+	nOpcoes := OPCOES_AUTOMATICO
 	// modo sem preferência: os horários vêm digitados e a planilha não
 	// precisa de colunas de opção (se tiver, são ignoradas)
 	var horariosLivres []string
@@ -77,8 +78,8 @@ func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) 
 		horariosLivres, nOpcoes = h, 0
 	} else if v := r.FormValue("nOpcoes"); v != "" {
 		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > 10 {
-			writeError(w, 400, fmt.Sprintf("número de opções inválido: %q (esperado de 1 a 10)", v))
+		if err != nil || n < 1 || n > LIMITE_OPCOES {
+			writeError(w, 400, fmt.Sprintf("número de opções inválido: %q (esperado de 1 a %d)", v, LIMITE_OPCOES))
 			return
 		}
 		nOpcoes = n
