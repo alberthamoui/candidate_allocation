@@ -171,7 +171,9 @@ cd frontend && npm run test:e2e
 
 Os testes de interface compilam o frontend, sobem o servidor Go na porta 8099 (sem conflitar com um servidor aberto na 8080) e percorrem as telas com as planilhas de `Excels/`: fluxo completo até a exportação, sugestão e troca de colunas no mapeamento, parâmetros e prévia de capacidade, erros de upload e o selo de versão. Na primeira vez, instale o navegador com `npx playwright install chromium`.
 
-`cenarios_test.go` gera dezenas de planilhas de teste em `Excels/cenarios/` (fora do git, recriadas a cada execução, com um `LEIAME.md` que descreve cada uma) e passa cada uma pelo fluxo do app: quantidades diferentes de opções, candidatos, horários e avaliadores, cabeçalhos com outros nomes, dados inválidos, duplicados, linhas vazias, restrições difíceis e planilhas incompletas. Dá para abrir essas planilhas e testar à mão pela tela. Para rodar só esse teste: `go test -run TestCenariosPlanilha -v`. Para ver o que falhou, `npx playwright show-report` abre um relatório com screenshot e passo a passo de cada teste.
+`cenarios_test.go` gera dezenas de planilhas de teste em `Excels/cenarios/` (fora do git, recriadas a cada execução, com um `LEIAME.md` que descreve cada uma) e passa cada uma pelo fluxo do app: quantidades diferentes de opções, candidatos, horários e avaliadores, cabeçalhos com outros nomes, dados inválidos, duplicados, linhas vazias, restrições difíceis e planilhas incompletas. Dá para abrir essas planilhas e testar à mão pela tela. Para rodar só esse teste: `go test -run TestCenariosPlanilha -v`.
+
+**CI:** o GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) roda em todo PR e em todo push na `dev` e na `main`, com três jobs em paralelo: lint e testes do Go (com os cenários), testes de interface (Playwright, com o relatório anexado se falhar) e o build da imagem do `Dockerfile`, a mesma que o Render usa. Para ver o que falhou, `npx playwright show-report` abre um relatório com screenshot e passo a passo de cada teste.
 
 ### Docker
 
@@ -225,6 +227,7 @@ candidate_allocation/
 ├── db/             -- funções auxiliares de banco
 ├── Dockerfile      -- build multi-stage (Node → Go → Alpine)
 ├── Makefile        -- atalhos: rodar, testar, lint...
+├── .github/workflows/ci.yml -- CI: lint, testes e build da imagem em cada PR
 ├── .golangci.yml   -- regras do golangci-lint
 ├── Excels/         -- planilha de exemplo (download) e planilha oficial (testes)
 └── frontend/       -- app React/TypeScript (Vite + Tailwind)
