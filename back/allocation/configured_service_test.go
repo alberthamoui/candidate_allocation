@@ -144,3 +144,30 @@ func seedConfiguredAllocationDB(t *testing.T, db *sql.DB) {
 		}
 	}
 }
+
+func TestNoPreferenceUsesAdminSchedulesWithEqualRanks(t *testing.T) {
+	db := openTempSQLiteDB(t)
+	seedConfiguredAllocationDB(t, db)
+	params := types.AllocationParams{GruposPorHorario: 1, MinPessoasPorGrupo: 1, MaxPessoasPorGrupo: 2, AvaliadoresPorGrupo: 1, SemPreferencia: true, HorariosLivres: []string{"sexta 14-16", "sábado 10-12"}}
+	config, err := BuildConfigurationFromPersistedData(db, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := RunConfiguredAllocation(db, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(run.Result.Assignments) != 2 || run.Result.Score.TotalPenalty != 0 {
+		t.Fatal(run.Result)
+	}
+	for _, c := range run.Problem.Candidates {
+		if len(c.PreferredGroupIDs) != len(run.Problem.Groups) {
+			t.Fatal("admin schedule unavailable", c)
+		}
+		for _, rank := range c.PreferenceRankByGroupID {
+			if rank != 0 {
+				t.Fatal("arbitrary preference ranking")
+			}
+		}
+	}
+}

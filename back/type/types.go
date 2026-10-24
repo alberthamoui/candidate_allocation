@@ -7,7 +7,7 @@ type NullableString string
 type Candidato struct {
 	Timestamp       string                     `json:"timestamp" db:"type=TEXT"`
 	Nome            string                     `json:"nome" db:"type=TEXT;required"`
-	CPF             string                     `json:"cpf" db:"type=TEXT;required;unique" app:"duplicate"`
+	CPF             string                     `json:"cpf" db:"type=TEXT;unique" app:"duplicate"`
 	Numero          string                     `json:"numero" db:"type=TEXT;required"`
 	Semestre        string                     `json:"semestre" db:"type=INTEGER;required"`
 	Curso           string                     `json:"curso" db:"type=TEXT;required"`
@@ -109,6 +109,8 @@ type WorkflowDefinition struct {
 
 // AllocationParams contains the editable allocation parameters.
 type AllocationParams struct {
+	SemPreferencia      bool            `json:"semPreferencia"`
+	HorariosLivres      []string        `json:"horariosLivres"`
 	GruposPorHorario    int             `json:"gruposPorHorario"`
 	MinPessoasPorGrupo  int             `json:"minPessoasPorGrupo"`
 	MaxPessoasPorGrupo  int             `json:"maxPessoasPorGrupo"`

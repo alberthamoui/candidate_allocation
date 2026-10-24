@@ -3,6 +3,9 @@
 import {types} from '../models';
 import {logic} from '../models';
 import {main} from '../models';
+import {operations} from '../models';
+
+export function BeginGoogleConnection():Promise<string>;
 
 export function BuildAllocationConfiguration(arg1:Array<types.UniqueValueDetection>,arg2:Array<types.PreferenceScheduleMapping>,arg3:types.AllocationParams,arg4:Array<types.Candidato>):Promise<types.AllocationConfiguration>;
 
@@ -24,13 +27,33 @@ export function DetectUniqueCandidateColumnValues(arg1:Array<types.Candidato>,ar
 
 export function DetectUniquePreferenceValues(arg1:Array<types.Candidato>):Promise<Array<types.UniqueValueDetection>>;
 
+export function DisconnectGoogle():Promise<void>;
+
+export function EvaluateCandidates(arg1:Array<number>,arg2:string):Promise<main.UIAllocationResult>;
+
+export function ExportAgendaExcel():Promise<string>;
+
+export function GetAgenda():Promise<main.UIAllocationResult>;
+
 export function GetAllocationRunState(arg1:boolean):Promise<main.UIAllocationRunState>;
 
 export function GetAvaliadorMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
 
 export function GetCandidateMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
 
+export function GetChannelConfig():Promise<main.ConfigAvisos>;
+
 export function GetCriteriaOptions():Promise<Record<string, Array<string>>>;
+
+export function GetGoogleConnectionStatus():Promise<main.GoogleConnectionStatus>;
+
+export function GetMoveSuggestions(arg1:number):Promise<Array<main.MoveSuggestion>>;
+
+export function GetNoticeDetails(arg1:number,arg2:number):Promise<operations.DeliveryPage>;
+
+export function GetNoticeHistory(arg1:number):Promise<operations.HistoryPage>;
+
+export function GetNoticeStates():Promise<Record<number, string>>;
 
 export function GetRestricaoMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
 
@@ -42,17 +65,27 @@ export function Greet(arg1:string):Promise<string>;
 
 export function ListCandidateCriterionColumns(arg1:Array<types.Candidato>):Promise<Array<types.CandidateCriterionColumn>>;
 
+export function MoveAgenda(arg1:main.MoveRequest):Promise<main.AgendaOperation>;
+
 export function NormalizePreferenceScheduleMappings(arg1:Array<types.PreferenceScheduleMapping>):Promise<Array<types.PreferenceScheduleMapping>>;
 
 export function NormalizeSoftCriteria(arg1:Array<types.SoftCriterion>):Promise<Array<types.SoftCriterion>>;
+
+export function PreviewAgendaNotices(arg1:Array<number>,arg2:number):Promise<Array<operations.Delivery>>;
+
+export function RetryNoticeFailures(arg1:number):Promise<number>;
 
 export function RunAllocation(arg1:types.AllocationConfiguration):Promise<main.UIAllocationResult>;
 
 export function SaveAvaliadoresFromMaps(arg1:Array<Record<string, any>>):Promise<void>;
 
+export function SaveChannelConfig(arg1:main.ConfigAvisos):Promise<void>;
+
 export function SaveRestricoesFromMaps(arg1:Array<Record<string, any>>):Promise<void>;
 
 export function SaveUsuariosFromMaps(arg1:Array<Record<string, any>>):Promise<void>;
+
+export function SendAgendaNotices(arg1:Array<number>,arg2:number):Promise<number>;
 
 export function StartAllocation(arg1:types.AllocationConfiguration):Promise<void>;
 
@@ -63,6 +96,8 @@ export function SuggestMapping(arg1:Array<number>,arg2:number):Promise<Array<typ
 export function SuggestMappingAvaliador():Promise<Array<types.MappingItem>>;
 
 export function SuggestMappingRestricao():Promise<Array<types.MappingItem>>;
+
+export function TestChannels():Promise<Record<string, string>>;
 
 export function ValidateAllocationParams(arg1:types.AllocationParams,arg2:Array<types.Candidato>):Promise<void>;
 

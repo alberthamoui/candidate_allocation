@@ -375,7 +375,7 @@ func processData(data []types.Candidato) (map[int]ValidationResult, [][]int) {
 		entrada.EmailPessoal = strings.ToLower(strings.TrimSpace(entrada.EmailPessoal))
 		entrada.Numero = strings.TrimSpace(entrada.Numero)
 
-		if !reCPF.MatchString(entrada.CPF) {
+		if entrada.CPF != "" && !reCPF.MatchString(entrada.CPF) {
 			errs = append(errs, ErrorEntry{Field: 3, Msg: "cpf inválido"})
 		}
 		if !reNumero.MatchString(entrada.Numero) {

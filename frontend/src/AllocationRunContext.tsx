@@ -48,6 +48,7 @@ type AllocationRunState = {
 	error: string;
 	start: (config: any) => Promise<void>;
 	stop: () => Promise<boolean>;
+	setResult: (result:any)=>void;
 };
 
 const AllocationRunContext = createContext<AllocationRunState | null>(null);
@@ -106,7 +107,7 @@ export function AllocationRunProvider({ children }: { children: ReactNode }) {
 			}
 		};
 
-		void synchronize(true);
+		void synchronize(false);
 		if (!running) return () => { active = false; };
 		const interval = window.setInterval(() => void synchronize(false), 2000);
 		return () => {
@@ -129,7 +130,7 @@ export function AllocationRunProvider({ children }: { children: ReactNode }) {
 	}, []);
 
 	const stop = useCallback(async () => StopAllocation(), []);
-	const value = useMemo(() => ({ result, progress, running, error, start, stop }), [result, progress, running, error, start, stop]);
+	const value = useMemo(() => ({ result, progress, running, error, start, stop, setResult }), [result, progress, running, error, start, stop]);
 	return <AllocationRunContext.Provider value={value}>{children}</AllocationRunContext.Provider>;
 }
 

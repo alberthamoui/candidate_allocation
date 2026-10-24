@@ -60,3 +60,5 @@ Esta documentação descreve o comportamento existente. Código e testes continu
 Uma LLM deve ler primeiro este índice e depois consultar [`manifest.yaml`](manifest.yaml). O manifesto relaciona arquivos alterados aos documentos que precisam ser revisados; ele não contém regras de negócio.
 
 O marcador em [`documentation-state.yaml`](documentation-state.yaml) registra o último estado de código coberto pelo atualizador automático.
+
+- [Operações da agenda, canais e histórico](features/agenda-operations.md)

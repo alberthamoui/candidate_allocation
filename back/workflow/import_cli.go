@@ -27,6 +27,11 @@ type cliCandidateSummary struct {
 }
 
 func RunCLI(ctx context.Context, filePath string, optionCount int) error {
+	return RunCLIWithResult(ctx, filePath, optionCount, nil)
+}
+
+// RunCLIWithResult publishes the same exact-solver result to the desktop agenda.
+func RunCLIWithResult(ctx context.Context, filePath string, optionCount int, save func(allocation.ConfiguredAllocationResult) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -132,6 +137,9 @@ func RunCLI(ctx context.Context, filePath string, optionCount int) error {
 		return fmt.Errorf("erro ao serializar resultado da alocacao em JSON: %w", err)
 	}
 	fmt.Println(string(resultJSON))
+	if save != nil {
+		return save(allocationResult)
+	}
 
 	return nil
 }

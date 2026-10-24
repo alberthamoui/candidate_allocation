@@ -140,13 +140,21 @@ func ensureDynamicTable(db *sql.DB, table string, fields []types.FieldSchema) er
 		if !ok {
 			continue
 		}
+		predicate := fmt.Sprintf(`"%s" IS NOT NULL`, field.ColumnName)
+		if !field.Required && field.SQLiteType == "TEXT" {
+			// Empty optional unique values (e.g. CPF) do not identify a person.
+			predicate += fmt.Sprintf(` AND "%s" <> ''`, field.ColumnName)
+			if _, err := db.Exec(fmt.Sprintf(`DROP INDEX IF EXISTS "%s"`, indexName)); err != nil {
+				return err
+			}
+		}
 		// #nosec G201 - table and column names come from internal schema metadata.
 		stmt := fmt.Sprintf(
-			`CREATE UNIQUE INDEX IF NOT EXISTS "%s" ON "%s" ("%s") WHERE "%s" IS NOT NULL`,
+			`CREATE UNIQUE INDEX IF NOT EXISTS "%s" ON "%s" ("%s") WHERE %s`,
 			indexName,
 			table,
 			field.ColumnName,
-			field.ColumnName,
+			predicate,
 		)
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("erro ao criar índice único %s: %w", indexName, err)

@@ -131,6 +131,13 @@ func BuildConfigurationFromPersistedData(db *sql.DB, params types.AllocationPara
 	}
 
 	detections := logic.DetectUniquePreferenceValues(data.Candidatos)
+	if params.SemPreferencia {
+		candidates := append([]types.Candidato(nil), data.Candidatos...)
+		for i := range candidates {
+			candidates[i].Opcoes = append([]string(nil), params.HorariosLivres...)
+		}
+		detections = logic.DetectUniquePreferenceValues(candidates)
+	}
 	mappings := make([]types.PreferenceScheduleMapping, 0, len(detections))
 	for _, detection := range detections {
 		mappings = append(mappings, types.PreferenceScheduleMapping{

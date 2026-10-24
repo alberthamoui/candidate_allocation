@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"os"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -10,7 +11,8 @@ import (
 const DefaultDatabasePath = "./insper.db"
 
 func OpenDefault() (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", DefaultDatabasePath)
+	path:=os.Getenv("CANDIDATE_ALLOCATOR_DATABASE");if path==""{path=DefaultDatabasePath}
+	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao abrir banco default %s: %w", DefaultDatabasePath, err)
 	}

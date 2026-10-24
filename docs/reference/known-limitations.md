@@ -60,3 +60,7 @@ O input aceita `.xls` e `.csv`, mas a implementação abre dados com `excelize` 
 ## Resíduos de template/utilitários
 
 `Greet`, o título nativo `wails-events`, `draft_app.go` e `fix-helphint.js` não representam funcionalidades centrais. Scripts de build assumem execução a partir de `scripts/`, e o instalador do Wails usa `@latest`.
+
+## Agenda e comunicação em mainjoao
+
+A agenda final e as avaliações agora persistem em SQLite e são compartilhadas com os comandos `cli agenda`. O cache de snapshots é limitado e descartável. O rascunho React de importação continua transitório; persistência da agenda não implica recuperação de cada tela de mapeamento. O Google OAuth depende do cliente Desktop configurado para a instalação. O WhatsApp Business exige número e modelo aprovados; não há conexão de WhatsApp pessoal por QR Code ou cadastro integrado da Meta neste aplicativo desktop. Aceitação pelo provedor não é confirmação de entrega. Envios que estavam na chamada de rede durante uma interrupção exigem conferência; somente falhas confirmadas entram na repetição automática solicitada pelo administrador.

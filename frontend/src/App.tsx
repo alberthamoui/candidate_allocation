@@ -35,6 +35,7 @@ function App({
 	const [fileResult, setFileResult] = useState("");
 	const [file, setFile] = useState<File | null>(null);
 	const [isLoading, setIsLoading] = useState(false);
+	const [usarPreferencia,setUsarPreferencia]=useState(true);
 	const navigate = useNavigate();
 
 	function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -80,7 +81,7 @@ function App({
 						return;
 					}
 					const data = new Uint8Array(fileData as ArrayBuffer);
-					const mappingCandidatos = await SuggestMapping(Array.from(data), 5);
+					const mappingCandidatos = await SuggestMapping(Array.from(data), usarPreferencia ? 5 : 0);
 					const [
 						candidateFieldInfos,
 						mappingAvaliadores,
@@ -95,6 +96,7 @@ function App({
 						GetRestricaoMappingFieldInfos(),
 					]);
 
+					sessionStorage.setItem("agenda_sem_preferencia",usarPreferencia?"false":"true");
 					setMapping(makeDrafts(mappingCandidatos, candidateFieldInfos, true));
 					setCandidateFieldInfos(candidateFieldInfos);
 					setMappingAvaliadores(
@@ -127,7 +129,7 @@ function App({
 					</p>
 				</div>
 
-				<div className="space-y-6">
+				<div className="space-y-6"><label className="flex gap-2 text-sm"><input type="checkbox" checked={usarPreferencia} onChange={e=>setUsarPreferencia(e.target.checked)}/>Candidatos informam preferências de horário</label><p className="text-xs text-slate-500">CPF é opcional. Inclua Telefone/WhatsApp como coluna adicional para enviar mensagens.</p>
 					<div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
 						<FieldLabel
 							label="Arquivo Excel"
