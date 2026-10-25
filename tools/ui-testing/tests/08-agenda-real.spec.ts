@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { completeImportWizard } from "./support/ui";
+import { completeImportWizard, reviewSchedules } from "./support/ui";
 
 test("agenda real preserva avaliação, horário manual e Excel após recarregar", async ({
 	page,
@@ -9,7 +9,8 @@ test("agenda real preserva avaliação, horário manual e Excel após recarregar
 	await page.getByTestId("min-people-per-group-input").fill("1");
 	await page.getByTestId("max-people-per-group-input").fill("8");
 	await page.getByTestId("evaluators-per-group-input").fill("1");
-	await page.getByTestId("start-allocation-button").click();
+	await reviewSchedules(page);
+ await page.getByTestId("start-allocation-button").click();
 	await expect(page.getByTestId("allocation-result-page")).toBeVisible({
 		timeout: 30000,
 	});

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { completeImportWizard, openPageHelp } from './support/ui';
+import { completeImportWizard, reviewSchedules, openPageHelp } from './support/ui';
 
 test.describe('Allocation Flow UI', () => {
   test('explains quality, highlights candidates and exposes person preferences', async ({ page }) => {
@@ -297,7 +297,8 @@ test.describe('Allocation Flow UI', () => {
     await page.getByTestId('add-criterion-button').click();
     await expect(page.getByTestId('criterion-type-select')).toBeVisible();
     await expect(page.getByTestId('criterion-type-select')).toHaveValue('min_value');
-    await page.getByTestId('start-allocation-button').click();
+    await reviewSchedules(page);
+ await page.getByTestId('start-allocation-button').click();
 
     await expect(page.getByTestId('allocation-result-page')).toBeVisible({ timeout: 30000 });
     await expect(page.getByText('Diagnóstico técnico do solver', { exact: true })).toBeVisible();

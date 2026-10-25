@@ -70,7 +70,7 @@ As chaves usadas para comparar duplicados vêm de `duplicateFields` do backend, 
 
 ## Persistência
 
-O payload genérico é serializado para JSON e desserializado na struct Go correspondente. `Save` sincroniza o schema, abre o banco e delega as inserções. Inserções individuais que falham dentro de `fillDb` são atualmente registradas no stdout e podem não propagar erro ao frontend; isso está registrado como limitação.
+O payload genérico é serializado para JSON e desserializado na struct Go correspondente. `Save` sincroniza o schema e grava cada lote em uma transação; qualquer falha retorna um erro e desfaz o lote. O desktop usa `ReplaceImport` para gravar todas as entidades revisadas e a limpeza da importação anterior em uma única transação. As restrições são gravadas depois dos avaliadores, quando os IDs existem. Erros recebidos como string ou Error continuam visíveis na revisão.
 
 ## Testes essenciais
 

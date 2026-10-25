@@ -2,7 +2,6 @@ package db
 
 import (
 	types "candidate_alocator/back/type"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -10,7 +9,7 @@ import (
 	"strings"
 )
 
-func InsertStruct(db *sql.DB, table string, value interface{}, fields []types.FieldSchema) (int64, error) {
+func InsertStruct(db Connection, table string, value interface{}, fields []types.FieldSchema) (int64, error) {
 	rv := reflect.ValueOf(value)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()

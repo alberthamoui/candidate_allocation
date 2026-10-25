@@ -2,6 +2,7 @@ package main
 
 import (
 	"candidate_alocator/back/allocation"
+	"candidate_alocator/back/logic"
 	"candidate_alocator/back/operations"
 	types "candidate_alocator/back/type"
 	"database/sql"
@@ -347,7 +348,8 @@ func refreshManualPreferences(s *agendaSnapshot) {
 			for rank, option := range original.Opcoes {
 				matches := strings.EqualFold(strings.TrimSpace(option), strings.TrimSpace(g.ScheduleKey))
 				for _, mapping := range s.Run.Config.Normalized.PreferenceMappings {
-					if strings.EqualFold(mapping.ValorPreferencia, option) && strings.EqualFold(strings.TrimSpace(mapping.Dia+" "+mapping.Hora), strings.TrimSpace(g.ScheduleKey)) {
+					day, hour, _ := logic.CanonicalSchedule(mapping.Dia, mapping.Hora)
+					if strings.EqualFold(mapping.ValorPreferencia, option) && strings.EqualFold(strings.TrimSpace(day+" "+hour), strings.TrimSpace(g.ScheduleKey)) {
 						matches = true
 					}
 				}

@@ -57,7 +57,7 @@ func EnsureAppSchema(db *sql.DB) error {
 	return nil
 }
 
-func ClearDatabase(db *sql.DB) error {
+func ClearDatabase(db Connection) error {
 	tables := []string{
 		"disponibilidade",
 		"restricoesNposso",
@@ -69,16 +69,13 @@ func ClearDatabase(db *sql.DB) error {
 
 	for _, table := range tables {
 		// #nosec G201 - table name is from a fixed internal allowlist.
-		// #nosec G201 - table name is from a fixed internal allowlist.
 		if _, err := db.Exec(fmt.Sprintf(`DELETE FROM "%s"`, table)); err != nil {
 			return fmt.Errorf("erro ao limpar tabela %s: %w", table, err)
 		}
 		// Reseta o auto-incremento para cada tabela
 		// #nosec G201 - table name is from a fixed internal allowlist.
-		// #nosec G201 - table name is from a fixed internal allowlist.
-		if _, err := db.Exec(fmt.Sprintf(`DELETE FROM sqlite_sequence WHERE name='%s'`, table)); err != nil {
-			// Ignora erro se a tabela não tiver auto-incremento
-			continue
+		if _, err := db.Exec(`DELETE FROM sqlite_sequence WHERE name = ?`, table); err != nil {
+			return fmt.Errorf("erro ao limpar sequência de %s: %w", table, err)
 		}
 	}
 

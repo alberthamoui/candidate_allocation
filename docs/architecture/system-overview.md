@@ -33,7 +33,7 @@ O sistema possui dois modos de entrada que reutilizam o mesmo domínio Go:
 
 ## Processos de execução
 
-No desktop, `main.go` cria um `App`, registra seus métodos no Wails e serve `frontend/dist` no build. Em desenvolvimento, `wails dev` conecta a WebView ao Vite. `App.startup` sincroniza o schema do banco e limpa os dados existentes antes de iniciar uma nova sessão.
+No desktop, `main.go` cria um `App`, registra seus métodos no Wails e serve `frontend/dist` no build. Em desenvolvimento, `wails dev` conecta a WebView ao Vite. `App.startup` sincroniza o schema e preserva os dados existentes.
 
 Na CLI, `detectCLIMode` reconhece `cli`, `-cli` ou `--cli`. `runCLI` exige `-file`, aceita `-opcoes` e delega para `workflow.RunCLI`.
 
@@ -56,8 +56,8 @@ Na CLI, `detectCLIMode` reconhece `cli`, `-cli` ou `--cli`. `runCLI` exige `-fil
 
 - bytes do Excel e quantidade de opções ficam em memória no `App`;
 - drafts de mapeamento e entidades em revisão ficam no estado do React;
-- dados aprovados ficam no SQLite durante a sessão;
-- configuração e resultado da alocação passam por `location.state` e não são persistidos;
-- encerramento do app limpa o estado transitório; uma nova inicialização também limpa as tabelas.
+- a revisão completa substitui os dados de domínio no SQLite em uma transação;
+- a agenda final e sua configuração persistem em `operations.db`; a navegação e os rascunhos React continuam transitórios;
+- encerramento do app limpa o estado transitório, preservando os bancos;
 
 Consulte [limitações conhecidas](../reference/known-limitations.md) antes de alterar persistência, sequência do workflow ou navegação direta.

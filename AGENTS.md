@@ -23,3 +23,6 @@
 - Agendas/configurações ficam em `operations.db`; destinatários são registros separados. Não volte a embutir o histórico na agenda nem crie polling contínuo para o histórico. Use eventos e paginação.
 - O cache de agendas é descartável, limitado e expira por inatividade. Uma recuperação do disco deve respeitar o mesmo limite da criação.
 - Atualize README e os documentos afetados junto com o código. O atualizador `make docs-update` é específico de Jujutsu; em worktrees Git, faça essa atualização diretamente.
+
+- Diagnósticos de desempenho só podem existir em builds `debug`/`dev`. Mantenha um teste de release demonstrando que variáveis de ambiente não ativam amostragem ou a CLI de desempenho. Benchmarks usam dados sintéticos e bancos temporários.
+- A substituição de importações deve incluir limpeza e todos os vínculos em uma transação; nunca limpe o banco no upload ou silencie erro de um registro.

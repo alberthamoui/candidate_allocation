@@ -1,6 +1,7 @@
 package main
 
 import (
+	"candidate_alocator/back/diagnostics"
 	"candidate_alocator/back/operations"
 	"context"
 	"database/sql"
@@ -57,6 +58,7 @@ type App struct {
 	synchronousNotices            bool
 	noticeEvent                   func(int64)
 	pendingRestrictions           []map[string]interface{}
+	pendingCandidates             []map[string]interface{}
 }
 
 // NewApp creates a new App application struct
@@ -110,20 +112,10 @@ func (a *App) SuggestMapping(data []byte, quantidadeOpcoes int) ([]types.Mapping
 	if a.allocationRunning {
 		return nil, fmt.Errorf("pare a busca antes de importar outra planilha")
 	}
-	if err := dbpkg.EnsureDefaultDatabase(); err != nil {
-		return nil, err
-	}
-	db, err := dbpkg.OpenDefault()
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = db.Close() }()
-	if err := dbpkg.ClearDatabase(db); err != nil {
-		return nil, err
-	}
 	a.excelData = data
 	a.nOpcoes = quantidadeOpcoes
 	a.pendingRestrictions = nil
+	a.pendingCandidates = nil
 	a.allocationAccess = time.Now()
 	return mapping, nil
 }
@@ -169,6 +161,9 @@ func (a *App) SaveRestricoesFromMaps(restricaoMaps []map[string]interface{}) err
 	// evaluator IDs exist, instead of silently dropping their relationships.
 	a.allocationMu.Lock()
 	defer a.allocationMu.Unlock()
+	if _, err := logic.DecodeImportMaps(nil, nil, restricaoMaps); err != nil {
+		return err
+	}
 	data, err := json.Marshal(restricaoMaps)
 	if err != nil {
 		return err
@@ -176,21 +171,42 @@ func (a *App) SaveRestricoesFromMaps(restricaoMaps []map[string]interface{}) err
 	return json.Unmarshal(data, &a.pendingRestrictions)
 }
 
-func (a *App) SaveUsuariosFromMaps(candidatoMaps []map[string]interface{}) error {
-	return logic.SaveUsuariosFromMaps(candidatoMaps)
-}
-
-func (a *App) SaveAvaliadoresFromMaps(avaliadorMaps []map[string]interface{}) error {
+func (a *App) SaveUsuariosFromMaps(candidateMaps []map[string]interface{}) error {
 	a.allocationMu.Lock()
 	defer a.allocationMu.Unlock()
-	if err := logic.SaveAvaliadoresFromMaps(avaliadorMaps); err != nil {
+	if a.allocationRunning {
+		return fmt.Errorf("pare a busca antes de revisar outra importação")
+	}
+	if _, err := logic.DecodeImportMaps(candidateMaps, nil, nil); err != nil {
 		return err
 	}
-	if a.pendingRestrictions != nil {
-		if err := logic.SaveRestricoesFromMaps(a.pendingRestrictions); err != nil {
-			return err
-		}
-		a.pendingRestrictions = nil
+	data, err := json.Marshal(candidateMaps)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, &a.pendingCandidates)
+}
+
+func (a *App) SaveAvaliadoresFromMaps(evaluatorMaps []map[string]interface{}) error {
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	if a.allocationRunning {
+		return fmt.Errorf("pare a busca antes de concluir outra importação")
+	}
+	data, err := logic.DecodeImportMaps(a.pendingCandidates, evaluatorMaps, a.pendingRestrictions)
+	if err != nil {
+		return err
+	}
+	if err := dbpkg.EnsureDefaultDatabase(); err != nil {
+		return err
+	}
+	db, err := dbpkg.OpenDefault()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	if err := logic.ReplaceImport(db, data); err != nil {
+		return err
 	}
 	return nil
 }
@@ -389,6 +405,19 @@ func (a *App) GetCriteriaOptions() (map[string][]string, error) {
 	return result, nil
 }
 
+func (a *App) GetPreferenceScheduleMappings() ([]types.PreferenceScheduleMapping, error) {
+	db, err := dbpkg.OpenDefault()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = db.Close() }()
+	data, err := allocation.LoadConfiguredAllocationData(db)
+	if err != nil {
+		return nil, err
+	}
+	return logic.SuggestScheduleMappings(logic.DetectUniquePreferenceValues(data.Candidatos)), nil
+}
+
 func (a *App) BuildAllocationConfigurationFromDatabase(params types.AllocationParams) (types.AllocationConfiguration, error) {
 	db, err := dbpkg.OpenDefault()
 	if err != nil {
@@ -584,6 +613,7 @@ func (a *App) failAllocationRun(runID uint64, message string) bool {
 }
 
 func buildUIAllocationResult(run allocation.ConfiguredAllocationResult) UIAllocationResult {
+	defer diagnostics.Begin("agenda.present", len(run.Candidatos))()
 
 	evaluatorMap := buildUIEvaluatorMap(run.Avaliadores, run.Problem.Candidates)
 	candMap := buildUICandidateMap(run.Candidatos, run.Problem.Candidates, evaluatorMap)
@@ -809,6 +839,8 @@ func (a *App) clearTransientState() {
 	unsubscribe := a.allocationProgressUnsubscribe
 	a.allocationProgressUnsubscribe = nil
 	a.ctx = nil
+	a.pendingCandidates = nil
+	a.pendingRestrictions = nil
 	a.allocationMu.Unlock()
 	if unsubscribe != nil {
 		unsubscribe()

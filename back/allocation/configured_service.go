@@ -1,6 +1,8 @@
 package allocation
 
 import (
+	dbpkg "candidate_alocator/back/db"
+	"candidate_alocator/back/diagnostics"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -42,6 +44,7 @@ func RunConfiguredAllocationStreaming(
 	config types.AllocationConfiguration,
 	callbacks ConfiguredAllocationCallbacks,
 ) (ConfiguredAllocationResult, error) {
+	defer diagnostics.Begin("allocation.total", 0)()
 	if db == nil {
 		return ConfiguredAllocationResult{}, errors.New("conexao do banco nao pode ser nil")
 	}
@@ -75,7 +78,9 @@ func RunConfiguredAllocationStreaming(
 			})
 		}
 	}
+	endSolve := diagnostics.Begin("allocation.solve", len(problem.Candidates))
 	result := SolveAllocation(problem, options)
+	endSolve()
 
 	config.Result = types.AllocationExecutionResult{
 		Status: result.Status,
@@ -102,19 +107,28 @@ type ConfiguredAllocationData struct {
 // LoadConfiguredAllocationData loads the domain data persisted by the import
 // workflow in a shape that can be consumed by BuildAllocationProblem.
 func LoadConfiguredAllocationData(db *sql.DB) (ConfiguredAllocationData, error) {
-	candidatos, err := loadConfiguredCandidates(db)
+	defer diagnostics.Begin("allocation.load", 0)()
+	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return ConfiguredAllocationData{}, err
 	}
-	avaliadores, err := loadConfiguredEvaluators(db)
+	defer func() { _ = tx.Rollback() }()
+	candidatos, err := loadConfiguredCandidates(tx)
 	if err != nil {
 		return ConfiguredAllocationData{}, err
 	}
-	restricoes, err := loadConfiguredRestrictions(db)
+	avaliadores, err := loadConfiguredEvaluators(tx)
+	if err != nil {
+		return ConfiguredAllocationData{}, err
+	}
+	restricoes, err := loadConfiguredRestrictions(tx)
 	if err != nil {
 		return ConfiguredAllocationData{}, err
 	}
 
+	if err := tx.Commit(); err != nil {
+		return ConfiguredAllocationData{}, err
+	}
 	return ConfiguredAllocationData{
 		Candidatos:  candidatos,
 		Avaliadores: avaliadores,
@@ -138,19 +152,29 @@ func BuildConfigurationFromPersistedData(db *sql.DB, params types.AllocationPara
 		}
 		detections = logic.DetectUniquePreferenceValues(candidates)
 	}
-	mappings := make([]types.PreferenceScheduleMapping, 0, len(detections))
-	for _, detection := range detections {
-		mappings = append(mappings, types.PreferenceScheduleMapping{
-			ValorPreferencia: detection.ValorOriginal,
-			Dia:              detection.ValorOriginal,
-			Hora:             "horario importado",
-		})
+	mappings := params.ScheduleMappings
+	if mappings == nil {
+		mappings = logic.SuggestScheduleMappings(detections)
+	}
+	if err := logic.ValidateScheduleCoverage(detections, mappings); err != nil {
+		return types.AllocationConfiguration{}, err
+	}
+	for i, mapping := range mappings {
+		day, hour, err := logic.CanonicalSchedule(mapping.Dia, mapping.Hora)
+		if err != nil {
+			return types.AllocationConfiguration{}, fmt.Errorf("preferência %q: %w", mapping.ValorPreferencia, err)
+		}
+		// Do not mutate the caller's editable mappings.
+		if i == 0 {
+			mappings = append([]types.PreferenceScheduleMapping(nil), mappings...)
+		}
+		mappings[i].Dia, mappings[i].Hora = day, hour
 	}
 
 	return logic.BuildAllocationConfiguration(detections, mappings, params, data.Candidatos)
 }
 
-func loadConfiguredCandidates(db *sql.DB) ([]types.Candidato, error) {
+func loadConfiguredCandidates(db dbpkg.Connection) ([]types.Candidato, error) {
 	rows, err := db.Query(`SELECT id, timestamp, nome, cpf, numero, CAST(semestre AS TEXT), curso, email_secundario, email_pessoal, extras FROM pessoa ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao carregar candidatos configurados: %w", err)
@@ -202,7 +226,7 @@ func loadConfiguredCandidates(db *sql.DB) ([]types.Candidato, error) {
 	return candidatos, nil
 }
 
-func loadCandidatePreferences(db *sql.DB) (map[int][]string, error) {
+func loadCandidatePreferences(db dbpkg.Connection) (map[int][]string, error) {
 	rows, err := db.Query(`
 		SELECT d.pessoa_id, h.opcao
 		FROM disponibilidade d
@@ -232,7 +256,7 @@ func loadCandidatePreferences(db *sql.DB) (map[int][]string, error) {
 	return result, nil
 }
 
-func loadConfiguredEvaluators(db *sql.DB) ([]types.Avaliador, error) {
+func loadConfiguredEvaluators(db dbpkg.Connection) ([]types.Avaliador, error) {
 	rows, err := db.Query(`SELECT id, nome, email, sigla, extras FROM avaliador ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao carregar avaliadores configurados: %w", err)
@@ -262,7 +286,7 @@ func loadConfiguredEvaluators(db *sql.DB) ([]types.Avaliador, error) {
 	return avaliadores, nil
 }
 
-func loadConfiguredRestrictions(db *sql.DB) ([]types.Restricao, error) {
+func loadConfiguredRestrictions(db dbpkg.Connection) ([]types.Restricao, error) {
 	restrictionsByCandidate := make(map[string]*types.Restricao)
 
 	if err := appendRestrictionRows(db, restrictionsByCandidate, "restricoesNposso"); err != nil {
@@ -285,7 +309,7 @@ func loadConfiguredRestrictions(db *sql.DB) ([]types.Restricao, error) {
 	return result, nil
 }
 
-func appendRestrictionRows(db *sql.DB, byCandidate map[string]*types.Restricao, table string) error {
+func appendRestrictionRows(db dbpkg.Connection, byCandidate map[string]*types.Restricao, table string) error {
 	targetField := "NaoPosso"
 	if table == "restricoesPrefiroN" {
 		targetField = "PrefiroNao"

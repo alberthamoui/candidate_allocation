@@ -9,7 +9,7 @@ sources: [agenda_app.go, channels_app.go, google_app.go, agenda_cli.go, agenda_e
 
 A base de desenvolvimento e destino de pull requests é `mainjoao`. A implementação preserva o solver exato e usa os contratos de `back/type` e `back/logic/workflow_definition.go` para regras e otimização.
 
-O resultado final é salvo como uma agenda em `operations.db`; importação e solver continuam usando o banco de domínio. Uma nova importação válida limpa apenas os dados de domínio. Avaliações e mudanças manuais gravam a agenda; consultas e exportação leem a mesma fonte, inclusive pela CLI. A versão do snapshot invalida caches quando outra instância/CLI altera o arquivo.
+O resultado final é salvo como uma agenda em `operations.db`; importação e solver continuam usando o banco de domínio. Uma nova importação completamente revisada substitui apenas os dados de domínio em uma transação; falhas preservam os dados anteriores. Avaliações e mudanças manuais gravam a agenda; consultas e exportação leem a mesma fonte, inclusive pela CLI. A versão do snapshot invalida caches quando outra instância/CLI altera o arquivo.
 
 O cache de snapshots guarda até oito itens por instância, expira após quinze minutos e recupera dados do SQLite sob demanda respeitando o limite. O `App` também descarrega seu resultado inativo. Cada operação de armazenamento abre e fecha sua própria conexão; o histórico não é carregado no cache. Um item retirado da memória permanece no disco.
 

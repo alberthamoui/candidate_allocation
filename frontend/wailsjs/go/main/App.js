@@ -102,6 +102,10 @@ export function GetNoticeStates() {
   return window['go']['main']['App']['GetNoticeStates']();
 }
 
+export function GetPreferenceScheduleMappings() {
+  return window['go']['main']['App']['GetPreferenceScheduleMappings']();
+}
+
 export function GetRestricaoMappingFieldInfos() {
   return window['go']['main']['App']['GetRestricaoMappingFieldInfos']();
 }

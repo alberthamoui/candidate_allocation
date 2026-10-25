@@ -148,3 +148,8 @@ documents:
     path: docs/features/agenda-operations.md
     sources: [agenda_app.go, channels_app.go, google_app.go, agenda_cli.go, agenda_export.go, back/operations/**, back/allocation/manual_review.go, frontend/src/AgendaActions.tsx, frontend/src/ChannelsPanel.tsx]
     tests: [agenda_app_test.go, channel_transport_test.go, back/operations/store_test.go, back/allocation/manual_review_test.go, tools/ui-testing/tests/07-agenda.spec.ts]
+
+  - id: debug-validation
+    path: docs/operations/debug-validation.md
+    sources: [debug_cli.go, debug_cli_release.go, back/diagnostics/**, tools/native-validation/**]
+    tests: [debug_cli_test.go, debug_cli_release_test.go, back/diagnostics/*_test.go]

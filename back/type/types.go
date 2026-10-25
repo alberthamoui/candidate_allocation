@@ -109,13 +109,14 @@ type WorkflowDefinition struct {
 
 // AllocationParams contains the editable allocation parameters.
 type AllocationParams struct {
-	SemPreferencia      bool            `json:"semPreferencia"`
-	HorariosLivres      []string        `json:"horariosLivres"`
-	GruposPorHorario    int             `json:"gruposPorHorario"`
-	MinPessoasPorGrupo  int             `json:"minPessoasPorGrupo"`
-	MaxPessoasPorGrupo  int             `json:"maxPessoasPorGrupo"`
-	AvaliadoresPorGrupo int             `json:"avaliadoresPorGrupo"`
-	SoftCriteria        []SoftCriterion `json:"softCriteria"`
+	ScheduleMappings    []PreferenceScheduleMapping `json:"scheduleMappings,omitempty"`
+	SemPreferencia      bool                        `json:"semPreferencia"`
+	HorariosLivres      []string                    `json:"horariosLivres"`
+	GruposPorHorario    int                         `json:"gruposPorHorario"`
+	MinPessoasPorGrupo  int                         `json:"minPessoasPorGrupo"`
+	MaxPessoasPorGrupo  int                         `json:"maxPessoasPorGrupo"`
+	AvaliadoresPorGrupo int                         `json:"avaliadoresPorGrupo"`
+	SoftCriteria        []SoftCriterion             `json:"softCriteria"`
 }
 
 // ValidationMessageLevel classifies validation messages.

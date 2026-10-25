@@ -2,11 +2,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import { HelpIcon } from "./components/Tooltip";
 import { useNavigate } from "react-router-dom";
 import { TrashIcon, PlusIcon } from "@heroicons/react/24/outline";
-import { GetCriteriaOptions, GetWorkflowDefinition } from "../wailsjs/go/main/App";
+import {
+	BuildAllocationConfigurationFromDatabase,
+	GetCriteriaOptions,
+	GetWorkflowDefinition,
+	GetPreferenceScheduleMappings,
+} from "../wailsjs/go/main/App";
 import {
 	EmptyState,
 	FieldLabel,
-	
 	MetricPill,
 	PrimaryButton,
 	SectionCard,
@@ -14,6 +18,9 @@ import {
 	StatusBadge,
 	StickyActionBar,
 } from "./workflowShell";
+import { types } from "../wailsjs/go/models";
+import ScheduleReview from "./ScheduleReview";
+import type { ScheduleMapping } from "./ScheduleReview";
 import { waitForWailsBindings } from "./wailsReady";
 
 interface SoftCriterionDraft {
@@ -34,19 +41,39 @@ export default function AllocationConfigPage() {
 	const navigate = useNavigate();
 
 	const [gruposPorHorario, setGrupos] = useState(0);
-	const semPreferencia=sessionStorage.getItem("agenda_sem_preferencia")==="true";
-	const [horariosLivres,setHorariosLivres]=useState("");
+	const semPreferencia =
+		sessionStorage.getItem("agenda_sem_preferencia") === "true";
+	const [scheduleMappings, setScheduleMappings] = useState<ScheduleMapping[]>(
+		semPreferencia ? [{ valorPreferencia: "", dia: "", hora: "" }] : [],
+	);
+	const [configurationError, setConfigurationError] = useState("");
+	const [loading, setLoading] = useState(true);
+	const [saving, setSaving] = useState(false);
 	const [minPessoas, setMin] = useState(0);
 	const [maxPessoas, setMax] = useState(0);
 	const [avaliadoresPorGrupo, setAvaliadores] = useState(0);
 	const [criteria, setCriteria] = useState<SoftCriterionDraft[]>([]);
-	const [criteriaOptions, setCriteriaOptions] = useState<Record<string, string[]>>({});
-	const [softCriterionOptions, setSoftCriterionOptions] = useState<SoftCriterionOption[]>([]);
+	const [criteriaOptions, setCriteriaOptions] = useState<
+		Record<string, string[]>
+	>({});
+	const [softCriterionOptions, setSoftCriterionOptions] = useState<
+		SoftCriterionOption[]
+	>([]);
 
 	useEffect(() => {
 		waitForWailsBindings()
-			.then(() => Promise.all([GetWorkflowDefinition(), GetCriteriaOptions()]))
-			.then(([workflow, opts]) => {
+			.then(() =>
+				Promise.all([
+					GetWorkflowDefinition(),
+					GetCriteriaOptions(),
+					semPreferencia
+						? Promise.resolve(null)
+						: GetPreferenceScheduleMappings(),
+				]),
+			)
+			.then(([workflow, opts, schedules]) => {
+				if (schedules) setScheduleMappings(schedules);
+				setLoading(false);
 				const defaults = workflow.defaultAllocationParams;
 				setGrupos(defaults.gruposPorHorario);
 				setMin(defaults.minPessoasPorGrupo);
@@ -58,19 +85,27 @@ export default function AllocationConfigPage() {
 						columnKey: criterion.columnKey,
 						selectedValues: criterion.selectedValues || [],
 						threshold: criterion.threshold,
-					}))
+					})),
 				);
 				setSoftCriterionOptions(workflow.softCriterionOptions || []);
 				setCriteriaOptions(opts || {});
 			})
 			.catch((err) => {
-				console.error("Erro ao carregar contrato do workflow:", err);
+				setConfigurationError(
+					"Não foi possível carregar a configuração: " + String(err),
+				);
+				setLoading(false);
 			});
 	}, []);
 
-	const columns = useMemo(() => Object.keys(criteriaOptions).sort(), [criteriaOptions]);
+	const columns = useMemo(
+		() => Object.keys(criteriaOptions).sort(),
+		[criteriaOptions],
+	);
 	const criterionOptionByType = useMemo(() => {
-		return Object.fromEntries(softCriterionOptions.map((option) => [option.type, option]));
+		return Object.fromEntries(
+			softCriterionOptions.map((option) => [option.type, option]),
+		);
 	}, [softCriterionOptions]);
 
 	const criterionNeedsThreshold = (type: string) => {
@@ -99,7 +134,7 @@ export default function AllocationConfigPage() {
 	const updateCriterion = (
 		index: number,
 		field: keyof SoftCriterionDraft,
-		value: SoftCriterionDraft[keyof SoftCriterionDraft]
+		value: SoftCriterionDraft[keyof SoftCriterionDraft],
 	) => {
 		setCriteria((current) =>
 			current.map((criterion, i) => {
@@ -115,11 +150,15 @@ export default function AllocationConfigPage() {
 				if (field === "type" && !criterionNeedsThreshold(String(value))) {
 					next.threshold = 0;
 				}
-				if (field === "type" && criterionNeedsThreshold(String(value)) && next.threshold < 1) {
+				if (
+					field === "type" &&
+					criterionNeedsThreshold(String(value)) &&
+					next.threshold < 1
+				) {
 					next.threshold = 1;
 				}
 				return next;
-			})
+			}),
 		);
 	};
 
@@ -133,7 +172,7 @@ export default function AllocationConfigPage() {
 					? criterion.selectedValues.filter((item) => item !== val)
 					: [...criterion.selectedValues, val];
 				return { ...criterion, selectedValues: selected };
-			})
+			}),
 		);
 	};
 
@@ -144,9 +183,11 @@ export default function AllocationConfigPage() {
 			? "Sem critérios adicionais, o algoritmo ainda otimiza a ordem das preferências e evita avaliadores marcados como PrefiroNao."
 			: `${criteria.length} critério${
 					criteria.length > 1 ? "s" : ""
-			  } soft ativo${criteria.length > 1 ? "s" : ""} aumentam o refinamento da distribuição e podem reduzir o conjunto de soluções preferíveis.`;
+				} soft ativo${criteria.length > 1 ? "s" : ""} aumentam o refinamento da distribuição e podem reduzir o conjunto de soluções preferíveis.`;
 
-	const handleStart = () => {
+	const handleStart = async () => {
+		setConfigurationError("");
+		setSaving(true);
 		const formattedCriteria = criteria.map((criterion) => ({
 			type: criterion.type,
 			columnKey: criterion.columnKey,
@@ -155,7 +196,16 @@ export default function AllocationConfigPage() {
 		}));
 
 		const params = {
-			semPreferencia,horariosLivres:horariosLivres.split("\n").map(v=>v.trim()).filter(Boolean),
+			semPreferencia,
+			horariosLivres: semPreferencia
+				? scheduleMappings.map((m) => `${m.dia.trim()} ${m.hora.trim()}`)
+				: [],
+			scheduleMappings: scheduleMappings.map((m) => ({
+				...m,
+				valorPreferencia: semPreferencia
+					? `${m.dia.trim()} ${m.hora.trim()}`
+					: m.valorPreferencia,
+			})),
 			gruposPorHorario,
 			minPessoasPorGrupo: minPessoas,
 			maxPessoasPorGrupo: maxPessoas,
@@ -163,20 +213,52 @@ export default function AllocationConfigPage() {
 			softCriteria: formattedCriteria,
 		};
 
-		navigate("/allocation-loading", { state: { params } });
+		try {
+			const config = await BuildAllocationConfigurationFromDatabase(types.AllocationParams.createFrom(params));
+			navigate("/allocation-loading", { state: { params, config } });
+		} catch (error) {
+			setConfigurationError(String(error));
+		} finally {
+			setSaving(false);
+		}
 	};
 
 	return (
-		<div className="space-y-6">{semPreferencia&&<label className="block minimal-panel p-5">Horários disponíveis (um por linha)<textarea className="minimal-input mt-2" value={horariosLivres} onChange={e=>setHorariosLivres(e.target.value)} placeholder={"quarta 14-16\nsexta 10-12"}/></label>}
+		<div className="space-y-6">
+			<ScheduleReview
+				mappings={scheduleMappings}
+				onChange={setScheduleMappings}
+				free={semPreferencia}
+			/>
+			{configurationError && (
+				<div
+					role="alert"
+					className="minimal-panel border-red-200 p-4 text-red-700"
+				>
+					{configurationError}
+				</div>
+			)}
+
 			<SectionCard
 				title="Parâmetros centrais"
 				description="Defina a estrutura básica da rodada. Cada decisão altera a capacidade dos grupos e o espaço de soluções do algoritmo."
 				aside={<StatusBadge tone="accent">Configuração ativa</StatusBadge>}
 			>
 				<div className="grid gap-4 md:grid-cols-3">
-					<MetricPill label="Capacidade máxima por horário" value={`${capacityPerHorario} candidatos`} tone="accent" />
-					<MetricPill label="Capacidade mínima por horário" value={`${minCapacityPerHorario} candidatos`} />
-					<MetricPill label="Critérios adicionais" value={criteria.length} tone={criteria.length > 0 ? "success" : "neutral"} />
+					<MetricPill
+						label="Capacidade máxima por horário"
+						value={`${capacityPerHorario} candidatos`}
+						tone="accent"
+					/>
+					<MetricPill
+						label="Capacidade mínima por horário"
+						value={`${minCapacityPerHorario} candidatos`}
+					/>
+					<MetricPill
+						label="Critérios adicionais"
+						value={criteria.length}
+						tone={criteria.length > 0 ? "success" : "neutral"}
+					/>
 				</div>
 			</SectionCard>
 
@@ -212,7 +294,9 @@ export default function AllocationConfigPage() {
 									className="executive-input"
 									data-testid="evaluators-per-group-input"
 									value={avaliadoresPorGrupo}
-									onChange={(e) => setAvaliadores(parseInt(e.target.value, 10) || 0)}
+									onChange={(e) =>
+										setAvaliadores(parseInt(e.target.value, 10) || 0)
+									}
 								/>
 							</div>
 							<div>
@@ -250,7 +334,11 @@ export default function AllocationConfigPage() {
 						title="Critérios Soft"
 						description="Use regras desejáveis para orientar a distribuição sem transformar cada preferência em bloqueio absoluto."
 						aside={
-							<PrimaryButton onClick={addCriterion} className="justify-center" data-testid="add-criterion-button">
+							<PrimaryButton
+								onClick={addCriterion}
+								className="justify-center"
+								data-testid="add-criterion-button"
+							>
 								<PlusIcon className="h-4 w-4" />
 								Adicionar Regra
 							</PrimaryButton>
@@ -270,9 +358,12 @@ export default function AllocationConfigPage() {
 						) : (
 							<div className="space-y-5">
 								{criteria.map((criterion, idx) => {
-									const availableValues = criteriaOptions[criterion.columnKey] || [];
+									const availableValues =
+										criteriaOptions[criterion.columnKey] || [];
 									const criterionOption = criterionOptionByType[criterion.type];
-									const criterionDescription = criterionOption?.description || "Regra desejável aplicada à distribuição.";
+									const criterionDescription =
+										criterionOption?.description ||
+										"Regra desejável aplicada à distribuição.";
 									return (
 										<div
 											key={`${criterion.columnKey}-${idx}`}
@@ -300,12 +391,17 @@ export default function AllocationConfigPage() {
 
 											<div className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr_1fr_auto]">
 												<div>
-													<FieldLabel label="Tipo de Regra" description="Define o comportamento desejado da distribuição." />
+													<FieldLabel
+														label="Tipo de Regra"
+														description="Define o comportamento desejado da distribuição."
+													/>
 													<select
 														className="executive-input"
 														data-testid="criterion-type-select"
 														value={criterion.type}
-														onChange={(e) => updateCriterion(idx, "type", e.target.value)}
+														onChange={(e) =>
+															updateCriterion(idx, "type", e.target.value)
+														}
 													>
 														{softCriterionOptions.map((option) => (
 															<option key={option.type} value={option.type}>
@@ -324,14 +420,18 @@ export default function AllocationConfigPage() {
 														className="executive-input"
 														data-testid="criterion-column-select"
 														value={criterion.columnKey}
-														onChange={(e) => updateCriterion(idx, "columnKey", e.target.value)}
+														onChange={(e) =>
+															updateCriterion(idx, "columnKey", e.target.value)
+														}
 													>
 														{columns.map((column) => (
 															<option key={column} value={column}>
 																{column}
 															</option>
 														))}
-														{columns.length === 0 ? <option value="curso">curso</option> : null}
+														{columns.length === 0 ? (
+															<option value="curso">curso</option>
+														) : null}
 													</select>
 												</div>
 												<div>
@@ -347,7 +447,11 @@ export default function AllocationConfigPage() {
 														value={criterion.threshold}
 														disabled={!criterionNeedsThreshold(criterion.type)}
 														onChange={(e) =>
-															updateCriterion(idx, "threshold", parseInt(e.target.value, 10) || 0)
+															updateCriterion(
+																idx,
+																"threshold",
+																parseInt(e.target.value, 10) || 0,
+															)
 														}
 													/>
 												</div>
@@ -376,7 +480,8 @@ export default function AllocationConfigPage() {
 												) : (
 													<div className="flex flex-wrap gap-3">
 														{availableValues.map((val) => {
-															const isSelected = criterion.selectedValues.includes(val);
+															const isSelected =
+																criterion.selectedValues.includes(val);
 															return (
 																<button
 																	key={val}
@@ -413,14 +518,19 @@ export default function AllocationConfigPage() {
 									Capacidade operacional
 								</div>
 								<p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-									Com {gruposPorHorario} grupo{gruposPorHorario !== 1 ? "s" : ""} por horário, cada rodada comporta entre {minCapacityPerHorario} e {capacityPerHorario} candidato{capacityPerHorario !== 1 ? "s" : ""}.
+									Com {gruposPorHorario} grupo
+									{gruposPorHorario !== 1 ? "s" : ""} por horário, cada rodada
+									comporta entre {minCapacityPerHorario} e {capacityPerHorario}{" "}
+									candidato{capacityPerHorario !== 1 ? "s" : ""}.
 								</p>
 							</div>
 							<div className="rounded-[24px] border border-[var(--line)] bg-white/70 p-5">
 								<div className="text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
 									Refinamento do algoritmo
 								</div>
-								<p className="mt-3 text-sm leading-6 text-[var(--muted)]">{impactSummary}</p>
+								<p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+									{impactSummary}
+								</p>
 							</div>
 							<div className="rounded-[24px] border border-[var(--line)] bg-white/70 p-5">
 								<div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
@@ -428,9 +538,18 @@ export default function AllocationConfigPage() {
 									<HelpIcon text="Comece com parâmetros realistas e poucos critérios adicionais. Depois refine com base na leitura do resultado." />
 								</div>
 								<ul className="mt-3 space-y-3 text-sm leading-6 text-[var(--muted)]">
-									<li>Mantenha o mínimo e máximo coerentes com a capacidade real de entrevistas.</li>
-									<li>Use critérios adicionais apenas quando houver um objetivo claro de composição.</li>
-									<li>Revise os não alocados no resultado para recalibrar a configuração da próxima rodada.</li>
+									<li>
+										Mantenha o mínimo e máximo coerentes com a capacidade real
+										de entrevistas.
+									</li>
+									<li>
+										Use critérios adicionais apenas quando houver um objetivo
+										claro de composição.
+									</li>
+									<li>
+										Revise os não alocados no resultado para recalibrar a
+										configuração da próxima rodada.
+									</li>
 								</ul>
 							</div>
 						</div>
@@ -444,10 +563,16 @@ export default function AllocationConfigPage() {
 						Pronto para executar
 					</div>
 					<p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-						Revise a leitura de impacto e inicie a simulação quando os parâmetros refletirem a operação desejada.
+						Revise a leitura de impacto e inicie a simulação quando os
+						parâmetros refletirem a operação desejada.
 					</p>
 				</div>
-				<PrimaryButton onClick={handleStart} className="px-8 py-4 text-base" data-testid="start-allocation-button">
+				<PrimaryButton
+					onClick={() => void handleStart()}
+					disabled={loading || saving}
+					className="px-8 py-4 text-base"
+					data-testid="start-allocation-button"
+				>
 					Iniciar Simulação
 				</PrimaryButton>
 			</StickyActionBar>

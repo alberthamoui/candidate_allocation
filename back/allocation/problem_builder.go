@@ -92,15 +92,23 @@ func buildSolverGroups(
 	groups := make([]types.SolverGroup, 0, len(mappings)*params.GruposPorHorario)
 	preferenceToGroupIDs := make(map[string][]int, len(mappings))
 	groupIndex := 0
+	physicalGroups := map[string][]int{}
 
 	for _, mapping := range mappings {
 		key := normalizeSolverText(mapping.ValorPreferencia)
+		day, hour, _ := logic.CanonicalSchedule(mapping.Dia, mapping.Hora)
+		physical := day + " " + hour
+		if existing, ok := physicalGroups[physical]; ok {
+			preferenceToGroupIDs[key] = existing
+			continue
+		}
+		mapping.Dia, mapping.Hora = day, hour
 		for slot := 0; slot < params.GruposPorHorario; slot++ {
 			groupIndex++
 			group := types.SolverGroup{
 				ID:            groupIndex,
 				Label:         buildSolverGroupLabel(mapping, slot+1),
-				ScheduleKey:   key,
+				ScheduleKey:   physical,
 				EvaluatorIDs:  selectEvaluatorIDs(sortedEvaluators, groupIndex-1, params.AvaliadoresPorGrupo),
 				MinCandidates: params.MinPessoasPorGrupo,
 				MaxCandidates: params.MaxPessoasPorGrupo,
@@ -108,6 +116,7 @@ func buildSolverGroups(
 			groups = append(groups, group)
 			preferenceToGroupIDs[key] = append(preferenceToGroupIDs[key], group.ID)
 		}
+		physicalGroups[physical] = preferenceToGroupIDs[key]
 	}
 
 	return groups, preferenceToGroupIDs

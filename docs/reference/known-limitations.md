@@ -17,21 +17,13 @@ Estas são descrições do código atual, não decisões desejadas. Ao corrigir 
 
 O wizard revisa restrições antes dos avaliadores. O `App` mantém essas restrições pendentes e só as persiste depois de salvar os avaliadores, quando as siglas já possuem IDs. A CLI já segue essa ordem de persistência. Candidatos/siglas desconhecidos ainda exigem revisão dos dados importados.
 
-## Persistência sem transação e com erros silenciosos
-
-`logic.Save` não usa transação e `fillDb` não retorna erro. Falhas de registros individuais podem produzir persistência parcial enquanto a chamada Wails retorna sucesso.
-
 ## Banco de importação substituído por uma nova planilha
 
-O startup preserva os dados; uma nova importação válida limpa o banco de domínio. A agenda final e seus avisos ficam separados em `operations.db`. Não há catálogo de múltiplos processos seletivos na interface.
+O startup preserva os dados; uma importação completamente revisada substitui o banco de domínio em uma transação. A agenda final e seus avisos ficam separados em `operations.db`. Não há catálogo de múltiplos processos seletivos na interface.
 
 ## Rascunho de importação ainda transitório
 
 A agenda final, seus parâmetros, as avaliações e os canais persistem. Os mapeamentos e correções ainda em revisão dependem do estado React. Persistência do resultado não recupera automaticamente todas as telas anteriores.
-
-## Mapeamento de horário no desktop é provisório
-
-`BuildConfigurationFromPersistedData` mapeia cada preferência usando o próprio texto como dia e `horario importado` como hora. A UI ainda não permite editar `PreferenceScheduleMapping`; a CLI permite.
 
 ## Opções de critério diferem entre domínio e UI
 
@@ -64,3 +56,7 @@ O input aceita `.xls` e `.csv`, mas a implementação abre dados com `excelize` 
 ## Agenda e comunicação em mainjoao
 
 A agenda final e as avaliações agora persistem em SQLite e são compartilhadas com os comandos `cli agenda`. O cache de snapshots é limitado e descartável. O rascunho React de importação continua transitório; persistência da agenda não implica recuperação de cada tela de mapeamento. O Google OAuth depende do cliente Desktop configurado para a instalação. O WhatsApp Business exige número e modelo aprovados; não há conexão de WhatsApp pessoal por QR Code ou cadastro integrado da Meta neste aplicativo desktop. Aceitação pelo provedor não é confirmação de entrega. Envios que estavam na chamada de rede durante uma interrupção exigem conferência; somente falhas confirmadas entram na repetição automática solicitada pelo administrador.
+
+## Preparação inicial do solver
+
+O prazo/cancelamento da busca é cooperativo. A preparação inicial por fluxo de custo mínimo pode exceder o prazo antes de a busca observar o cancelamento, principalmente em volumes grandes. As medições debug registram o tempo total; o prazo configurado não é uma garantia de latência. Consulte [validação e desempenho](../operations/debug-validation.md).

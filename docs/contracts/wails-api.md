@@ -20,6 +20,8 @@ O contrato consumido pelo frontend é gerado a partir dos métodos públicos de 
 - `BuildUsuariosWithMapping`, `BuildAvaliadoresWithMapping`, `BuildRestricoesWithMapping`;
 - `SaveUsuariosFromMaps`, `SaveAvaliadoresFromMaps`, `SaveRestricoesFromMaps`.
 
+`SaveUsuariosFromMaps` e `SaveRestricoesFromMaps` mantêm a revisão pendente. `SaveAvaliadoresFromMaps` conclui a substituição atômica de candidatos, avaliadores e restrições. Falhas preservam a importação anterior e retornam o registro/etapa a corrigir.
+
 `SuggestMapping` também guarda os bytes da planilha e `nOpcoes` no estado transitório de `App`. As outras sugestões/builders dependem desse estado.
 
 ## Configuração
@@ -28,7 +30,8 @@ O contrato consumido pelo frontend é gerado a partir dos métodos públicos de 
 - `DetectUniquePreferenceValues`, `ListCandidateCriterionColumns`, `DetectUniqueCandidateColumnValues`;
 - `NormalizePreferenceScheduleMappings`, `NormalizeSoftCriteria`;
 - `ValidatePreferenceScheduleMappings`, `ValidateSoftCriteria`, `ValidateAllocationParams`;
-- `BuildAllocationConfiguration`, `BuildAllocationConfigurationFromDatabase`;
+- `GetPreferenceScheduleMappings`: sugestões editáveis de dia/intervalo;
+- `BuildAllocationConfiguration`, `BuildAllocationConfigurationFromDatabase` (aceita `params.scheduleMappings`);
 - funções de contagem combinatória.
 
 ## Execução
@@ -43,7 +46,7 @@ O contrato consumido pelo frontend é gerado a partir dos métodos públicos de 
 
 ## Ciclo de vida
 
-- `startup`: guarda contexto, sincroniza e limpa o banco, escreve sentinel opcional;
+- `startup`: guarda contexto e sincroniza o schema preservando os dados, escreve sentinel opcional;
 - `beforeClose`: limpa bytes/contexto;
 - `shutdown`: repete a limpeza e remove sentinel.
 

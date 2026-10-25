@@ -365,6 +365,9 @@ func TestVisualImportKeepsRestrictionsUntilEvaluatorIDsExist(t *testing.T) {
 	}
 	a := NewApp()
 	t.Cleanup(a.clearTransientState)
+	if err := a.SaveUsuariosFromMaps([]map[string]interface{}{{"nome": "Ana", "semestre": "1"}}); err != nil {
+		t.Fatal(err)
+	}
 	if err := a.SaveRestricoesFromMaps([]map[string]interface{}{{"candidato": "Ana", "naoPosso": "EV", "prefiroNao": ""}}); err != nil {
 		t.Fatal(err)
 	}

@@ -192,6 +192,10 @@ func ValidatePreferenceScheduleMappings(mappings []types.PreferenceScheduleMappi
 			return fmt.Errorf("hora nao pode ser vazia para a preferencia %q", valorPreferencia)
 		}
 
+		if _, _, err := CanonicalSchedule(dia, hora); err != nil {
+			return fmt.Errorf("preferência %q: %w", valorPreferencia, err)
+		}
+
 		key := normalizeDetectedValue(valorPreferencia)
 		if _, ok := seen[key]; ok {
 			return fmt.Errorf("preferencia %q foi mapeada mais de uma vez", valorPreferencia)

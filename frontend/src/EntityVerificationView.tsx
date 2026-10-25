@@ -357,7 +357,7 @@ export default function EntityVerificationView({
 			await onSave(dataToSave);
 			navigate(nextRoute);
 		} catch (err) {
-			setErrorMsg("Erro ao salvar dados: " + (err as Error).message);
+			setErrorMsg("Erro ao salvar dados: " + (err instanceof Error ? err.message : String(err)));
 		}
 	}
 

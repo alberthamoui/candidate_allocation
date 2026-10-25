@@ -25,7 +25,9 @@ test.describe('Layout polish', () => {
   test('ajuda contextual nao altera o scroll', async ({ page }) => {
     await page.goto('/');
 
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    // Keep the help control visible; Playwright otherwise scrolls it into view
+    // before clicking, which is unrelated to the modal changing the position.
+    await page.evaluate(() => window.scrollTo(0, Math.min(10, document.body.scrollHeight - window.innerHeight)));
     const before = await page.evaluate(() => window.scrollY);
     expect(before).toBeGreaterThan(0);
 

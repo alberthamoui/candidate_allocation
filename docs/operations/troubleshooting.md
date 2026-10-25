@@ -45,7 +45,7 @@ Configuração e resultado usam `location.state`. Recarregar `/allocation-loadin
 
 ## Banco inesperadamente vazio
 
-O desktop executa `ClearDatabase` em todo startup. Verifique também o diretório corrente, pois `./insper.db` é relativo ao processo.
+O startup preserva os dados. Confirme o diretório corrente e `CANDIDATE_ALLOCATOR_DATABASE`, pois `./insper.db` é relativo ao processo. Uma revisão de importação só é gravada após a confirmação dos avaliadores; se houver erro, corrija o registro informado e confirme novamente.
 
 ## Restrições não aparecem no solver
 
