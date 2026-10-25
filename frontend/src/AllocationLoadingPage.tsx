@@ -1,10 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { BuildAllocationConfigurationFromDatabase, GetWorkflowDefinition } from "../wailsjs/go/main/App";
+import {
+	BuildAllocationConfigurationFromDatabase,
+	GetWorkflowDefinition,
+} from "../wailsjs/go/main/App";
 import { MetricPill, SectionCard, StatusBadge } from "./workflowShell";
 import { waitForWailsBindings } from "./wailsReady";
 import { useAllocationRun } from "./AllocationRunContext";
-import { clampProgressPercent, formatPossibilityCount, formatRemainingPossibilityCount } from "./allocationProgress";
+import {
+	clampProgressPercent,
+	formatPossibilityCount,
+	formatRemainingPossibilityCount,
+} from "./allocationProgress";
 
 export default function AllocationLoadingPage() {
 	const navigate = useNavigate();
@@ -25,7 +32,9 @@ export default function AllocationLoadingPage() {
 					params = workflow.defaultAllocationParams;
 				}
 				setStatus("Montando configuração da alocação...");
-				const config = await BuildAllocationConfigurationFromDatabase(params);
+				const config =
+					location.state?.config ??
+					(await BuildAllocationConfigurationFromDatabase(params));
 				if (!active) return;
 				started.current = true;
 				setStatus("Buscando a primeira solução viável...");
@@ -35,7 +44,9 @@ export default function AllocationLoadingPage() {
 			}
 		};
 		run();
-		return () => { active = false; };
+		return () => {
+			active = false;
+		};
 	}, [location.state, start]);
 
 	useEffect(() => {
@@ -43,7 +54,10 @@ export default function AllocationLoadingPage() {
 	}, [navigate, result]);
 
 	const percentage = clampProgressPercent(progress.percent);
-	const remainingPossibilities = formatRemainingPossibilityCount(progress.totalBranches, progress.branchesResolved);
+	const remainingPossibilities = formatRemainingPossibilityCount(
+		progress.totalBranches,
+		progress.branchesResolved,
+	);
 	const displayedStatus = error ? "Erro na alocação: " + error : status;
 
 	return (
@@ -55,24 +69,50 @@ export default function AllocationLoadingPage() {
 			>
 				<div className="grid gap-4 md:grid-cols-3">
 					<MetricPill label="Status" value="Procurando solução" tone="accent" />
-					<MetricPill label="Possibilidades totais" value={formatPossibilityCount(progress.totalBranches)} />
-					<MetricPill label="Próxima etapa" value="Exibir a primeira solução" tone="success" />
+					<MetricPill
+						label="Possibilidades totais"
+						value={formatPossibilityCount(progress.totalBranches)}
+					/>
+					<MetricPill
+						label="Próxima etapa"
+						value="Exibir a primeira solução"
+						tone="success"
+					/>
 				</div>
 			</SectionCard>
 
-			<SectionCard title="Progresso da verificação" description="O total é fixo para esta execução. Podas contam como possibilidades analisadas com segurança.">
+			<SectionCard
+				title="Progresso da verificação"
+				description="O total é fixo para esta execução. Podas contam como possibilidades analisadas com segurança."
+			>
 				<div className="mx-auto max-w-3xl rounded-[30px] border border-[rgba(18,48,71,0.12)] bg-white/75 p-8 text-center">
 					<div className="mx-auto h-16 w-16 animate-spin rounded-full border-4 border-[rgba(178,122,68,0.18)] border-t-[var(--accent-strong)]" />
-					<h2 className="mt-6 text-2xl text-[var(--text)]">{displayedStatus}</h2>
+					<h2 className="mt-6 text-2xl text-[var(--text)]">
+						{displayedStatus}
+					</h2>
 					<div className="mt-8" data-testid="allocation-progress">
 						<div className="mb-3 flex min-w-0 items-end justify-between gap-4 overflow-hidden">
 							<div className="min-w-0 text-left">
-								<div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Possibilidades totais</div>
-								<div className="mt-1 truncate text-lg font-semibold tabular-nums" data-testid="allocation-total-possibilities">{formatPossibilityCount(progress.totalBranches)}</div>
+								<div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+									Possibilidades totais
+								</div>
+								<div
+									className="mt-1 truncate text-lg font-semibold tabular-nums"
+									data-testid="allocation-total-possibilities"
+								>
+									{formatPossibilityCount(progress.totalBranches)}
+								</div>
 							</div>
 							<div className="shrink-0 text-right">
-								<div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Possibilidades restantes</div>
-								<div className="mt-1 text-3xl font-semibold tabular-nums text-[var(--accent)]" data-testid="allocation-remaining-possibilities">{remainingPossibilities}</div>
+								<div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+									Possibilidades restantes
+								</div>
+								<div
+									className="mt-1 text-3xl font-semibold tabular-nums text-[var(--accent)]"
+									data-testid="allocation-remaining-possibilities"
+								>
+									{remainingPossibilities}
+								</div>
 							</div>
 						</div>
 						<div
@@ -84,10 +124,16 @@ export default function AllocationLoadingPage() {
 							aria-valuenow={percentage}
 							aria-valuetext={`${remainingPossibilities} possibilidades restantes`}
 						>
-							<div className="h-full rounded-full bg-[linear-gradient(90deg,var(--accent),#8b94ed)] transition-[width] duration-300" style={{ width: `${percentage}%` }} />
+							<div
+								className="h-full rounded-full bg-[linear-gradient(90deg,var(--accent),#8b94ed)] transition-[width] duration-300"
+								style={{ width: `${percentage}%` }}
+							/>
 						</div>
 					</div>
-					<p className="mt-5 text-sm leading-6 text-[var(--muted)]">Você não precisa esperar a prova de optimalidade para visualizar uma alocação válida.</p>
+					<p className="mt-5 text-sm leading-6 text-[var(--muted)]">
+						Você não precisa esperar a prova de optimalidade para visualizar uma
+						alocação válida.
+					</p>
 				</div>
 			</SectionCard>
 		</div>

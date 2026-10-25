@@ -171,3 +171,34 @@ func TestNoPreferenceUsesAdminSchedulesWithEqualRanks(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewedScheduleAliasesSharePhysicalCapacity(t *testing.T) {
+	db := openTempSQLiteDB(t)
+	seedConfiguredAllocationDB(t, db)
+	if _, err := db.Exec(`INSERT INTO opcoes_horario(id,opcao) VALUES(2,'opção A'); UPDATE disponibilidade SET horario_id=2 WHERE pessoa_id=2`); err != nil {
+		t.Fatal(err)
+	}
+	params := types.AllocationParams{GruposPorHorario: 1, MinPessoasPorGrupo: 1, MaxPessoasPorGrupo: 2, AvaliadoresPorGrupo: 1, ScheduleMappings: []types.PreferenceScheduleMapping{
+		{ValorPreferencia: "segunda 10h", Dia: "segunda-feira", Hora: "10h-12h"},
+		{ValorPreferencia: "opção A", Dia: "seg", Hora: "10:00-12:00"},
+	}}
+	config, err := BuildConfigurationFromPersistedData(db, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := RunConfiguredAllocation(db, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(run.Problem.Groups) != 1 || run.Problem.Groups[0].ScheduleKey != "segunda 10:00-12:00" || len(run.Result.Assignments) != 2 {
+		t.Fatal(run.Problem, run.Result)
+	}
+	params.ScheduleMappings = params.ScheduleMappings[:1]
+	if _, err := BuildConfigurationFromPersistedData(db, params); err == nil {
+		t.Fatal("missing review accepted")
+	}
+	params.ScheduleMappings = nil
+	if _, err := BuildConfigurationFromPersistedData(db, params); err == nil {
+		t.Fatal("ambiguous value silently assigned a schedule")
+	}
+}

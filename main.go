@@ -15,6 +15,13 @@ import (
 var assets embed.FS
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "debug" {
+		if err := runDebugCLI(os.Args[2:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "preview" {
 		if err := servePreview(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)

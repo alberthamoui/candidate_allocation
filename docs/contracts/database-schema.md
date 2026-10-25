@@ -16,7 +16,7 @@ sources:
 
 O arquivo é `./insper.db`, relativo ao diretório de execução. `EnsureDefaultDatabase` abre o banco e executa `EnsureAppSchema`.
 
-No desktop, `App.startup` chama `ClearDatabase`; portanto o banco funciona como armazenamento da sessão, não como histórico permanente.
+O startup preserva os dados. A importação seguinte só substitui as tabelas após a revisão completa. `CANDIDATE_ALLOCATOR_DATABASE` permite escolher outro arquivo.
 
 ## Tabelas
 
@@ -40,7 +40,7 @@ Na sincronização, colunas ausentes são adicionadas e índices únicos gerenci
 | `restricoesNposso` | avaliador proibido para candidato |
 | `restricoesPrefiroN` | avaliador evitado para candidato |
 
-`disponibilidade` possui índice único em `(pessoa_id, horario_id, preferencia)`. Foreign keys são ativadas por `PRAGMA foreign_keys = ON`.
+`disponibilidade` possui índice único em `(pessoa_id, horario_id, preferencia)`. `OpenDefault` ativa foreign keys em cada conexão por DSN, com espera de até cinco segundos por bloqueios.
 
 ## Serialização
 
@@ -58,9 +58,9 @@ Valores de horário são lower-case e trimados. Extras preservam as chaves da im
 
 `LoadConfiguredAllocationData` reconstrói candidatos, opções ordenadas por preferência, avaliadores, extras e restrições. As funções antigas em `load.go` atendem o solver legado.
 
-## Limitações transacionais
+## Transações
 
-`logic.Save/fillDb` não usa uma transação única e registra algumas falhas individuais sem devolvê-las. A ordem atual da UI salva restrições antes dos avaliadores, embora os vínculos dependam deles. Consulte [limitações conhecidas](../reference/known-limitations.md).
+`Save` grava cada lote em uma transação. `ReplaceImport` inclui limpeza, candidatos/disponibilidades, avaliadores e restrições na mesma transação. Falhas de SQL, vínculos desconhecidos e nomes ambíguos devolvem erro e causam rollback. A leitura configurada do solver usa uma transação para não misturar entidades de duas importações.
 
 ## Testes
 

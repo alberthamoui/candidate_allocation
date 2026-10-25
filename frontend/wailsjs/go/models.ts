@@ -1055,6 +1055,7 @@ export namespace types {
 	    }
 	}
 	export class AllocationParams {
+	    scheduleMappings?: PreferenceScheduleMapping[];
 	    semPreferencia: boolean;
 	    horariosLivres: string[];
 	    gruposPorHorario: number;
@@ -1069,6 +1070,7 @@ export namespace types {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scheduleMappings = this.convertValues(source["scheduleMappings"], PreferenceScheduleMapping);
 	        this.semPreferencia = source["semPreferencia"];
 	        this.horariosLivres = source["horariosLivres"];
 	        this.gruposPorHorario = source["gruposPorHorario"];

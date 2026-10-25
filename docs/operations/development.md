@@ -64,7 +64,7 @@ Os scripts em `scripts/` fazem builds limpos para plataforma atual, Windows amd6
 
 ## Banco
 
-`./insper.db` é criado no diretório corrente (ou no caminho de `CANDIDATE_ALLOCATOR_DATABASE`). Uma nova importação válida limpa esse banco; o startup preserva os dados. A agenda final, as avaliações, os canais e o histórico de avisos ficam em `operations.db` no diretório de configuração do usuário, configurável por `CANDIDATE_ALLOCATOR_DATA_DIR`. Veja [operações da agenda](../features/agenda-operations.md).
+`./insper.db` é criado no diretório corrente (ou no caminho de `CANDIDATE_ALLOCATOR_DATABASE`). Uma importação completamente revisada substitui esse banco em uma transação; falhas preservam os dados anteriores; o startup preserva os dados. A agenda final, as avaliações, os canais e o histórico de avisos ficam em `operations.db` no diretório de configuração do usuário, configurável por `CANDIDATE_ALLOCATOR_DATA_DIR`. Veja [operações da agenda](../features/agenda-operations.md).
 
 ## OpenCode e inspeção de UI
 

@@ -2,18 +2,15 @@ package logic
 
 import (
 	"bytes"
-	dbpkg "candidate_alocator/back/db"
+	"candidate_alocator/back/diagnostics"
 	types "candidate_alocator/back/type"
-	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -89,6 +86,7 @@ func SuggestMappingForSheet(data []byte, sheetIndex int, variables []string) ([]
 // BuildUsuariosWithMapping percorre a aba de candidatos, aplica o mapping
 // definido na interface e devolve os candidatos já validados e agrupados.
 func BuildUsuariosWithMapping(data []byte, nOpcoes int, mappingItems []types.MappingItem) (UsuariosResponse, error) {
+	defer diagnostics.Begin("import.parse", 0)()
 	if err := validateMappingItems(mappingItems); err != nil {
 		return UsuariosResponse{}, err
 	}
@@ -554,117 +552,6 @@ func getHorarios(data []types.Candidato) []string {
 // texto para minúsculas antes de comparar ou salvar.
 func normalizaOpcao(op string) string {
 	return strings.TrimSpace(strings.ToLower(op))
-}
-
-// fillDb recebe um conjunto de dados de domínio e executa as inserções
-// necessárias nas tabelas relacionadas do banco.
-func fillDb(db *sql.DB, data interface{}) {
-	switch v := data.(type) {
-	case []types.Candidato:
-		idHorarios := map[string]int64{}
-		for _, horario := range getHorarios(v) {
-			opcao := normalizaOpcao(horario)
-			if opcao == "" {
-				continue
-			}
-			idHorario, _ := dbpkg.AddHorario(db, opcao)
-			idHorarios[opcao] = idHorario
-		}
-
-		for _, usuario := range v {
-			id, err := dbpkg.InsertStruct(db, "pessoa", usuario, types.CandidateFields())
-			if err != nil {
-				fmt.Printf("Erro ao adicionar candidato %s: %v\n", usuario.Nome, err)
-				continue
-			}
-			for idx, opcao := range usuario.Opcoes {
-				opcaoNormalizada := normalizaOpcao(opcao)
-				if opcaoNormalizada == "" {
-					continue
-				}
-				horarioID, ok := idHorarios[opcaoNormalizada]
-				if !ok || horarioID == 0 {
-					continue
-				}
-				if _, err := dbpkg.AddDisponibilidade(db, id, horarioID, int64(idx+1)); err != nil {
-					fmt.Printf("Erro ao adicionar disponibilidade para candidato %d: %v\n", id, err)
-				}
-			}
-		}
-	case []types.Avaliador:
-		for _, a := range v {
-			if _, err := dbpkg.InsertStruct(db, "avaliador", a, types.AvaliadorFields()); err != nil {
-				fmt.Printf("Erro ao adicionar avaliador %s: %v\n", a.Nome, err)
-			}
-		}
-	case []types.Restricao:
-		for _, restricao := range v {
-			candidatoID, err := dbpkg.GetPessoaIDByName(db, restricao.Candidato)
-			if err != nil {
-				fmt.Printf("Erro ao pegar o id do candidato %s: %v\n", restricao.Candidato, err)
-				continue
-			}
-
-			if restricao.NaoPosso != "" {
-				parts := strings.FieldsFunc(restricao.NaoPosso, func(r rune) bool {
-					return r == ',' || unicode.IsSpace(r)
-				})
-				for _, sig := range parts {
-					sigla := strings.TrimSpace(sig)
-					avalID, err := dbpkg.GetAvaliadorIDBySigla(db, sigla)
-					if err != nil {
-						fmt.Printf("Erro no GetAvaliadorID (%s): %v\n", sigla, err)
-						continue
-					}
-					if _, err := dbpkg.AddRestricaoNposso(db, avalID, candidatoID); err != nil {
-						fmt.Printf("Erro ao inserir NaoPosso [%s] p/ candidato %d: %v\n", sigla, candidatoID, err)
-					}
-				}
-			}
-
-			if restricao.PrefiroNao != "" {
-				parts := strings.FieldsFunc(restricao.PrefiroNao, func(r rune) bool {
-					return r == ',' || unicode.IsSpace(r)
-				})
-				for _, sig := range parts {
-					sigla := strings.TrimSpace(sig)
-					avalID, err := dbpkg.GetAvaliadorIDBySigla(db, sigla)
-					if err != nil {
-						fmt.Printf("Erro no GetAvaliadorID (%s): %v\n", sigla, err)
-						continue
-					}
-					if _, err := dbpkg.AddRestricaoPrefiroN(db, avalID, candidatoID); err != nil {
-						fmt.Printf("Erro ao inserir PrefiroNao [%s] p/ candidato %d: %v\n", sigla, candidatoID, err)
-					}
-				}
-			}
-		}
-	default:
-		fmt.Println("Tipo de dado não suportado em fillDb")
-	}
-}
-
-// Save abre a conexão padrão do projeto e delega a persistência para fillDb de
-// acordo com o tipo concreto recebido.
-func Save(data interface{}) error {
-	if err := dbpkg.EnsureDefaultDatabase(); err != nil {
-		return err
-	}
-
-	conn, err := dbpkg.OpenDefault()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = conn.Close() }()
-
-	switch data.(type) {
-	case []types.Candidato, []types.Avaliador, []types.Restricao:
-		fillDb(conn, data)
-	default:
-		log.Printf("Tipo de dado não suportado em fillDb: %T", data)
-	}
-
-	return nil
 }
 
 // buildCandidateFromRow aplica o mapping de uma linha do Excel a um candidato,

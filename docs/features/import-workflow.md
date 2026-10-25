@@ -18,7 +18,7 @@ tests:
 
 ## Entrada
 
-O desktop aceita `.xlsx`, `.xls` e `.csv` no input, mas o backend usa `excelize` e o fluxo documentado/testado é o de planilhas Excel. O frontend sempre solicita cinco colunas virtuais de preferência. A CLI aceita `-opcoes` e usa cinco como default.
+O desktop aceita `.xlsx`, `.xls` e `.csv` no input, mas o backend usa `excelize` e o fluxo documentado/testado é o de planilhas Excel. O frontend solicita cinco colunas virtuais quando preferências estão ativadas e nenhuma quando estão desativadas. A CLI aceita `-opcoes` e usa cinco como default.
 
 ## Sugestão de mapeamento
 
@@ -44,7 +44,7 @@ Quando há menos colunas que variáveis, campos restantes ficam sem coluna (`ind
 
 Candidatos normalizam CPF, número e emails. As validações atuais exigem:
 
-- CPF com 11 dígitos;
+- CPF opcional; quando informado, precisa de 11 dígitos;
 - número com 9 dígitos;
 - semestre entre 1 e 10;
 - email pessoal em formato básico;
@@ -54,11 +54,11 @@ Avaliadores exigem nome, email e sigla não vazios. Duplicidades são derivadas 
 
 ## Desktop
 
-O upload gera os três drafts e as três listas de metadata de uma vez. O fluxo navega candidatos → restrições → avaliadores, com revisão e persistência após cada mapeamento.
+O upload gera os três drafts e as três listas de metadata de uma vez. O fluxo navega candidatos → restrições → avaliadores, com revisão em cada etapa. Candidatos e restrições permanecem pendentes até confirmar os avaliadores; então `ReplaceImport` substitui todas as tabelas relacionadas em uma única transação. Upload e revisão não apagam a importação anterior. Uma falha informa a seção e o número do registro, preserva os dados anteriores e permite corrigir e tentar novamente.
 
 ## CLI
 
-`RunCLI` valida o arquivo, limpa/sincroniza o banco, oferece edição interativa dos mappings, escolhe o primeiro registro válido de cada grupo duplicado, coleta configuração e executa a alocação. Os prompts aceitam defaults ao pressionar Enter.
+`RunCLI` valida o arquivo, sincroniza o schema e oferece edição interativa dos mappings, escolhe o primeiro registro válido de cada grupo duplicado, coleta configuração e executa a alocação. A substituição dos dados acontece em uma transação após concluir a revisão e a configuração. Os prompts aceitam defaults ao pressionar Enter.
 
 ## Falhas esperadas
 

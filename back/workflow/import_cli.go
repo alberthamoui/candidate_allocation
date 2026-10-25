@@ -41,15 +41,9 @@ func RunCLIWithResult(ctx context.Context, filePath string, optionCount int, sav
 	}
 	db, err := dbpkg.OpenDefault()
 	if err != nil {
-		fmt.Println("Erro ao abrir banco para limpeza:", err)
-		panic(err)
+		return fmt.Errorf("erro ao abrir banco: %w", err)
 	}
 	defer func() { _ = db.Close() }()
-
-	if err := dbpkg.ClearDatabase(db); err != nil {
-		fmt.Println("Erro ao limpar banco:", err)
-		panic(err)
-	}
 
 	// #nosec G304 - CLI input path is user-provided and handled as a local file.
 	data, err := os.ReadFile(filepath.Clean(filePath))
@@ -74,10 +68,6 @@ func RunCLIWithResult(ctx context.Context, filePath string, optionCount int, sav
 	printCandidateSummary(summary, usuariosResp)
 	if len(candidatos) == 0 {
 		return errors.New("nenhum candidato valido sobrou para salvar apos filtrar erros e duplicados")
-	}
-
-	if err := logic.Save(candidatos); err != nil {
-		return fmt.Errorf("erro ao salvar candidatos: %w", err)
 	}
 
 	restricaoMapping, err := logic.SuggestMappingRestricao(data)
@@ -108,16 +98,6 @@ func RunCLIWithResult(ctx context.Context, filePath string, optionCount int, sav
 	}
 
 	avaliadores := buildAvaliadoresForCLI(avaliadoresResp)
-	if err := logic.Save(avaliadores); err != nil {
-		return fmt.Errorf("erro ao salvar avaliador: %w", err)
-	}
-
-	fmt.Printf("Avaliadores processados: %d\n", len(avaliadores))
-
-	if err := logic.Save(restricoes); err != nil {
-		return fmt.Errorf("erro ao salvar restricoes: %w", err)
-	}
-	fmt.Printf("Restricoes processadas: %d\n", len(restricoes))
 	config, err := collectAllocationSetup(os.Stdin, os.Stdout, candidatos)
 	if err != nil {
 		return err
@@ -127,6 +107,11 @@ func RunCLIWithResult(ctx context.Context, filePath string, optionCount int, sav
 		return fmt.Errorf("erro ao serializar configuracao em JSON: %w", err)
 	}
 	fmt.Println(string(configJSON))
+
+	if err := logic.ReplaceImport(db, logic.ImportData{Candidatos: candidatos, Avaliadores: avaliadores, Restricoes: restricoes}); err != nil {
+		return fmt.Errorf("erro ao concluir importação: %w", err)
+	}
+	fmt.Printf("Importação concluída: %d candidatos, %d avaliadores, %d restrições\n", len(candidatos), len(avaliadores), len(restricoes))
 
 	allocationResult, err := allocation.RunConfiguredAllocation(db, config, nil)
 	if err != nil {

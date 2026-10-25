@@ -2,6 +2,7 @@
 package operations
 
 import (
+	"candidate_alocator/back/diagnostics"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -207,6 +208,7 @@ func (s *Store) Save(id string, data []byte) error {
 }
 
 func (s *Store) Load(id string) ([]byte, error) {
+	defer diagnostics.Begin("agenda.load", 1)()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	db, err := s.open()

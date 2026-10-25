@@ -55,6 +55,8 @@ export function GetNoticeHistory(arg1:number):Promise<operations.HistoryPage>;
 
 export function GetNoticeStates():Promise<Record<number, string>>;
 
+export function GetPreferenceScheduleMappings():Promise<Array<types.PreferenceScheduleMapping>>;
+
 export function GetRestricaoMappingFieldInfos():Promise<Array<types.MappingFieldInfo>>;
 
 export function GetSoftCriterionOptions():Promise<Array<types.SoftCriterionOption>>;

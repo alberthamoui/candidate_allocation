@@ -62,3 +62,5 @@ Uma LLM deve ler primeiro este índice e depois consultar [`manifest.yaml`](mani
 O marcador em [`documentation-state.yaml`](documentation-state.yaml) registra o último estado de código coberto pelo atualizador automático.
 
 - [Operações da agenda, canais e histórico](features/agenda-operations.md)
+
+- [Validação nativa, canais e desempenho em debug](operations/debug-validation.md).

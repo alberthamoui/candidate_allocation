@@ -6,6 +6,10 @@ Aplicação desktop e CLI para importar candidatos, restrições e avaliadores d
 
 A branch principal é **`mainjoao`**. Novas branches devem partir de `origin/mainjoao`, e os pull requests devem apontar para `mainjoao`. Trabalhe em uma branch/worktree própria e entregue o PR para revisão. Consulte também [AGENTS.md](AGENTS.md).
 
+## Importar e revisar horários
+
+A importação anterior é preservada enquanto você revisa a nova planilha. A confirmação final grava candidatos, avaliadores, preferências e restrições juntos; qualquer falha desfaz a operação e informa o registro a corrigir. Na configuração, confira o dia/data e intervalo de cada preferência. Valores ambíguos precisam ser preenchidos. Sem preferências, informe os horários da rodada na mesma tela.
+
 ## Operar a agenda
 
 Depois de parar/concluir a busca, cada candidato oferece **Realocar**, **Passou**, **Não passou** e **Avisar**. Cada mesa oferece realocação, avaliação em lote e envio. Os indicadores de pendências filtram candidatos sem avaliação, com aviso pendente/falho, com alerta ou sem mesa.
@@ -110,3 +114,12 @@ make docs-update
 ```
 
 O comando encontra todos os changes posteriores ao marcador versionado e inicia `codex exec` para revisar e corrigir somente a documentação afetada.
+
+## Desempenho somente em debug
+
+```bash
+go run -tags debug . debug performance -sizes 100,1000,5000 -runs 3 -solver-budget 2s
+go run -tags debug . debug performance -sizes 100,1000 -runs 3 -scenario criteria
+```
+
+Usa dados sintéticos e bancos temporários, sem enviar mensagens. Registra duração e memória agregadas, sem dados pessoais. O prazo é cooperativo e a preparação inicial do solver pode ultrapassá-lo. A versão release não disponibiliza a medição, mesmo com variável de ambiente. Veja [validação nativa, canais e resultados de desempenho](docs/operations/debug-validation.md).

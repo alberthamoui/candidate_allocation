@@ -30,9 +30,9 @@ O frontend carrega esses valores via `GetWorkflowDefinition`; a CLI usa a mesma 
 
 Valores das opções de todos os candidatos são trimados, convertidos para minúsculas e têm espaços internos colapsados. `UniqueValueDetection` mantém o primeiro valor original, o normalizado e a contagem.
 
-Cada preferência normalizada deve ter exatamente um `PreferenceScheduleMapping` com dia e hora não vazios. Duplicar a mesma preferência é erro.
+Cada preferência normalizada deve ter exatamente um `PreferenceScheduleMapping`. Dias aceitam nomes da semana ou datas válidas (AAAA-MM-DD / DD/MM/AAAA); horas aceitam um início ou um intervalo no mesmo dia, como 14:00-16:00. Intervalos invertidos, horas inválidas e preferências sem mapeamento são rejeitados. A realocação manual livre continua separada dessa validação da rodada.
 
-Na CLI, dia e hora são perguntados ao usuário. No desktop atual, `BuildConfigurationFromPersistedData` usa o próprio valor importado como dia e o texto `horario importado` como hora.
+Na CLI, dia e hora são perguntados ao usuário. No desktop, `GetPreferenceScheduleMappings` sugere dias e intervalos reconhecíveis e deixa valores ambíguos vazios para revisão. A tela envia `params.scheduleMappings` ao backend, que valida a cobertura dos dados atuais. Rodadas sem preferência informam os mesmos campos separadamente e atribuem igual prioridade a todos os horários. Preferências diferentes mapeadas para o mesmo dia/intervalo compartilham mesas e capacidade.
 
 ## Critérios soft disponíveis
 
@@ -69,4 +69,4 @@ As funções de quantidade estimam distribuições de pessoas distintas em grupo
 
 ## Tela
 
-`AllocationConfigPage` mostra capacidade mínima/máxima por horário, edita quatro parâmetros e permite múltiplos critérios. Ao iniciar, apenas navega com os parâmetros; validação completa acontece quando a configuração é construída no backend.
+`AllocationConfigPage` mostra capacidade mínima/máxima por horário, edita quatro parâmetros e permite múltiplos critérios. Ao iniciar, valida a configuração no backend e mostra os erros na própria tela. Somente uma configuração válida segue para a busca.

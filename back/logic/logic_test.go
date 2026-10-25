@@ -994,7 +994,7 @@ func TestFillDb(t *testing.T) {
 		withTempWorkingDir(t, func(tmpDir string) {
 			db := createTestDB(t, tmpDir)
 
-			fillDb(db, []types.Candidato{
+			if err := fillDb(db, []types.Candidato{
 				{
 					Timestamp:       "2026-01-01",
 					Nome:            "Maria",
@@ -1006,7 +1006,9 @@ func TestFillDb(t *testing.T) {
 					EmailPessoal:    "maria@gmail.com",
 					Opcoes:          []string{"Seg 10h", "Ter 14h"},
 				},
-			})
+			}); err != nil {
+				t.Fatal(err)
+			}
 
 			if count := fetchCount(t, db, `SELECT COUNT(*) FROM pessoa`); count != 1 {
 				t.Fatalf("expected 1 pessoa, got %d", count)
@@ -1021,9 +1023,11 @@ func TestFillDb(t *testing.T) {
 		withTempWorkingDir(t, func(tmpDir string) {
 			db := createTestDB(t, tmpDir)
 
-			fillDb(db, []types.Avaliador{
+			if err := fillDb(db, []types.Avaliador{
 				{Nome: "Ana", Email: "ana@insper.edu.br", Sigla: "AN"},
-			})
+			}); err != nil {
+				t.Fatal(err)
+			}
 
 			if count := fetchCount(t, db, `SELECT COUNT(*) FROM avaliador`); count != 1 {
 				t.Fatalf("expected 1 avaliador, got %d", count)
@@ -1047,9 +1051,11 @@ func TestFillDb(t *testing.T) {
 				}
 			}
 
-			fillDb(db, []types.Restricao{
+			if err := fillDb(db, []types.Restricao{
 				{Candidato: "Maria", NaoPosso: "AN, BR", PrefiroNao: "BR"},
-			})
+			}); err != nil {
+				t.Fatal(err)
+			}
 
 			if count := fetchCount(t, db, `SELECT COUNT(*) FROM restricoesNposso`); count != 2 {
 				t.Fatalf("expected 2 restricoesNposso, got %d", count)
@@ -1099,8 +1105,8 @@ func TestSave(t *testing.T) {
 	})
 
 	t.Run("unsupported type", func(t *testing.T) {
-		if err := Save("tipo-nao-suportado"); err != nil {
-			t.Fatalf("expected unsupported type to return nil error, got %v", err)
+		if err := Save("tipo-nao-suportado"); err == nil {
+			t.Fatal("unsupported data must return an error")
 		}
 	})
 }

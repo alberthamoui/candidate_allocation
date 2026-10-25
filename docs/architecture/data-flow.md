@@ -42,11 +42,11 @@ Builders retornam structs junto de erros de campo e grupos de duplicidade. O fro
 
 ## Persistência
 
-`logic.Save` abre `./insper.db` e usa metadata de `back/type` para inserir campos persistentes. Preferências viram registros em `opcoes_horario` e `disponibilidade`; restrições viram vínculos candidato–avaliador.
+O desktop confirma todas as entidades com `logic.ReplaceImport`; a CLI usa a mesma substituição atômica. `logic.Save` continua disponível para lotes individuais, também com transação. A persistência abre `./insper.db` (ou `CANDIDATE_ALLOCATOR_DATABASE`) e usa metadata de `back/type` para inserir campos persistentes. Preferências viram registros em `opcoes_horario` e `disponibilidade`; restrições viram vínculos candidato–avaliador.
 
 ## Configuração
 
-Na UI, os parâmetros vêm de `GetWorkflowDefinition` e as opções de coluna/valor vêm do SQLite. No processamento, `BuildAllocationConfigurationFromDatabase` recarrega os dados, detecta preferências e cria `AllocationConfiguration` normalizada.
+Na UI, os parâmetros vêm de `GetWorkflowDefinition` e as opções de coluna/valor vêm do SQLite. No processamento, `BuildAllocationConfigurationFromDatabase` recarrega os dados, detecta preferências, valida a revisão explícita de dia/intervalo e cria `AllocationConfiguration` normalizada.
 
 Na CLI, dia e hora são coletados interativamente para cada preferência e a mesma função de configuração é usada.
 
