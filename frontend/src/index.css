@@ -169,3 +169,6 @@ textarea:focus-visible {
 		border-color: var(--text);
 	}
 }
+
+/* Pending filters keep the person's name and actions together. */
+[data-candidate-id]:has([data-agenda-hidden="true"]) { display: none; }

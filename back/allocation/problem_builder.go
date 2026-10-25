@@ -39,6 +39,14 @@ func BuildAllocationProblem(
 	for idx, candidato := range candidatos {
 		candidateID := idx + 1
 		preferredGroupIDs, preferenceRanks := buildCandidatePreferenceData(candidato, preferenceToGroupIDs)
+		if config.Normalized.Params.SemPreferencia {
+			preferredGroupIDs = []int{}
+			preferenceRanks = map[int]int{}
+			for _, g := range groups {
+				preferredGroupIDs = append(preferredGroupIDs, g.ID)
+				preferenceRanks[g.ID] = 0
+			}
+		}
 		problemCandidates = append(problemCandidates, types.SolverCandidate{
 			ID:                      candidateID,
 			Name:                    strings.TrimSpace(candidato.Nome),

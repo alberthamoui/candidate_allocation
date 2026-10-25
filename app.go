@@ -1,6 +1,7 @@
 package main
 
 import (
+	"candidate_alocator/back/operations"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"candidate_alocator/back/allocation"
 	dbpkg "candidate_alocator/back/db"
@@ -42,6 +44,19 @@ type App struct {
 	allocationHasResult           bool
 	allocationError               string
 	allocationProgressUnsubscribe func()
+	operationsMu                  sync.Mutex
+	operationsStore               *operations.Store
+	operationsPath                string
+	operationsStop                chan struct{}
+	allocationAccess              time.Time
+	googleMu                      sync.Mutex
+	channelsMu                    sync.Mutex
+	googlePending                 *googleConnection
+	sendMu                        sync.Mutex
+	noticeSender                  func(ConfigAvisos, operations.Delivery) error
+	synchronousNotices            bool
+	noticeEvent                   func(int64)
+	pendingRestrictions           []map[string]interface{}
 }
 
 // NewApp creates a new App application struct
@@ -58,15 +73,7 @@ func (a *App) startup(ctx context.Context) {
 		panic(err)
 	}
 
-	db, err := dbpkg.OpenDefault()
-	if err != nil {
-		fmt.Println("Erro ao abrir banco para limpeza:", err)
-		panic(err)
-	}
-	defer func() { _ = db.Close() }()
-
-	if err := dbpkg.ClearDatabase(db); err != nil {
-		fmt.Println("Erro ao limpar banco:", err)
+	if err := a.startOperations(); err != nil {
 		panic(err)
 	}
 
@@ -94,9 +101,31 @@ func (a *App) Greet(name string) string {
 }
 
 func (a *App) SuggestMapping(data []byte, quantidadeOpcoes int) ([]types.MappingItem, error) {
+	mapping, err := logic.SuggestMapping(data, quantidadeOpcoes)
+	if err != nil {
+		return nil, err
+	}
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	if a.allocationRunning {
+		return nil, fmt.Errorf("pare a busca antes de importar outra planilha")
+	}
+	if err := dbpkg.EnsureDefaultDatabase(); err != nil {
+		return nil, err
+	}
+	db, err := dbpkg.OpenDefault()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = db.Close() }()
+	if err := dbpkg.ClearDatabase(db); err != nil {
+		return nil, err
+	}
 	a.excelData = data
 	a.nOpcoes = quantidadeOpcoes
-	return logic.SuggestMapping(data, quantidadeOpcoes)
+	a.pendingRestrictions = nil
+	a.allocationAccess = time.Now()
+	return mapping, nil
 }
 
 func (a *App) SuggestMappingAvaliador() ([]types.MappingItem, error) {
@@ -136,7 +165,15 @@ func (a *App) BuildRestricoesWithMapping(mappingItems []types.MappingItem) ([]ty
 }
 
 func (a *App) SaveRestricoesFromMaps(restricaoMaps []map[string]interface{}) error {
-	return logic.SaveRestricoesFromMaps(restricaoMaps)
+	// The visual wizard reviews restrictions before evaluators. Keep them until
+	// evaluator IDs exist, instead of silently dropping their relationships.
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	data, err := json.Marshal(restricaoMaps)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, &a.pendingRestrictions)
 }
 
 func (a *App) SaveUsuariosFromMaps(candidatoMaps []map[string]interface{}) error {
@@ -144,7 +181,18 @@ func (a *App) SaveUsuariosFromMaps(candidatoMaps []map[string]interface{}) error
 }
 
 func (a *App) SaveAvaliadoresFromMaps(avaliadorMaps []map[string]interface{}) error {
-	return logic.SaveAvaliadoresFromMaps(avaliadorMaps)
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	if err := logic.SaveAvaliadoresFromMaps(avaliadorMaps); err != nil {
+		return err
+	}
+	if a.pendingRestrictions != nil {
+		if err := logic.SaveRestricoesFromMaps(a.pendingRestrictions); err != nil {
+			return err
+		}
+		a.pendingRestrictions = nil
+	}
+	return nil
 }
 
 func (a *App) DetectUniquePreferenceValues(candidatos []types.Candidato) []types.UniqueValueDetection {
@@ -219,6 +267,9 @@ type UICandidate struct {
 	NaoPosso        []string          `json:"naoPosso"`
 	PrefiroNao      []string          `json:"prefiroNao"`
 	Extras          map[string]string `json:"extras"`
+	Numero          string            `json:"numero"`
+	Telefone        string            `json:"telefone"`
+	Avaliacao       string            `json:"avaliacao"`
 }
 
 type UIAvaliador struct {
@@ -250,6 +301,7 @@ type UIAllocationResult struct {
 	RejectionReason string                          `json:"rejectionReason"`
 	Metrics         types.SolverMetrics             `json:"metrics"`
 	DebugNotes      []string                        `json:"debugNotes"`
+	Editado         bool                            `json:"editado"`
 }
 
 // UIAllocationRunState is the authoritative snapshot used by the frontend to
@@ -273,8 +325,10 @@ func (a *App) GetAllocationRunState(includeResult bool) UIAllocationRunState {
 		Error: a.allocationError,
 	}
 	if includeResult && a.allocationHasResult {
+		a.restoreAgendaLocked()
 		result := a.allocationResult
 		state.Result = &result
+		a.allocationAccess = time.Now()
 	}
 	return state
 }
@@ -362,7 +416,17 @@ func (a *App) RunAllocation(config types.AllocationConfiguration) (UIAllocationR
 	if err != nil {
 		return UIAllocationResult{}, err
 	}
-	return buildUIAllocationResult(run), nil
+	result := buildUIAllocationResult(run)
+	if err := a.saveConfiguredAgenda(run, result); err != nil {
+		return UIAllocationResult{}, err
+	}
+	a.allocationMu.Lock()
+	a.allocationResult = result
+	a.allocationHasResult = true
+	a.allocationAccess = time.Now()
+	a.allocationMu.Unlock()
+	a.maybeAutoNotify()
+	return result, nil
 }
 
 // StartAllocation starts a background exact search. Improving feasible
@@ -417,9 +481,16 @@ func (a *App) StartAllocation(config types.AllocationConfiguration) error {
 			return
 		}
 		uiResult := buildUIAllocationResult(run)
+		if err := a.saveConfiguredAgenda(run, uiResult); err != nil {
+			if a.failAllocationRun(runID, err.Error()) && eventContext != nil {
+				runtime.EventsEmit(eventContext, allocationErrorEvent, err.Error())
+			}
+			return
+		}
 		if a.completeAllocationRun(runID, uiResult) && eventContext != nil {
 			runtime.EventsEmit(eventContext, allocationCompleteEvent, uiResult)
 		}
+		a.maybeAutoNotify()
 	}()
 	return nil
 }
@@ -495,6 +566,7 @@ func (a *App) completeAllocationRun(runID uint64, result UIAllocationResult) boo
 	a.allocationCancel = nil
 	a.allocationResult = result
 	a.allocationHasResult = true
+	a.allocationAccess = time.Now()
 	a.allocationError = ""
 	return true
 }
@@ -611,6 +683,8 @@ func buildUICandidateMap(candidatos []types.Candidato, solverCandidates []types.
 			NaoPosso:        naoPosso,
 			PrefiroNao:      prefiroNao,
 			Extras:          nullableExtrasToStrings(candidato.Extras),
+			Numero:          candidato.Numero,
+			Telefone:        phoneFromExtras(nullableExtrasToStrings(candidato.Extras)),
 		}
 	}
 	return result
@@ -707,6 +781,25 @@ func removeWailsSmokeSentinel() {
 }
 
 func (a *App) clearTransientState() {
+	a.googleMu.Lock()
+	if a.googlePending != nil {
+		if a.googlePending.cancel != nil {
+			a.googlePending.cancel()
+		}
+		if a.googlePending.server != nil {
+			_ = a.googlePending.server.Close()
+		}
+	}
+	a.googleMu.Unlock()
+	a.operationsMu.Lock()
+	if a.operationsStop != nil {
+		close(a.operationsStop)
+		a.operationsStop = nil
+	}
+	if a.operationsStore != nil {
+		a.operationsStore.Close()
+	}
+	a.operationsMu.Unlock()
 	a.allocationMu.Lock()
 	if a.allocationCancel != nil {
 		a.allocationCancel()
@@ -715,11 +808,11 @@ func (a *App) clearTransientState() {
 	a.allocationRunning = false
 	unsubscribe := a.allocationProgressUnsubscribe
 	a.allocationProgressUnsubscribe = nil
+	a.ctx = nil
 	a.allocationMu.Unlock()
 	if unsubscribe != nil {
 		unsubscribe()
 	}
-	a.ctx = nil
 	a.excelData = nil
 	a.nOpcoes = 0
 }

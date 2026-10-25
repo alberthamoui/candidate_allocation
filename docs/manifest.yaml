@@ -143,3 +143,8 @@ documents:
   - id: generated-test-inventory
     path: docs/generated/test-inventory.md
     sources: ['**/*_test.go', tools/ui-testing/tests/**, tools/ui-testing/agent_inspect.test.js]
+
+  - id: agenda-operations
+    path: docs/features/agenda-operations.md
+    sources: [agenda_app.go, channels_app.go, google_app.go, agenda_cli.go, agenda_export.go, back/operations/**, back/allocation/manual_review.go, frontend/src/AgendaActions.tsx, frontend/src/ChannelsPanel.tsx]
+    tests: [agenda_app_test.go, channel_transport_test.go, back/operations/store_test.go, back/allocation/manual_review_test.go, tools/ui-testing/tests/07-agenda.spec.ts]

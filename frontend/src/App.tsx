@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
+import { useAllocationRun } from "./AllocationRunContext";
 import {
 	GetAvaliadorMappingFieldInfos,
 	GetCandidateMappingFieldInfos,
@@ -9,11 +10,12 @@ import {
 	SuggestMappingAvaliador,
 	SuggestMappingRestricao,
 } from "../wailsjs/go/main/App";
-import type { MappingDraft, MappingFieldInfo, MappingItem } from "./importTypes";
-import {
-	FieldLabel,
-	PrimaryButton,
-} from "./workflowShell";
+import type {
+	MappingDraft,
+	MappingFieldInfo,
+	MappingItem,
+} from "./importTypes";
+import { FieldLabel, PrimaryButton } from "./workflowShell";
 
 interface AppProps {
 	setMapping: (data: MappingDraft[]) => void;
@@ -35,7 +37,9 @@ function App({
 	const [fileResult, setFileResult] = useState("");
 	const [file, setFile] = useState<File | null>(null);
 	const [isLoading, setIsLoading] = useState(false);
+	const [usarPreferencia, setUsarPreferencia] = useState(true);
 	const navigate = useNavigate();
+	const savedAgenda = useAllocationRun().result;
 
 	function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
 		const selected = e.target.files?.[0] ?? null;
@@ -46,9 +50,11 @@ function App({
 	function makeDrafts(
 		items: MappingItem[],
 		fieldInfos: MappingFieldInfo[],
-		allowExtraFields: boolean
+		allowExtraFields: boolean,
 	): MappingDraft[] {
-		const coreVariables = new Set(fieldInfos.map((fieldInfo) => fieldInfo.variavel));
+		const coreVariables = new Set(
+			fieldInfos.map((fieldInfo) => fieldInfo.variavel),
+		);
 
 		return items.map((item) => {
 			const isCore = coreVariables.has(item.variavel);
@@ -80,7 +86,10 @@ function App({
 						return;
 					}
 					const data = new Uint8Array(fileData as ArrayBuffer);
-					const mappingCandidatos = await SuggestMapping(Array.from(data), 5);
+					const mappingCandidatos = await SuggestMapping(
+						Array.from(data),
+						usarPreferencia ? 5 : 0,
+					);
 					const [
 						candidateFieldInfos,
 						mappingAvaliadores,
@@ -95,14 +104,18 @@ function App({
 						GetRestricaoMappingFieldInfos(),
 					]);
 
+					sessionStorage.setItem(
+						"agenda_sem_preferencia",
+						usarPreferencia ? "false" : "true",
+					);
 					setMapping(makeDrafts(mappingCandidatos, candidateFieldInfos, true));
 					setCandidateFieldInfos(candidateFieldInfos);
 					setMappingAvaliadores(
-						makeDrafts(mappingAvaliadores, avaliadorFieldInfos, true)
+						makeDrafts(mappingAvaliadores, avaliadorFieldInfos, true),
 					);
 					setAvaliadorFieldInfos(avaliadorFieldInfos);
 					setMappingRestricoes(
-						makeDrafts(mappingRestricoes, restricaoFieldInfos, false)
+						makeDrafts(mappingRestricoes, restricaoFieldInfos, false),
 					);
 					setRestricaoFieldInfos(restricaoFieldInfos);
 					navigate("/mapping");
@@ -123,15 +136,34 @@ function App({
 				<div className="mb-8 text-center">
 					<h1 className="text-2xl font-semibold mb-2">Importação de Dados</h1>
 					<p className="text-sm text-gray-500">
-						Selecione a planilha (.xlsx) para iniciar um novo processo de alocação.
+						Selecione a planilha (.xlsx) para iniciar um novo processo de
+						alocação.
 					</p>
 				</div>
 
 				<div className="space-y-6">
-					<div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
-						<FieldLabel
-							label="Arquivo Excel"
+					{savedAgenda && (
+						<PrimaryButton
+							className="w-full"
+							onClick={() => navigate("/allocation-result")}
+						>
+							Retomar agenda salva
+						</PrimaryButton>
+					)}
+					<label className="flex gap-2 text-sm">
+						<input
+							type="checkbox"
+							checked={usarPreferencia}
+							onChange={(e) => setUsarPreferencia(e.target.checked)}
 						/>
+						Candidatos informam preferências de horário
+					</label>
+					<p className="text-xs text-slate-500">
+						CPF é opcional. Inclua Telefone/WhatsApp como coluna adicional para
+						enviar mensagens.
+					</p>
+					<div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
+						<FieldLabel label="Arquivo Excel" />
 						<input
 							type="file"
 							id="fileInput"
@@ -141,7 +173,7 @@ function App({
 							accept=".xlsx,.xls,.csv"
 						/>
 					</div>
-					
+
 					<PrimaryButton
 						onClick={handleFile}
 						className="w-full py-2.5 text-base"
@@ -151,9 +183,12 @@ function App({
 						<ArrowUpTrayIcon className="h-5 w-5" />
 						{isLoading ? "Processando..." : "Continuar"}
 					</PrimaryButton>
-					
+
 					{fileResult && (
-						<div data-testid="import-error-message" className="bg-red-50 text-red-600 border border-red-100 rounded-lg p-3 text-sm font-medium text-center">
+						<div
+							data-testid="import-error-message"
+							className="bg-red-50 text-red-600 border border-red-100 rounded-lg p-3 text-sm font-medium text-center"
+						>
 							{fileResult}
 						</div>
 					)}

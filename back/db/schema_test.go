@@ -170,3 +170,22 @@ func TestEnsureAppSchemaDropsObsoleteAvaliadorUniqueIndexes(t *testing.T) {
 		t.Fatalf("expected unique index for avaliador.%s to exist", unique.ColumnName)
 	}
 }
+
+func TestOptionalCPFAllowsMultipleEmptyValuesAndRetainsUniqueness(t *testing.T) {
+	db := openTempSQLiteDB(t)
+	if err := EnsureAppSchema(db); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"Ana", "Bia"} {
+		_, err := InsertStruct(db, "pessoa", types.Candidato{Nome: name, Semestre: "1"}, types.CandidateFields())
+		if err != nil {
+			t.Fatal("optional CPF rejected", err)
+		}
+	}
+	if _, err := InsertStruct(db, "pessoa", types.Candidato{Nome: "Caio", CPF: "12345678901", Semestre: "1"}, types.CandidateFields()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InsertStruct(db, "pessoa", types.Candidato{Nome: "Dora", CPF: "12345678901", Semestre: "1"}, types.CandidateFields()); err == nil {
+		t.Fatal("duplicate CPF accepted")
+	}
+}

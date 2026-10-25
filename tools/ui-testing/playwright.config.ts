@@ -30,6 +30,7 @@ export default defineConfig({
     
     /* Take screenshots on failure automatically */
     screenshot: 'only-on-failure',
+	launchOptions: process.env.PLAYWRIGHT_CHROMIUM_PATH ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_PATH} : undefined,
   },
 
   outputDir: '/tmp/candidate-allocation-playwright',

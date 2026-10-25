@@ -1,6 +1,7 @@
 package main
 
 import (
+	"candidate_alocator/back/allocation"
 	"candidate_alocator/back/workflow"
 	"context"
 	"errors"
@@ -26,6 +27,9 @@ func detectCLIMode(args []string) ([]string, bool) {
 }
 
 func runCLI(args []string) error {
+	if len(args) > 0 && args[0] == "agenda" {
+		return runAgendaCLI(args[1:])
+	}
 	flagSet := flag.NewFlagSet("cli", flag.ContinueOnError)
 	flagSet.SetOutput(os.Stderr)
 
@@ -49,5 +53,14 @@ func runCLI(args []string) error {
 		return fmt.Errorf("o parametro -opcoes deve ser maior que zero")
 	}
 
-	return workflow.RunCLI(context.Background(), *filePath, *optionCount)
+	a := NewApp()
+	a.synchronousNotices = true
+	defer a.clearTransientState()
+	return workflow.RunCLIWithResult(context.Background(), *filePath, *optionCount, func(run allocation.ConfiguredAllocationResult) error {
+		if err := a.saveConfiguredAgenda(run, buildUIAllocationResult(run)); err != nil {
+			return err
+		}
+		a.maybeAutoNotify()
+		return nil
+	})
 }

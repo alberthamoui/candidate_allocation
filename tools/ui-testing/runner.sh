@@ -23,7 +23,7 @@ if [ ! -d "node_modules" ] || ! node -e "require('@playwright/test')" >/dev/null
     npm ci
 fi
 
-if ! node -e "const fs = require('fs'); const { chromium } = require('@playwright/test'); fs.accessSync(chromium.executablePath())" >/dev/null 2>&1; then
+if ! node -e "const fs = require('fs'); const { chromium } = require('@playwright/test'); fs.accessSync(process.env.PLAYWRIGHT_CHROMIUM_PATH || chromium.executablePath())" >/dev/null 2>&1; then
     echo "Installing Playwright Chromium..."
     npx playwright install chromium
 fi

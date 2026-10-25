@@ -34,6 +34,8 @@ export default function AllocationConfigPage() {
 	const navigate = useNavigate();
 
 	const [gruposPorHorario, setGrupos] = useState(0);
+	const semPreferencia=sessionStorage.getItem("agenda_sem_preferencia")==="true";
+	const [horariosLivres,setHorariosLivres]=useState("");
 	const [minPessoas, setMin] = useState(0);
 	const [maxPessoas, setMax] = useState(0);
 	const [avaliadoresPorGrupo, setAvaliadores] = useState(0);
@@ -153,6 +155,7 @@ export default function AllocationConfigPage() {
 		}));
 
 		const params = {
+			semPreferencia,horariosLivres:horariosLivres.split("\n").map(v=>v.trim()).filter(Boolean),
 			gruposPorHorario,
 			minPessoasPorGrupo: minPessoas,
 			maxPessoasPorGrupo: maxPessoas,
@@ -164,7 +167,7 @@ export default function AllocationConfigPage() {
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-6">{semPreferencia&&<label className="block minimal-panel p-5">Horários disponíveis (um por linha)<textarea className="minimal-input mt-2" value={horariosLivres} onChange={e=>setHorariosLivres(e.target.value)} placeholder={"quarta 14-16\nsexta 10-12"}/></label>}
 			<SectionCard
 				title="Parâmetros centrais"
 				description="Defina a estrutura básica da rodada. Cada decisão altera a capacidade dos grupos e o espaço de soluções do algoritmo."

@@ -64,7 +64,7 @@ Os scripts em `scripts/` fazem builds limpos para plataforma atual, Windows amd6
 
 ## Banco
 
-`./insper.db` é criado no diretório corrente. O desktop limpa as tabelas no startup. Para preservar dados durante diagnóstico, não assuma persistência entre reinícios.
+`./insper.db` é criado no diretório corrente (ou no caminho de `CANDIDATE_ALLOCATOR_DATABASE`). Uma nova importação válida limpa esse banco; o startup preserva os dados. A agenda final, as avaliações, os canais e o histórico de avisos ficam em `operations.db` no diretório de configuração do usuário, configurável por `CANDIDATE_ALLOCATOR_DATA_DIR`. Veja [operações da agenda](../features/agenda-operations.md).
 
 ## OpenCode e inspeção de UI
 
@@ -88,3 +88,7 @@ make docs-update
 ```
 
 O comando exige `jj`, `codex` autenticado e um repositório com o marcador `docs/documentation-state.yaml`. Use `make docs-update-dry-run` para inspecionar o intervalo sem criar change nem iniciar o Codex.
+
+A branch principal é `mainjoao`; use `origin/mainjoao` como base e `mainjoao` como destino dos PRs.
+
+Em host sem GTK/WebKit, compile o frontend e execute `go run . preview` (loopback na porta 8128). Esse adaptador de desenvolvimento chama os métodos reais do `App`. O runner pode apontar para ele com `UI_BASE_URL=http://127.0.0.1:8128`; `PLAYWRIGHT_CHROMIUM_PATH` permite usar um Chromium já instalado.

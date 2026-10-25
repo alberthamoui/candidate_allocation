@@ -226,6 +226,9 @@ export namespace main {
 	    naoPosso: string[];
 	    prefiroNao: string[];
 	    extras: Record<string, string>;
+	    numero: string;
+	    telefone: string;
+	    avaliacao: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new UICandidate(source);
@@ -243,6 +246,9 @@ export namespace main {
 	        this.naoPosso = source["naoPosso"];
 	        this.prefiroNao = source["prefiroNao"];
 	        this.extras = source["extras"];
+	        this.numero = source["numero"];
+	        this.telefone = source["telefone"];
+	        this.avaliacao = source["avaliacao"];
 	    }
 	}
 	export class UIMesa {
@@ -294,6 +300,7 @@ export namespace main {
 	    rejectionReason: string;
 	    metrics: types.SolverMetrics;
 	    debugNotes: string[];
+	    editado: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new UIAllocationResult(source);
@@ -311,6 +318,137 @@ export namespace main {
 	        this.rejectionReason = source["rejectionReason"];
 	        this.metrics = this.convertValues(source["metrics"], types.SolverMetrics);
 	        this.debugNotes = source["debugNotes"];
+	        this.editado = source["editado"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AgendaOperation {
+	    result: UIAllocationResult;
+	    batchId: number;
+	    warning: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AgendaOperation(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.result = this.convertValues(source["result"], UIAllocationResult);
+	        this.batchId = source["batchId"];
+	        this.warning = source["warning"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class WhatsConfig {
+	    provedor?: string;
+	    phone_id?: string;
+	    template?: string;
+	    idioma?: string;
+	    variaveis_template?: string[];
+	    token_definido?: boolean;
+	    ativo: boolean;
+	    url: string;
+	    token: string;
+
+	    static createFrom(source: any = {}) {
+	        return new WhatsConfig(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provedor = source["provedor"];
+	        this.phone_id = source["phone_id"];
+	        this.template = source["template"];
+	        this.idioma = source["idioma"];
+	        this.variaveis_template = source["variaveis_template"];
+	        this.token_definido = source["token_definido"];
+	        this.ativo = source["ativo"];
+	        this.url = source["url"];
+	        this.token = source["token"];
+	    }
+	}
+	export class EmailConfig {
+	    provedor?: string;
+	    refresh_token?: string;
+	    google_connected: boolean;
+	    senha_definida?: boolean;
+	    ativo: boolean;
+	    host: string;
+	    porta: number;
+	    usuario: string;
+	    senha: string;
+	    remetente: string;
+
+	    static createFrom(source: any = {}) {
+	        return new EmailConfig(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provedor = source["provedor"];
+	        this.refresh_token = source["refresh_token"];
+	        this.google_connected = source["google_connected"];
+	        this.senha_definida = source["senha_definida"];
+	        this.ativo = source["ativo"];
+	        this.host = source["host"];
+	        this.porta = source["porta"];
+	        this.usuario = source["usuario"];
+	        this.senha = source["senha"];
+	        this.remetente = source["remetente"];
+	    }
+	}
+	export class ConfigAvisos {
+	    ativo: boolean;
+	    enviar_ao_alocar: boolean;
+	    mensagem: string;
+	    email: EmailConfig;
+	    whatsapp: WhatsConfig;
+
+	    static createFrom(source: any = {}) {
+	        return new ConfigAvisos(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ativo = source["ativo"];
+	        this.enviar_ao_alocar = source["enviar_ao_alocar"];
+	        this.mensagem = source["mensagem"];
+	        this.email = this.convertValues(source["email"], EmailConfig);
+	        this.whatsapp = this.convertValues(source["whatsapp"], WhatsConfig);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -331,6 +469,74 @@ export namespace main {
 		    return a;
 		}
 	}
+
+	export class GoogleConnectionStatus {
+	    available: boolean;
+	    status: string;
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new GoogleConnectionStatus(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.status = source["status"];
+	        this.message = source["message"];
+	    }
+	}
+	export class MoveRequest {
+	    scope: string;
+	    kind: string;
+	    candidateId: number;
+	    groupId: number;
+	    destinationId: number;
+	    schedule: string;
+	    from: string;
+	    to: string;
+	    notify: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new MoveRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scope = source["scope"];
+	        this.kind = source["kind"];
+	        this.candidateId = source["candidateId"];
+	        this.groupId = source["groupId"];
+	        this.destinationId = source["destinationId"];
+	        this.schedule = source["schedule"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	        this.notify = source["notify"];
+	    }
+	}
+	export class MoveSuggestion {
+	    groupId: number;
+	    description: string;
+	    schedule: string;
+	    vacancies: number;
+	    penalty: number;
+	    alerts: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new MoveSuggestion(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.groupId = source["groupId"];
+	        this.description = source["description"];
+	        this.schedule = source["schedule"];
+	        this.vacancies = source["vacancies"];
+	        this.penalty = source["penalty"];
+	        this.alerts = source["alerts"];
+	    }
+	}
+
 	export class UIAllocationRunState {
 	    runId: number;
 	    running: boolean;
@@ -373,6 +579,134 @@ export namespace main {
 	}
 	
 	
+
+
+}
+
+export namespace operations {
+
+	export class Batch {
+	    id: number;
+	    created: string;
+	    total: number;
+	    accepted: number;
+	    failed: number;
+	    pending: number;
+	    unknown: number;
+	    repeatedBy: number;
+
+	    static createFrom(source: any = {}) {
+	        return new Batch(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.created = source["created"];
+	        this.total = source["total"];
+	        this.accepted = source["accepted"];
+	        this.failed = source["failed"];
+	        this.pending = source["pending"];
+	        this.unknown = source["unknown"];
+	        this.repeatedBy = source["repeatedBy"];
+	    }
+	}
+	export class Delivery {
+	    id: number;
+	    batchId: number;
+	    personId: number;
+	    groupId: number;
+	    channel: string;
+	    destination: string;
+	    name: string;
+	    message: string;
+	    variables: Record<string, string>;
+	    status: string;
+	    error: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Delivery(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.batchId = source["batchId"];
+	        this.personId = source["personId"];
+	        this.groupId = source["groupId"];
+	        this.channel = source["channel"];
+	        this.destination = source["destination"];
+	        this.name = source["name"];
+	        this.message = source["message"];
+	        this.variables = source["variables"];
+	        this.status = source["status"];
+	        this.error = source["error"];
+	    }
+	}
+	export class DeliveryPage {
+	    items: Delivery[];
+	    next: number;
+
+	    static createFrom(source: any = {}) {
+	        return new DeliveryPage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], Delivery);
+	        this.next = source["next"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class HistoryPage {
+	    items: Batch[];
+	    next: number;
+
+	    static createFrom(source: any = {}) {
+	        return new HistoryPage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], Batch);
+	        this.next = source["next"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 
@@ -721,6 +1055,8 @@ export namespace types {
 	    }
 	}
 	export class AllocationParams {
+	    semPreferencia: boolean;
+	    horariosLivres: string[];
 	    gruposPorHorario: number;
 	    minPessoasPorGrupo: number;
 	    maxPessoasPorGrupo: number;
@@ -733,6 +1069,8 @@ export namespace types {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.semPreferencia = source["semPreferencia"];
+	        this.horariosLivres = source["horariosLivres"];
 	        this.gruposPorHorario = source["gruposPorHorario"];
 	        this.minPessoasPorGrupo = source["minPessoasPorGrupo"];
 	        this.maxPessoasPorGrupo = source["maxPessoasPorGrupo"];

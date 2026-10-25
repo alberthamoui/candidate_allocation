@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import {AgendaActionsProvider,CandidateActions,GroupActions,DayActions} from "./AgendaActions";
 import { useLocation } from "react-router-dom";
 import { Tooltip } from "./components/Tooltip";
 import {
@@ -214,7 +215,7 @@ export default function AllocationResultPage() {
 	);
 
 	return (
-		<div className="space-y-6" data-testid="allocation-result-page">
+		<AgendaActionsProvider result={result} onResult={allocationRun.setResult} running={allocationRun.running}><div className="space-y-6" data-testid="allocation-result-page">
 		{allocationRun.running ? (
 			<SectionCard
 				title={hasUnallocatedCandidates ? "Alocação parcial disponível — busca continua" : "Solução válida encontrada — verificação continua"}
@@ -363,7 +364,7 @@ export default function AllocationResultPage() {
 					<EmptyState title="Nenhum grupo foi formado." description="Revise a configuração de capacidade e execute a alocação novamente." />
 				</SectionCard>
 			) : Object.keys(groupedByHorario).map((horario) => (
-				<SectionCard key={horario} title={`Horário: ${horario}`} description="Clique em qualquer pessoa para consultar informações e preferências.">
+				<SectionCard key={horario} title={`Horário: ${horario}`} description="Clique em qualquer pessoa para consultar informações e preferências." aside={<DayActions schedule={horario}/>}>
 					<div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
 						{groupedByHorario[horario].map((mesa: any) => (
 							<div
@@ -372,7 +373,7 @@ export default function AllocationResultPage() {
 								data-quality-impact={activeQualityPenalizedGroupIDs.has(Number(mesa.id)) ? "penalized" : activeQualityNonPenalizedGroupIDs.has(Number(mesa.id)) ? "non-penalized" : "unrelated"}
 								className={`rounded-2xl border bg-white shadow-sm ${activeQualityPenalizedGroupIDs.has(Number(mesa.id)) ? "border-rose-400 ring-2 ring-rose-200" : activeQualityNonPenalizedGroupIDs.has(Number(mesa.id)) ? "border-emerald-400 ring-2 ring-emerald-200" : "border-slate-200"}`}
 							>
-								<div className="rounded-t-2xl border-b border-slate-100 bg-slate-50 px-5 py-4"><h3 className="text-base font-semibold text-slate-950">{mesa.descricao}</h3></div>
+								<div className="rounded-t-2xl border-b border-slate-100 bg-slate-50 px-5 py-4"><h3 className="text-base font-semibold text-slate-950">{mesa.descricao}</h3></div><GroupActions group={mesa}/>
 								<div className="p-4">
 									<div className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">Candidatos</div>
 									<ul className="mt-3 space-y-2">
@@ -380,7 +381,7 @@ export default function AllocationResultPage() {
 											<li key={candidate.id} data-candidate-id={candidate.id} data-course={normalizeFilterValue(candidate.curso)} data-quality-impact={activeQualityPenalizedCandidateIDs.has(Number(candidate.id)) ? "penalized" : activeQualityNonPenalizedCandidateIDs.has(Number(candidate.id)) ? "non-penalized" : "unrelated"} className={`rounded-xl border text-sm transition-all ${getCandidateClassName(candidate)}`}>
 												<button type="button" onClick={() => setPersonSelection({ kind: "candidate", person: candidate })} className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left">
 													<span className="font-semibold">{candidate.nome}</span><span className="text-xs opacity-75">{candidate.curso} · {candidate.semestre}º</span>
-												</button>
+												</button><CandidateActions candidate={candidate} conflict={(result.hardViolations||[]).some((v:any)=>v.candidateId===candidate.id||v.groupId===mesa.id)}/>
 											</li>
 										))}
 									</ul>
@@ -409,9 +410,9 @@ export default function AllocationResultPage() {
 				) : (
 					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 						{result.naoAlocados.map((candidate: any) => (
-							<button type="button" key={candidate.id} data-candidate-id={candidate.id} onClick={() => setPersonSelection({ kind: "candidate", person: candidate })} className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-left hover:border-red-300">
+							<div key={candidate.id} data-candidate-id={candidate.id} className="rounded-xl border border-red-200 bg-red-50"><button type="button" onClick={() => setPersonSelection({kind:"candidate",person:candidate})} className="w-full px-4 py-3 text-left">
 								<div className="font-semibold text-red-900">{candidate.nome}</div><div className="mt-1 text-xs text-red-700">{candidate.curso} · {candidate.semestre}º semestre</div>
-							</button>
+							</button><CandidateActions candidate={candidate} unallocated conflict/></div>
 						))}
 					</div>
 				)}
@@ -428,6 +429,6 @@ export default function AllocationResultPage() {
 			</details>
 
 			<PersonDetailsPopover selection={personSelection} onClose={() => setPersonSelection(null)} />
-		</div>
+		</div></AgendaActionsProvider>
 	);
 }

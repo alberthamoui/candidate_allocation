@@ -125,7 +125,7 @@ test.describe('Allocation Flow UI', () => {
     await expect(page.getByText('Como o score foi calculado')).toBeVisible();
     await expect(page.getByText('Bruno foi alocado na preferência 2')).toBeVisible();
 
-    await page.getByRole('button', { name: /Ana Lima/ }).click();
+    await page.locator('[data-candidate-id="1"] > button').click();
     await expect(page.getByTestId('person-details-tooltip')).toContainText('Segunda 10h');
     await page.getByLabel('Fechar informações').click();
     await page.getByRole('button', { name: /Profa. Eva/ }).click();
@@ -162,7 +162,7 @@ test.describe('Allocation Flow UI', () => {
     await expect(page.getByTestId('allocation-result-page')).toBeVisible();
     await expect(page.getByText('Alocação parcial disponível — busca continua')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Candidatos não alocados' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Bia/ })).toBeVisible();
+    await expect(page.locator('[data-candidate-id="2"] > button')).toBeVisible();
   });
 
   test('keeps searching until completion and clearly reports the finished proof', async ({ page }) => {
