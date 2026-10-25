@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"candidate_alocator/back/allocation"
+	dbpkg "candidate_alocator/back/db"
 	"candidate_alocator/back/logic"
 	"candidate_alocator/back/operations"
 	types "candidate_alocator/back/type"
@@ -346,5 +347,43 @@ func TestCompletedSearchCanBeEvictedWithoutOpeningResultAgain(t *testing.T) {
 	}
 	if result, err := a.GetAgenda(); err != nil || len(result.Mesas) != 2 {
 		t.Fatal(result, err)
+	}
+}
+
+func TestVisualImportKeepsRestrictionsUntilEvaluatorIDsExist(t *testing.T) {
+	t.Setenv("CANDIDATE_ALLOCATOR_DATABASE", filepath.Join(t.TempDir(), "import.db"))
+	if err := dbpkg.EnsureDefaultDatabase(); err != nil {
+		t.Fatal(err)
+	}
+	db, err := dbpkg.OpenDefault()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := dbpkg.InsertStruct(db, "pessoa", types.Candidato{Nome: "Ana", Semestre: "1"}, types.CandidateFields()); err != nil {
+		t.Fatal(err)
+	}
+	a := NewApp()
+	t.Cleanup(a.clearTransientState)
+	if err := a.SaveRestricoesFromMaps([]map[string]interface{}{{"candidato": "Ana", "naoPosso": "EV", "prefiroNao": ""}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SaveAvaliadoresFromMaps([]map[string]interface{}{{"nome": "Eva", "email": "eva@example.test", "sigla": "EV"}}); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM restricoesNposso").Scan(&count); err != nil || count != 1 {
+		t.Fatal("visual import lost evaluator restriction", count, err)
+	}
+}
+
+func TestDayActionCanSelectWholeDayFromAnIntervalCard(t *testing.T) {
+	a := operationsApp(t)
+	op, err := a.MoveAgenda(MoveRequest{Kind: "day", Scope: "day", From: "quarta 14-16", To: "sexta"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if op.Result.Mesas[0].Horario != "sexta 14-16" || op.Result.Mesas[1].Horario != "sexta 16-18" {
+		t.Fatal("whole-day action only moved one interval")
 	}
 }

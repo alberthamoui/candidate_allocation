@@ -395,5 +395,8 @@ func (a *App) TestChannels() (map[string]string, error) {
 			result["whatsapp"] = "Provedor avançado configurado; confira o contrato de envio"
 		}
 	}
+	if len(result) == 0 {
+		result["configuracao"] = "Ative pelo menos um canal antes de testar"
+	}
 	return result, nil
 }

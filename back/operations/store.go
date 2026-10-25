@@ -67,6 +67,10 @@ type DeliveryPage struct {
 	Next  int64      `json:"next"`
 }
 
+// ErrUncertain means the provider may have accepted a message even though its
+// response was lost. Such a delivery must not enter the automatic failure retry.
+var ErrUncertain = errors.New("aceitação não confirmada; confira no provedor antes de reenviar")
+
 func New(path string, ttl time.Duration, limit int) (*Store, error) {
 	if ttl <= 0 || limit < 1 {
 		return nil, errors.New("limites de cache inválidos")
@@ -388,6 +392,9 @@ func (s *Store) Complete(id int64, sendError error) error {
 	status, message := "accepted", ""
 	if sendError != nil {
 		status, message = "failed", sendError.Error()
+		if errors.Is(sendError, ErrUncertain) {
+			status = "unknown"
+		}
 	}
 	_, err = db.Exec("UPDATE deliveries SET status=?,error=?,updated=? WHERE id=? AND status='sending'", status, message, time.Now().UTC().Format(time.RFC3339Nano), id)
 	return err

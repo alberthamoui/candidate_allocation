@@ -104,6 +104,7 @@ export function AgendaActionsProvider({
 		[filter, setFilter] = useState("");
 	const [states, setStates] = useState<Record<number, string>>({});
 	const [move, setMove] = useState<{ kind: string; item: any } | null>(null),
+		[dayScope, setDayScope] = useState("interval"),
 		[suggestions, setSuggestions] = useState<any[]>([]),
 		[destination, setDestination] = useState(0),
 		[schedule, setSchedule] = useState(""),
@@ -147,6 +148,7 @@ export function AgendaActionsProvider({
 		setDestination(0);
 		setSchedule("");
 		setNotify(false);
+		setDayScope("interval");
 		if (kind === "person")
 			GetMoveSuggestions(item.id)
 				.then(setSuggestions)
@@ -352,9 +354,26 @@ export function AgendaActionsProvider({
 							</label>
 						</>
 					)}
+					{move.kind === "day" && (
+						<label className="block text-sm">
+							O que mover?
+							<select
+								className="minimal-input mt-1"
+								value={dayScope}
+								onChange={(e) => setDayScope(e.target.value)}
+							>
+								<option value="interval">Somente este intervalo</option>
+								<option value="day">
+									Dia inteiro, preservando os intervalos
+								</option>
+							</select>
+						</label>
+					)}
 					<label className="mt-3 block text-sm">
 						{move.kind === "day"
-							? "Novo dia (intervalos serão preservados)"
+							? dayScope === "day"
+								? "Novo dia (intervalos serão preservados)"
+								: "Novo intervalo"
 							: "Novo horário"}
 						<input
 							className="minimal-input mt-1"
@@ -401,6 +420,7 @@ export function AgendaActionsProvider({
 							void act(async () => {
 								const op = await MoveAgenda({
 									kind: move.kind,
+									scope: dayScope,
 									candidateId: move.kind === "person" ? move.item.id : 0,
 									groupId: move.kind === "group" ? move.item.id : 0,
 									destinationId: destination,

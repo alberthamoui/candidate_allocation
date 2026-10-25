@@ -23,6 +23,7 @@ type agendaSnapshot struct {
 	Result UIAllocationResult                    `json:"result"`
 }
 type MoveRequest struct {
+	Scope         string `json:"scope"`
 	Kind          string `json:"kind"`
 	CandidateID   int    `json:"candidateId"`
 	GroupID       int    `json:"groupId"`
@@ -361,6 +362,9 @@ func refreshManualPreferences(s *agendaSnapshot) {
 }
 
 func moveSnapshot(s *agendaSnapshot, p MoveRequest) ([]int, error) {
+	if p.Kind == "day" && p.Scope == "day" {
+		p.From, _ = dividirDataHorario(p.From)
+	}
 	if s.Run.Result.Assignments == nil {
 		s.Run.Result.Assignments = map[int]int{}
 	}

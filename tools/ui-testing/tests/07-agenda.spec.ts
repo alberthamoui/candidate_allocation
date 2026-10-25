@@ -275,3 +275,17 @@ test("ações de mesa e realocação permanecem acessíveis no celular", async (
 		),
 	).toBe(false);
 });
+
+test("ação de dia distingue intervalo e dia inteiro", async ({ page }) => {
+	await agenda(page);
+	await page
+		.getByRole("button", { name: "Mover intervalo / dia" })
+		.first()
+		.click();
+	await expect(page.getByLabel("O que mover?")).toHaveValue("interval");
+	await page.getByLabel("O que mover?").selectOption("day");
+	await expect(
+		page.getByLabel("Novo dia (intervalos serão preservados)"),
+	).toBeVisible();
+	await page.getByLabel("Fechar ação").click();
+});

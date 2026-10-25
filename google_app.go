@@ -216,11 +216,17 @@ func (a *App) sendGoogleEmail(cfg EmailConfig, d operations.Delivery) error {
 	}
 	resp, err := client.Post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", "application/json", bytes.NewReader(body))
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", operations.ErrUncertain, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("google recusou o envio (%d); confira a conexão", resp.StatusCode)
+	}
+	var accepted struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 8192)).Decode(&accepted); err != nil || accepted.ID == "" {
+		return operations.ErrUncertain
 	}
 	return nil
 }

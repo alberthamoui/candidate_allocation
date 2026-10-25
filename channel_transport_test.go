@@ -132,9 +132,9 @@ func TestSMTPConnectionAndLocalDelivery(t *testing.T) {
 			if data {
 				content.WriteString(line)
 				if strings.Contains(content.String(), "\r\n.\r\n") {
-					data = false
 					received <- content.String()
 					_, _ = io.WriteString(conn, "250 accepted\r\n")
+					return // SMTP accepted DATA; simulate a lost QUIT response.
 				}
 				continue
 			}

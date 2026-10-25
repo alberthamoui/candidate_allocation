@@ -56,6 +56,15 @@ test("agenda real preserva avaliação, horário manual e Excel após recarregar
 		page.getByRole("button", { name: "Exportar Excel", exact: true }).click(),
 	]);
 	expect(download.suggestedFilename()).toBe("agenda.xlsx");
+	await page.goto("/");
+	await page
+		.getByRole("button", { name: "Retomar agenda salva", exact: true })
+		.click();
+	await expect(page.getByTestId("allocation-result-page")).toBeVisible();
+	await expect(
+		page.locator(`[data-candidate-id="${person.id}"]`),
+	).toContainText("Passou");
+
 	const final = await page.evaluate(
 		async () => await (window as any).go.main.App.GetAgenda(),
 	);

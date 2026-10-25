@@ -22,18 +22,19 @@ func servePreview(args []string) error {
 		return err
 	}
 	a := NewApp()
+	defer a.clearTransientState()
 	if err := dbpkg.EnsureDefaultDatabase(); err != nil {
 		return err
 	}
-	if err := a.startOperations(); err != nil {
-		return err
-	}
-	defer a.clearTransientState()
 	dist, err := fs.Sub(assets, "frontend/dist")
 	if err != nil {
 		return err
 	}
-	server := &http.Server{Addr: *listen, Handler: previewRouter(a, dist), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
+	router := previewRouter(a, dist)
+	if err := a.startOperations(); err != nil {
+		return err
+	}
+	server := &http.Server{Addr: *listen, Handler: router, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
 	fmt.Printf("Preview de desenvolvimento: http://%s (base mainjoao)\n", *listen)
 	return server.ListenAndServe()
 }

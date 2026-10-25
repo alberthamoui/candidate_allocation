@@ -56,6 +56,7 @@ type App struct {
 	noticeSender                  func(ConfigAvisos, operations.Delivery) error
 	synchronousNotices            bool
 	noticeEvent                   func(int64)
+	pendingRestrictions           []map[string]interface{}
 }
 
 // NewApp creates a new App application struct
@@ -122,6 +123,7 @@ func (a *App) SuggestMapping(data []byte, quantidadeOpcoes int) ([]types.Mapping
 	}
 	a.excelData = data
 	a.nOpcoes = quantidadeOpcoes
+	a.pendingRestrictions = nil
 	a.allocationAccess = time.Now()
 	return mapping, nil
 }
@@ -163,7 +165,15 @@ func (a *App) BuildRestricoesWithMapping(mappingItems []types.MappingItem) ([]ty
 }
 
 func (a *App) SaveRestricoesFromMaps(restricaoMaps []map[string]interface{}) error {
-	return logic.SaveRestricoesFromMaps(restricaoMaps)
+	// The visual wizard reviews restrictions before evaluators. Keep them until
+	// evaluator IDs exist, instead of silently dropping their relationships.
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	data, err := json.Marshal(restricaoMaps)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, &a.pendingRestrictions)
 }
 
 func (a *App) SaveUsuariosFromMaps(candidatoMaps []map[string]interface{}) error {
@@ -171,7 +181,18 @@ func (a *App) SaveUsuariosFromMaps(candidatoMaps []map[string]interface{}) error
 }
 
 func (a *App) SaveAvaliadoresFromMaps(avaliadorMaps []map[string]interface{}) error {
-	return logic.SaveAvaliadoresFromMaps(avaliadorMaps)
+	a.allocationMu.Lock()
+	defer a.allocationMu.Unlock()
+	if err := logic.SaveAvaliadoresFromMaps(avaliadorMaps); err != nil {
+		return err
+	}
+	if a.pendingRestrictions != nil {
+		if err := logic.SaveRestricoesFromMaps(a.pendingRestrictions); err != nil {
+			return err
+		}
+		a.pendingRestrictions = nil
+	}
+	return nil
 }
 
 func (a *App) DetectUniquePreferenceValues(candidatos []types.Candidato) []types.UniqueValueDetection {

@@ -217,3 +217,23 @@ func TestPendingJobsAndNoticeScheduleState(t *testing.T) {
 		t.Fatal("accepted job resumed")
 	}
 }
+
+func TestUncertainNetworkResponseIsNotRetried(t *testing.T) {
+	s := testStore(t)
+	id, err := s.CreateBatch("agenda", []Delivery{{PersonID: 1, Channel: "email"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := s.Deliveries("agenda", id, 0, 100)
+	_, _ = s.Claim(page.Items[0].ID)
+	if err := s.Complete(page.Items[0].ID, ErrUncertain); err != nil {
+		t.Fatal(err)
+	}
+	history, err := s.History("agenda", 0, 10)
+	if err != nil || history.Items[0].Unknown != 1 || history.Items[0].Failed != 0 {
+		t.Fatal(history, err)
+	}
+	if _, err := s.Retry("agenda", id); err == nil {
+		t.Fatal("ambiguous acceptance repeated")
+	}
+}

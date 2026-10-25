@@ -13,21 +13,21 @@ Estas são descrições do código atual, não decisões desejadas. Ao corrigir 
 
 `WorkflowDefinition` possui sete etapas e coloca avaliadores antes de restrições. `workflowMeta.ts` possui oito macroetapas, coloca restrições antes de avaliadores e adiciona checkpoint/resultado. A configuração consome defaults/opções do backend, mas a timeline e ajuda ainda são hardcoded.
 
-## Restrição é salva antes do avaliador na UI
+## Revisão de restrições antes dos avaliadores
 
-O desktop persiste candidatos, depois restrições e só então avaliadores. `fillDb` precisa encontrar avaliador por sigla para inserir a restrição. Como erros individuais são apenas impressos, a UI pode avançar sem vínculos persistidos. A CLI salva avaliadores antes de restrições e não tem essa ordem específica.
+O wizard revisa restrições antes dos avaliadores. O `App` mantém essas restrições pendentes e só as persiste depois de salvar os avaliadores, quando as siglas já possuem IDs. A CLI já segue essa ordem de persistência. Candidatos/siglas desconhecidos ainda exigem revisão dos dados importados.
 
 ## Persistência sem transação e com erros silenciosos
 
 `logic.Save` não usa transação e `fillDb` não retorna erro. Falhas de registros individuais podem produzir persistência parcial enquanto a chamada Wails retorna sucesso.
 
-## Banco limpo no startup
+## Banco de importação substituído por uma nova planilha
 
-`App.startup` sempre chama `ClearDatabase`. Não há histórico entre sessões nem mecanismo de confirmação/recuperação.
+O startup preserva os dados; uma nova importação válida limpa o banco de domínio. A agenda final e seus avisos ficam separados em `operations.db`. Não há catálogo de múltiplos processos seletivos na interface.
 
-## Configuração e resultado não são persistidos
+## Rascunho de importação ainda transitório
 
-Parâmetros e resultado passam por React Router `location.state`. Recarregar ou abrir rotas diretamente perde o contexto.
+A agenda final, seus parâmetros, as avaliações e os canais persistem. Os mapeamentos e correções ainda em revisão dependem do estado React. Persistência do resultado não recupera automaticamente todas as telas anteriores.
 
 ## Mapeamento de horário no desktop é provisório
 

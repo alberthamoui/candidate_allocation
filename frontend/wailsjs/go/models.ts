@@ -487,6 +487,7 @@ export namespace main {
 	    }
 	}
 	export class MoveRequest {
+	    scope: string;
 	    kind: string;
 	    candidateId: number;
 	    groupId: number;
@@ -502,6 +503,7 @@ export namespace main {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scope = source["scope"];
 	        this.kind = source["kind"];
 	        this.candidateId = source["candidateId"];
 	        this.groupId = source["groupId"];

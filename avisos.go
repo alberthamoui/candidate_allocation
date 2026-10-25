@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"candidate_alocator/back/operations"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -238,12 +239,15 @@ func enviarEmailSMTP(cfg EmailConfig, para, assunto, corpo string) error {
 	}
 	msg := "From: " + remetente.String() + "\r\nTo: " + destino.String() + "\r\nSubject: " + assunto + "\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" + corpo
 	if _, err := w.Write([]byte(msg)); err != nil {
-		return err
+		return fmt.Errorf("%w: %v", operations.ErrUncertain, err)
 	}
 	if err := w.Close(); err != nil {
-		return err
+		return fmt.Errorf("%w: %v", operations.ErrUncertain, err)
 	}
-	return c.Quit()
+	// DATA's positive response is the acceptance. A lost QUIT response cannot
+	// turn a message already accepted by SMTP into a retryable failure.
+	_ = c.Quit()
+	return nil
 }
 
 func enviarWhatsAppVariaveis(cfg WhatsConfig, para, corpo string, vars map[string]string) error {
@@ -298,15 +302,15 @@ func enviarWhatsAppVariaveis(cfg WhatsConfig, para, corpo string, vars map[strin
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", operations.ErrUncertain, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 8192))
-	if err != nil {
-		return err
-	}
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("provedor WhatsApp recusou o envio (%s); verifique token, telefone e modelo aprovado", resp.Status)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	if err != nil {
+		return fmt.Errorf("%w: %v", operations.ErrUncertain, err)
 	}
 	if cfg.Provedor == "meta" {
 		var out struct {
@@ -315,7 +319,7 @@ func enviarWhatsAppVariaveis(cfg WhatsConfig, para, corpo string, vars map[strin
 			} `json:"messages"`
 		}
 		if err := json.Unmarshal(b, &out); err != nil || len(out.Messages) == 0 || out.Messages[0].ID == "" {
-			return fmt.Errorf("WhatsApp não confirmou a aceitação da mensagem")
+			return fmt.Errorf("%w: WhatsApp não confirmou a aceitação da mensagem", operations.ErrUncertain)
 		}
 	}
 	return nil
