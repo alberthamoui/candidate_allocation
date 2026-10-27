@@ -1,24 +1,57 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeftIcon, ArrowUturnLeftIcon, CheckCircleIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import {
+	ArrowLeftIcon,
+	ArrowUturnLeftIcon,
+	CheckCircleIcon,
+	ExclamationTriangleIcon
+} from "@heroicons/react/24/outline";
 import {
 	getCapacidade,
+	marcarNovaAlocacao,
+	getUsarPreferencia,
 	getParametrosSalvos,
 	salvarParametros,
 	CapacidadeResponse,
 	CriterioAlocacao,
-	ParametrosAlocacao,
+	ParametrosAlocacao
 } from "../api";
 import EditorCriterios from "../components/EditorCriterios";
-import { Aviso, BarraAcoes, BotaoPrimario, BotaoSecundario, CabecalhoPagina, cn, Metrica, Secao, Selo } from "../components/ui";
+import {
+	Aviso,
+	BarraAcoes,
+	BotaoPrimario,
+	BotaoSecundario,
+	CabecalhoPagina,
+	cn,
+	Metrica,
+	Secao,
+	Selo
+} from "../components/ui";
 
-type Campo = Exclude<keyof ParametrosAlocacao, "criterios">; // campos numéricos
+type Campo = "mesas_por_horario" | "min_pessoas_por_mesa" | "max_pessoas_por_mesa" | "avaliadores_por_mesa"; // campos numéricos
 
 const CAMPOS: { campo: Campo; label: string; dica: string }[] = [
-	{ campo: "mesas_por_horario", label: "Mesas por horário", dica: "Máximo de mesas em cada horário" },
-	{ campo: "avaliadores_por_mesa", label: "Avaliadores por mesa", dica: "Cada avaliador fica em uma mesa por horário" },
-	{ campo: "min_pessoas_por_mesa", label: "Mínimo de candidatos por mesa", dica: "Mesa com menos que isso não é formada" },
-	{ campo: "max_pessoas_por_mesa", label: "Máximo de candidatos por mesa", dica: "" },
+	{
+		campo: "mesas_por_horario",
+		label: "Mesas por horário",
+		dica: "Máximo de mesas em cada horário"
+	},
+	{
+		campo: "avaliadores_por_mesa",
+		label: "Avaliadores por mesa",
+		dica: "Cada avaliador fica em uma mesa por horário"
+	},
+	{
+		campo: "min_pessoas_por_mesa",
+		label: "Mínimo de candidatos por mesa",
+		dica: "Mesa com menos que isso não é formada"
+	},
+	{
+		campo: "max_pessoas_por_mesa",
+		label: "Máximo de candidatos por mesa",
+		dica: ""
+	}
 ];
 
 // Texto digitado → parâmetros; null se algum campo estiver vazio ou não for inteiro.
@@ -39,6 +72,8 @@ function paraTexto(p: ParametrosAlocacao): Record<Campo, string> {
 export default function Parametros() {
 	const navigate = useNavigate();
 	const [valores, setValores] = useState<Record<Campo, string> | null>(null);
+	const [semPreferencia, setSemPreferencia] = useState(!getUsarPreferencia());
+	const [horarios, setHorarios] = useState("");
 	const [criterios, setCriterios] = useState<CriterioAlocacao[]>([]);
 	const [padrao, setPadrao] = useState<ParametrosAlocacao | null>(null);
 	const [previa, setPrevia] = useState<CapacidadeResponse | null>(null);
@@ -55,6 +90,8 @@ export default function Parametros() {
 				const salvos = getParametrosSalvos();
 				setValores(paraTexto(salvos ?? inicial.parametros));
 				setCriterios(salvos?.criterios ?? []);
+				setSemPreferencia(salvos?.sem_preferencia ?? inicial.parametros.sem_preferencia ?? !getUsarPreferencia());
+				setHorarios((salvos?.horarios_livres ?? inicial.parametros.horarios_livres ?? []).join("\n"));
 				if (!salvos) setPrevia(inicial);
 			} catch (err: any) {
 				setErro(err.message);
@@ -66,7 +103,7 @@ export default function Parametros() {
 	// Recalcula a prévia a cada mudança (com um pequeno atraso enquanto digita)
 	useEffect(() => {
 		if (!valores) return;
-		const params = paraParametros(valores, criterios);
+		const params = montarParametros();
 		if (!params) {
 			setErro("Preencha todos os campos com números inteiros.");
 			return;
@@ -87,14 +124,34 @@ export default function Parametros() {
 			}
 		}, 250);
 		return () => clearTimeout(t);
-	}, [valores, criterios]);
+	}, [valores, criterios, semPreferencia, horarios]);
 
-	const params = valores ? paraParametros(valores, criterios) : null;
-	const podeRodar = !!params && !erro && !carregando && !!previa && previa.mesas_por_horario > 0;
+	function montarParametros() {
+		const p = valores ? paraParametros(valores, criterios) : null;
+		return p
+			? {
+					...p,
+					sem_preferencia: semPreferencia,
+					horarios_livres: horarios
+						.split(/[\n,;]/)
+						.map((s) => s.trim())
+						.filter(Boolean)
+				}
+			: null;
+	}
+	const params = montarParametros();
+	const podeRodar =
+		!!params &&
+		!erro &&
+		!carregando &&
+		!!previa &&
+		previa.mesas_por_horario > 0 &&
+		(!semPreferencia || !!params?.horarios_livres.length);
 
 	function rodar() {
 		if (!params || !podeRodar) return;
 		salvarParametros(params);
+		marcarNovaAlocacao();
 		navigate("/resultado");
 	}
 
@@ -110,13 +167,42 @@ export default function Parametros() {
 
 			<div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
 				<div className="space-y-6">
+					<Secao titulo="Preferências de horário">
+						<label className="flex gap-2 text-sm">
+							<input
+								type="checkbox"
+								checked={!semPreferencia}
+								disabled={!getUsarPreferencia()}
+								onChange={(e) => setSemPreferencia(!e.target.checked)}
+							/>
+							Usar a ordem de preferência dos candidatos
+						</label>
+						{semPreferencia && (
+							<label className="block mt-3">
+								<span className="rotulo">Horários disponíveis (um por linha)</span>
+								<textarea
+									className="campo"
+									rows={4}
+									placeholder="28/10/2026 14:00-16:00"
+									value={horarios}
+									onChange={(e) => setHorarios(e.target.value)}
+								/>
+								<span className="text-xs text-[var(--text-muted)]">
+									Todos poderão ser alocados em qualquer horário desta lista.
+								</span>
+							</label>
+						)}
+					</Secao>
 					{valores && (
 						<Secao
 							titulo="Mesas"
 							ajuda="O número de mesas também é limitado pela quantidade de avaliadores: cada um fica em no máximo uma mesa em cada horário."
 							acoes={
 								alterado && (
-									<BotaoSecundario onClick={() => padrao && setValores(paraTexto(padrao))} className="px-3 py-1.5 text-xs">
+									<BotaoSecundario
+										onClick={() => padrao && setValores(paraTexto(padrao))}
+										className="px-3 py-1.5 text-xs"
+									>
 										<ArrowUturnLeftIcon className="h-3.5 w-3.5" />
 										Restaurar valores padrão
 									</BotaoSecundario>
@@ -142,7 +228,11 @@ export default function Parametros() {
 					)}
 
 					{valores && (
-						<EditorCriterios criterios={criterios} onChange={setCriterios} valoresColunas={previa?.valores_colunas ?? {}} />
+						<EditorCriterios
+							criterios={criterios}
+							onChange={setCriterios}
+							valoresColunas={previa?.valores_colunas ?? {}}
+						/>
 					)}
 				</div>
 
@@ -188,7 +278,7 @@ export default function Parametros() {
 										testId="previa-cabem"
 										rotulo="Cabem no máximo"
 										valor={previa.max_alocaveis}
-										detalhe="pelos horários escolhidos"
+										detalhe={semPreferencia ? "nos horários definidos" : "pelos horários escolhidos"}
 										tom={todosCabem ? "sucesso" : "atencao"}
 									/>
 								</div>
@@ -212,9 +302,9 @@ export default function Parametros() {
 										<thead className="bg-[var(--bg-subtle)] text-left">
 											<tr>
 												<th className="rotulo-caps px-3 py-2">Horário</th>
-												<th className="rotulo-caps px-3 py-2 text-right">1ª opção</th>
-												<th className="rotulo-caps px-3 py-2 text-right" title="Escolheram em qualquer opção">
-													Escolheram
+												{!semPreferencia && <th className="rotulo-caps px-3 py-2 text-right">1ª opção</th>}
+												<th className="rotulo-caps px-3 py-2 text-right" title={semPreferencia ? "Disponíveis neste horário" : "Escolheram em qualquer opção"}>
+													{semPreferencia ? "Disponíveis" : "Escolheram"}
 												</th>
 												<th className="rotulo-caps px-3 py-2 text-right">Vagas</th>
 											</tr>
@@ -225,7 +315,7 @@ export default function Parametros() {
 												return (
 													<tr key={h.descricao} className="hover:bg-[var(--bg-subtle)]">
 														<td className="px-3 py-2 capitalize">{h.descricao}</td>
-														<td
+														{!semPreferencia && <td
 															className={cn(
 																"px-3 py-2 text-right tabular-nums",
 																lotado ? "font-semibold text-[var(--warning)]" : "text-[var(--text-muted)]"
@@ -233,8 +323,10 @@ export default function Parametros() {
 															title={lotado ? "Mais gente quer este horário como 1ª opção do que há vagas" : undefined}
 														>
 															{h.primeira_opcao}
+														</td>}
+														<td className="px-3 py-2 text-right tabular-nums text-[var(--text-muted)]">
+															{h.interessados}
 														</td>
-														<td className="px-3 py-2 text-right tabular-nums text-[var(--text-muted)]">{h.interessados}</td>
 														<td className="px-3 py-2 text-right tabular-nums text-[var(--text-muted)]">
 															{previa.capacidade_por_horario}
 														</td>

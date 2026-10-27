@@ -1,4 +1,4 @@
-import { ButtonHTMLAttributes, ReactNode, useState } from "react";
+import { ButtonHTMLAttributes, ReactNode, useState, useRef, useEffect } from "react";
 
 // Peças visuais compartilhadas pelas telas (inspiradas no workflowShell da
 // branch mainjoao). As classes base ficam em index.css.
@@ -215,26 +215,80 @@ export function IconeAjuda({ texto }: { texto: string }) {
 
 /** Janela sobre a tela (confirmações, erros). */
 export function Modal({
-	titulo,
-	children,
-	acoes,
-	onFechar,
+  titulo,
+  children,
+  acoes,
+  onFechar,
 }: {
-	titulo: ReactNode;
-	children: ReactNode;
-	acoes?: ReactNode;
-	onFechar?: () => void;
+  titulo: ReactNode;
+  children: ReactNode;
+  acoes?: ReactNode;
+  onFechar?: () => void;
 }) {
-	return (
-		<div
-			className="fixed inset-0 z-[60] flex items-center justify-center bg-black/25 p-4 backdrop-blur-sm"
-			onClick={onFechar}
-		>
-			<div role="dialog" aria-modal className="painel w-full max-w-md p-6 shadow-[var(--shadow-lg)]" onClick={(e) => e.stopPropagation()}>
-				<h3 className="text-lg font-semibold">{titulo}</h3>
-				<div className="mt-2 text-sm leading-6 text-[var(--text-muted)]">{children}</div>
-				{acoes && <div className="mt-6 flex justify-end gap-2">{acoes}</div>}
-			</div>
-		</div>
-	);
+  const dialog = useRef<HTMLDivElement>(null);
+  const fechar = useRef(onFechar);
+  fechar.current = onFechar;
+  useEffect(() => {
+    const anterior = document.activeElement as HTMLElement | null;
+    const el = dialog.current;
+    el?.focus();
+    function tecla(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        fechar.current?.();
+      }
+      if (e.key === "Tab" && el) {
+        const elementos = Array.from(
+          el.querySelectorAll<HTMLElement>(
+            'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]',
+          ),
+        ).filter((x) => x.offsetParent !== null);
+        const primeiro = elementos[0],
+          ultimo = elementos[elementos.length - 1];
+        if (!primeiro) {
+          e.preventDefault();
+          return;
+        }
+        if (
+          e.shiftKey &&
+          (document.activeElement === primeiro || document.activeElement === el)
+        ) {
+          e.preventDefault();
+          ultimo.focus();
+        } else if (
+          !e.shiftKey &&
+          (document.activeElement === ultimo || document.activeElement === el)
+        ) {
+          e.preventDefault();
+          primeiro.focus();
+        }
+      }
+    }
+    el?.addEventListener("keydown", tecla);
+    return () => {
+      el?.removeEventListener("keydown", tecla);
+      anterior?.focus();
+    };
+  }, []);
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/25 p-4 backdrop-blur-sm"
+      onClick={onFechar}
+    >
+      <div
+        ref={dialog}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal
+        className="painel w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto p-6 shadow-[var(--shadow-lg)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold">{titulo}</h3>
+        <div className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+          {children}
+        </div>
+        {acoes && <div className="mt-6 flex justify-end gap-2">{acoes}</div>}
+      </div>
+    </div>
+  );
 }

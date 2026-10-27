@@ -1,3 +1,4 @@
+import { AcoesPessoa, AcoesMesa, AcoesHorario } from "./OperacoesAgenda";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { ExclamationTriangleIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { AlocacaoResponse, AvaliadorResultado, CandidatoResultado, ItemQualidade, MesaResult } from "../api";
@@ -34,6 +35,7 @@ const DESTACADO = "bg-[var(--warning-soft)] font-semibold text-[var(--text)] rin
 export default function PainelResultado({ result }: { result: AlocacaoResponse }) {
 	const [busca, setBusca] = useState("");
 	const [horario, setHorario] = useState("");
+	const [avaliacao, setAvaliacao] = useState("");
 	const [curso, setCurso] = useState("");
 	const [semestre, setSemestre] = useState("");
 	const [itemAtivo, setItemAtivo] = useState<string>("");
@@ -49,17 +51,18 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 
 	const item = qualidade.find((q) => q.codigo === itemAtivo);
 	const idsDoItem = useMemo(() => new Set(item?.candidatos ?? []), [item]);
-	const filtrando = !!(busca.trim() || curso || semestre || item);
+	const filtrando = !!(busca.trim() || curso || semestre || item || avaliacao);
 
 	// um candidato "bate" se atende a todos os filtros ativos
 	const bate = (c: CandidatoResultado) =>
 		(!busca.trim() || normalizar(`${c.nome} ${c.email_insper} ${c.curso}`).includes(normalizar(busca))) &&
+		(!avaliacao || (avaliacao === "pendente" ? !c.avaliacao : c.avaliacao === avaliacao)) &&
 		(!curso || normalizar(c.curso) === normalizar(curso)) &&
 		(!semestre || String(c.semestre) === semestre) &&
 		(!item || idsDoItem.has(c.id));
 
 	// só com a busca de texto ativa, ela também procura avaliadores (nome, sigla, email)
-	const buscaAvaliador = !!busca.trim() && !curso && !semestre && !item;
+	const buscaAvaliador = !!busca.trim() && !curso && !semestre && !item && !avaliacao;
 	const bateAvaliador = (a: AvaliadorResultado) =>
 		buscaAvaliador && normalizar(`${a.nome} ${a.sigla} ${a.email}`).includes(normalizar(busca));
 
@@ -86,6 +89,7 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 		setCurso("");
 		setSemestre("");
 		setItemAtivo("");
+		setAvaliacao("");
 	}
 
 	useEffect(() => {
@@ -112,6 +116,9 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 				/>
 			</div>
 
+			<button className="painel p-4 text-left text-sm" onClick={() => setAvaliacao("pendente")} aria-pressed={avaliacao === "pendente"}>
+				{todos.filter(c => !c.avaliacao).length} avaliações pendentes — avaliar participantes
+			</button>
 			{/* ── Qualidade ──────────────────────────────────────────────── */}
 			<Secao titulo="Qualidade da alocação" subtitulo="Clique em um item para destacar os candidatos dele.">
 				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -154,8 +161,14 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 						className="campo pl-9"
 					/>
 				</div>
-				<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+				<div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
 					<Filtro rotulo="Horário" valor={horario} opcoes={horarios} onChange={setHorario} />
+					<label className="block"><span className="rotulo">Avaliação</span>
+						<select className="campo" value={avaliacao} onChange={e => setAvaliacao(e.target.value)}>
+							<option value="">Todas</option><option value="pendente">Pendente</option>
+							<option value="aprovado">Passou</option><option value="reprovado">Não passou</option>
+						</select>
+					</label>
 					<Filtro rotulo="Curso" valor={curso} opcoes={cursos} onChange={setCurso} />
 					<Filtro rotulo="Semestre" valor={semestre} opcoes={semestres} onChange={setSemestre} formatar={(s) => `${s}º`} />
 				</div>
@@ -191,6 +204,7 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 						<section key={hor} aria-label={`Mesas de ${hor}`} className="space-y-3">
 							<div className="flex items-center gap-2">
 								<h2 className="text-base font-semibold capitalize">{hor}</h2>
+								<AcoesHorario horario={hor} />
 								<Selo>{qtd(ms.length, "mesa", "mesas")}</Selo>
 							</div>
 							<div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -203,6 +217,7 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 											<Selo>
 												{mesa.candidatos.length} candidato{mesa.candidatos.length !== 1 ? "s" : ""}
 											</Selo>
+											<AcoesMesa mesa={mesa} />
 										</div>
 										<div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
 											<div>
@@ -232,6 +247,7 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 																	/>
 																)}
 															</button>
+															<AcoesPessoa pessoa={c} />
 														</li>
 													))}
 												</ul>
@@ -301,6 +317,7 @@ export default function PainelResultado({ result }: { result: AlocacaoResponse }
 											>
 												{c.nome}
 											</button>
+											<AcoesPessoa pessoa={c} alocado={false} />
 										</td>
 										<td className="px-4 py-2.5 text-[var(--text-muted)]">{c.curso}</td>
 										<td className="px-4 py-2.5 text-[var(--text-muted)]">{c.semestre ? `${c.semestre}º` : ""}</td>

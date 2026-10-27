@@ -145,7 +145,9 @@ type ParametrosAlocacao struct {
 	MaxPessoasPorMesa  int `json:"max_pessoas_por_mesa"`
 	AvaliadoresPorMesa int `json:"avaliadores_por_mesa"`
 	// Criterios são regras opcionais sobre curso/semestre (criterios.go).
-	Criterios []CriterioAlocacao `json:"criterios"`
+	Criterios      []CriterioAlocacao `json:"criterios"`
+	SemPreferencia bool               `json:"sem_preferencia"`
+	HorariosLivres []string           `json:"horarios_livres"`
 }
 
 func parametrosAlocacaoPadrao() ParametrosAlocacao {
@@ -258,6 +260,9 @@ func montarProblema(param ParametrosAlocacao, horarios map[int]*Horario, avals [
 				continue // horário repetido: vale a melhor opção
 			}
 			p.custoPref[c*p.nSlot+s] = -pontosOpcao(nivel)
+			if param.SemPreferencia {
+				p.custoPref[c*p.nSlot+s] = 0
+			}
 			p.prefs[c] = append(p.prefs[c], s)
 		}
 	}
@@ -845,6 +850,9 @@ func (p *problema) montarMesas(sol solucao) (map[int]int, []*Mesa) {
 // Se ctx for cancelado (ex.: o usuário fechou a página), as buscas param e
 // fica a melhor solução vista até ali.
 func fazerMelhorAlocacaoMesas(ctx context.Context, param ParametrosAlocacao, horarios map[int]*Horario, avals []*Avaliador, prefs map[int][]int, hard, soft map[int]map[int]bool, atributos map[int]map[string]string, onProgress func(int, int, int)) (ResultadoAlocacao, []*Mesa) {
+	if ctx.Err() != nil {
+		return ResultadoAlocacao{Alocacao: map[int]int{}, Pontuacao: SCORE_BASE - len(prefs)*custoNaoAlocado}, nil
+	}
 	p := montarProblema(param, horarios, avals, prefs, hard, soft)
 	p.aplicarCriterios(param.Criterios, atributos)
 	if p.nMesas == 0 {
@@ -908,7 +916,7 @@ esperar:
 
 	aloc, mesas := p.montarMesas(melhor)
 	res := ResultadoAlocacao{Alocacao: aloc, Alocados: len(aloc)}
-	score, penalidades, _ := pontuarResultado(res, mesas, prefs, hard, soft)
+	score, penalidades, _ := pontuarResultado(res, mesas, prefs, hard, soft, param.SemPreferencia)
 	if len(p.criterios) > 0 {
 		penalidades["criterios"] = p.penalidadeCriterios(melhor)
 		score -= penalidades["criterios"]

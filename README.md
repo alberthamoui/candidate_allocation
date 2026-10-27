@@ -2,6 +2,10 @@
 
 Sistema web para alocação de candidatos em mesas de entrevista, desenvolvido em Go (servidor HTTP) + React/TypeScript (frontend embarcado).
 
+**Branch principal: `main`. Todo novo PR deve ter `main` como destino; o merge depende da revisão do mantenedor.**
+
+App e CLI compartilham o servidor HTTP, a mesma sessão e as regras Go. A CLI não possui solver ou banco paralelo.
+
 **Acesso online:** [https://candidate-allocation.onrender.com/](https://candidate-allocation.onrender.com/)
 
 ---
@@ -61,19 +65,20 @@ O arquivo `.xlsx` deve ter exatamente **3 abas**, nesta ordem. Um arquivo de exe
 
 ### Aba 1 — Candidatos
 
-Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos — o app sugere o mapeamento pelo nome de cada coluna (ignorando maiúsculas, acentos e pontuação, e entendendo variações como "Primeira Opção" ou "E-mail institucional"), ajustável na interface. Campos sem correspondência pelo nome recebem as colunas que sobraram, na ordem da planilha.
+Uma linha por candidato. Os nomes e a ordem das colunas não precisam ser exatos — o app sugere o mapeamento pelo nome de cada coluna (ignorando maiúsculas, acentos e pontuação, e entendendo variações como "Primeira Opção" ou "E-mail institucional"), ajustável na interface. CPF e telefone sem correspondência ficam vazios. Os demais campos sem correspondência podem receber colunas restantes; confira o mapeamento antes de confirmar.
 
 | Campo | Descrição | Validação |
 |---|---|---|
 | Timestamp | Data/hora do preenchimento (opcional) | — |
 | Nome | Nome completo | — |
-| CPF | Apenas dígitos, sem pontuação | 11 dígitos numéricos |
-| Número | RA ou número de matrícula | 9 dígitos numéricos |
+| CPF | Opcional; pode omitir a coluna | Se preenchido, 11 dígitos numéricos |
+| Número | RA ou matrícula; nunca usado para enviar WhatsApp | Opcional |
+| Telefone / WhatsApp | Contato separado da matrícula, opcional | DDD + número, ou formato internacional com `+` |
 | Semestre | Semestre atual do candidato | Valor entre 1 e 10 |
 | Curso | Nome do curso | — |
 | Email Institucional | Email institucional do candidato | Deve terminar com o domínio configurado (ex: `@al.insper.edu.br`) |
 | Email Pessoal | Email pessoal | Qualquer email válido |
-| Opção 1 … Opção N | Horários disponíveis em ordem de preferência | Uma coluna por opção |
+| Opção 1 … Opção N | Opcionais quando a preferência de horários estiver desligada | Sem preferência, o administrador define os horários nos parâmetros |
 
 Dois parâmetros são configurados antes do upload:
 
@@ -108,7 +113,7 @@ Uma linha por candidato que possui restrição. As siglas devem corresponder exa
 
 ### Pré-requisitos
 
-- [Go](https://golang.org/) 1.21+
+- [Go](https://golang.org/) 1.24.2+
 - [Node.js](https://nodejs.org/) 18+
 - Compilador C (necessário para `go-sqlite3`) — no Windows, instale o [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)
 - `make` (opcional, para os atalhos abaixo) — no Windows: `scoop install make` ou `choco install make`
@@ -176,7 +181,7 @@ docker run -p 8080:8080 candidate-allocation
 
 ### Produção (Render)
 
-O app está publicado no Render, com deploy da branch `main` pelo `Dockerfile` — um merge `main ← dev` publica a versão. O servidor lê quanta CPU o container tem (cota do cgroup) e se ajusta: no plano gratuito (0,1 CPU) cada alocação roda **uma** busca e só **uma** alocação roda por vez; as outras esperam na fila ("Aguardando outra alocação terminar..."). Se o usuário fecha a página, a alocação dele para. No plano gratuito o serviço dorme depois de ~15 min sem uso e as sessões (em memória) se perdem; a tela avisa que a sessão expirou e pede para recomeçar.
+O app está publicado no Render, com deploy da branch `main` pelo `Dockerfile` — um merge `main ← dev` publica a versão. O servidor lê quanta CPU o container tem (cota do cgroup) e se ajusta: no plano gratuito (0,1 CPU) cada alocação roda **uma** busca e só **uma** alocação roda por vez; as outras esperam na fila ("Aguardando outra alocação terminar..."). Se o usuário fecha a página, a alocação dele para. As agendas agora são persistidas no diretório `ALOCACAO_DADOS`; configure um volume persistente no Render para recuperá-las após reinícios ou recriação do container. A expiração em memória não apaga os dados do disco.
 
 Variáveis de ambiente opcionais (no painel do Render):
 
@@ -185,7 +190,7 @@ Variáveis de ambiente opcionais (no painel do Render):
 | `ALOCACAO_EXECUCOES` | uma por CPU, até 8 | buscas em paralelo por alocação |
 | `ALOCACAO_ITERACOES` | 200000 | movimentos por busca (menos = mais rápido, pode piorar um pouco o resultado) |
 | `ALOCACOES_SIMULTANEAS` | CPUs ÷ buscas (mínimo 1) | alocações ao mesmo tempo |
-| `MAX_SESSOES` | 200 | sessões abertas ao mesmo tempo |
+| `MAX_SESSOES` | 200 | sessões carregadas na memória ao mesmo tempo |
 | `MAX_UPLOAD_MB` | 10 | tamanho máximo da planilha |
 
 Referência medida com 1 núcleo: a planilha oficial (98 candidatos) leva ~0,5 s de CPU por busca — cerca de 6 s com 0,1 CPU — e chega ao mesmo resultado com 1 busca ou com 8. Com 300 candidatos, uma busca leva ~35 s com 0,1 CPU. O selo no canto da tela mostra branch e commit (no Render, via `RENDER_GIT_BRANCH`/`RENDER_GIT_COMMIT`).
@@ -265,6 +270,86 @@ candidate_allocation/
 | `GET` | `/api/export?sessionId=` | Download do resultado em `.xlsx` |
 | `GET` | `/api/exemplo` | Download do arquivo de exemplo |
 | `GET` | `/api/versao` | Branch e commit que o servidor está rodando (exibidos no canto da tela) |
-| `DELETE` | `/api/session` | Encerra e limpa a sessão atual |
+| `DELETE` | `/api/session` | Encerra e limpa a sessão atual (aguarda operações/envios ativos) |
+| `GET` | `/api/resultado` | Recupera a agenda atual |
+| `GET/POST` | `/api/avisos` | Consulta configuração sem segredos / configura canais |
+| `POST` | `/api/avisos/testar`, `/api/avisos/previa` | Testa conexão / mostra prévia sem enviar |
+| `POST` | `/api/avisos/enviar` | Autoriza aviso para todos, mesa ou pessoa |
+| `GET` | `/api/avisos/historico` | Resumos paginados (`antes`, `limite`) |
+| `GET` | `/api/avisos/lotes/{id}` | Detalhes do lote (`resumo=true` evita carregar mensagens) |
+| `POST` | `/api/avisos/repetir` | Repete somente falhas confirmadas |
+| `POST` | `/api/realocar` | Realoca pessoa, mesa ou dia |
+| `GET` | `/api/realocar/sugestoes` | Ordena destinos para uma pessoa |
+| `POST` | `/api/avaliar` | Avalia um ou vários candidatos atomicamente |
 
 Todas as rotas de sessão recebem o `sessionId` pelo header `X-Session-Id`.
+
+
+## Operar a agenda no app e na CLI
+
+Na entrada, escolha **Configurar avisos** ou **Agora não**. CPF e canais são opcionais. Desmarque **Usar preferências de horário dos candidatos** para importar uma planilha sem opções e informar os horários disponíveis nos parâmetros. Todos os horários terão o mesmo custo no algoritmo nesse modo.
+
+No resultado, cada pessoa tem ações **Realocar**, **Passou / Não passou / pendente** e **Avisar**. Cada mesa tem **Realocar mesa** e **Avisar mesa**. No cabeçalho do horário, **Realocar horário ou dia** permite mudar só aquele intervalo ou todas as mesas do dia: informe apenas a data na origem e no destino para preservar os intervalos.
+
+A realocação manual permite qualquer destino, inclusive uma mesa nova ou acima da capacidade. O servidor ordena sugestões por vagas, preferências, equipe, restrições e critérios, e exibe alertas depois da alteração. O administrador escolhe se autoriza avisos aos participantes afetados. Avaliadores recebem e-mail quando esse canal está ativo. O Excel sempre usa a agenda e as avaliações atuais.
+
+Compile com `make build`. Para iniciar o servidor e compartilhar a mesma agenda entre navegador e terminal:
+
+```bash
+ALOCACAO_DADOS=/caminho/privado/agendas PORT=8080 ./server servir
+./server ajuda
+./server alocar -planilha Excels/teste_oficial.xlsx -servidor http://localhost:8080
+```
+
+O último comando devolve o link da agenda e o identificador. Copie-o para os próximos comandos (também aparece em **Usar esta agenda pela CLI** no app):
+
+```bash
+./server resultado -sessao ID
+./server realocar-pessoa -sessao ID -pessoa 12 -mesa 3
+./server sugestoes -sessao ID -pessoa 12
+./server realocar-mesa -sessao ID -mesa 3 -para '29/10/2026 14:00-16:00' -avisar
+./server realocar-dia -sessao ID -de '29/10/2026' -para '30/10/2026' -avisar
+./server avaliar -sessao ID -id 12 -resultado passou
+./server avaliar -sessao ID -id 13 -resultado 'não passou'
+./server avaliar -sessao ID -id 12 -resultado pendente
+./server exportar -sessao ID -saida agenda.xlsx
+./server avisos -sessao ID
+./server avisos -sessao ID -config /caminho/privado/canais.json
+./server avisos -sessao ID -testar
+./server avisos -sessao ID -previa
+./server enviar -sessao ID -pessoa 12
+./server enviar -sessao ID -mesa 3
+./server enviar -sessao ID
+./server historico -sessao ID -limite 20
+./server envio -sessao ID -lote LOTE
+./server repetir-falhas -sessao ID -lote LOTE
+```
+
+Todos aceitam `-servidor URL` (padrão `http://localhost:8080`). `historico -antes CURSOR` consulta a página seguinte. `enviar` é autorização explícita; realocações só notificam com `-avisar`. A CLI retorna erro se algum envio falhar ou ficar incerto e imprime separadamente a operação já salva.
+
+Para importar sem CPF e sem preferências:
+
+```bash
+./server alocar -planilha candidatos.xlsx -sem-preferencia \
+  -horarios '28/10/2026 10:00-12:00,28/10/2026 14:00-16:00'
+```
+
+`alocar -avisos /caminho/privado/canais.json` permite configurar os canais na importação. O campo `enviar_ao_alocar: true` autoriza o aviso automático depois de concluir a alocação. Sem essa autorização, gerar uma agenda não envia mensagens. Não coloque senhas em argumentos do terminal; proteja o arquivo de configuração com `chmod 600`. A configuração retornada pela API/CLI oculta senha e token; valores vazios preservam o segredo somente na mesma conta.
+
+## Conectar os canais
+
+- **Gmail / Google Workspace:** informe o remetente e uma [senha de aplicativo do Google](https://support.google.com/accounts/answer/185833). O app preenche host, porta e usuário. A conta precisa permitir senhas de aplicativo; a senha normal da conta não serve. Para outros serviços, abra a configuração SMTP avançada. O envio exige TLS.
+- **WhatsApp Business (Meta):** informe o ID do número, token e nome do modelo aprovado; configure idioma e a ordem das variáveis do corpo do modelo. O WhatsApp usa o texto aprovado pela Meta, conforme a [documentação oficial de modelos](https://whatsapp.github.io/WhatsApp-Nodejs-SDK/api-reference/messages/template/). O texto livre do editor é usado no e-mail e no webhook avançado.
+- **Webhook avançado:** recebe POST JSON com `to`, `message`, `para` e `mensagem`; o token vai em `Authorization: Bearer`. Use HTTPS. Um HTTP 2xx significa aceitação pelo integrador, que é responsável pelo encaminhamento.
+
+No editor, clique em **nome**, **data**, **horario**, **mesa**, **email**, **curso** ou **numero** para inserir variáveis. Veja a prévia antes de enviar. **Testar conexão** verifica autenticação SMTP ou acesso ao número da Meta, sem enviar uma mensagem. Credenciais inválidas e falta de telefone ficam visíveis.
+
+## Persistência e acompanhamento dos envios
+
+`ALOCACAO_DADOS` é o diretório privado de dados (padrão `alocacao-dados`). Cada sessão usa SQLite com arquivo `0600`, incluindo agenda, avaliações, configuração e os envios. Use um volume persistente em servidor/container e faça backup desse diretório. Execute uma única instância por diretório. Sem volume persistente, a hospedagem pode apagar os dados ao recriar o container.
+
+Sessões inativas são descarregadas da memória após 15 minutos e recuperadas do disco pelo ID. O limite `MAX_SESSOES` se aplica às sessões carregadas; sessões com operações ou envios ativos não são descarregadas. O ID funciona como chave de acesso: mantenha-o privado. Para uma instalação exposta à internet, coloque autenticação administrativa e HTTPS no proxy antes de conectar contas reais.
+
+A agenda e a autorização de envio são gravadas na mesma transação. Cada mensagem/canal tem estado próprio: pendente, em transmissão, aceito pelo provedor, falhou ou aceitação incerta. O histórico é paginado e carrega detalhes sob demanda; durante o envio, a interface consulta apenas o resumo daquele lote. Aceitação não confirma entrega ou leitura. Em caso de interrupção durante a transmissão, confira o provedor antes de preparar outro aviso; mensagens incertas não são repetidas automaticamente. **Repetir falhas** cria uma única nova tentativa das falhas confirmadas, com contatos e horários atuais.
+
+As conexões precisam das contas do administrador. Os testes automatizados usam provedores simulados, sem disparos externos; validar autenticação e entrega com contas e destinatários reais permanece uma etapa de instalação.

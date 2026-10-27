@@ -64,8 +64,13 @@ func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Preferência de horário é opcional. Desligada, a planilha não precisa das
+	// colunas de opção: o administrador informa os horários na etapa seguinte.
+	usarPreferencia := interpretarBool(r.FormValue("usarPreferencia"), true)
 	nOpcoes := 5
-	if v := r.FormValue("nOpcoes"); v != "" {
+	if !usarPreferencia {
+		nOpcoes = 0
+	} else if v := r.FormValue("nOpcoes"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 10 {
 			writeError(w, 400, fmt.Sprintf("número de opções inválido: %q (esperado de 1 a 10)", v))
@@ -87,9 +92,24 @@ func (store *SessionStore) handleUpload(w http.ResponseWriter, r *http.Request) 
 		writeError(w, 500, "erro ao criar a sessão: "+err.Error())
 		return
 	}
+	sess.usarPreferencia = usarPreferencia
+	sess.preferenciaDefinida = true
+	if avisos := strings.TrimSpace(r.FormValue("avisos")); avisos != "" {
+		var cfg ConfigAvisos
+		if err := json.Unmarshal([]byte(avisos), &cfg); err != nil {
+			_ = store.Delete(id)
+			writeError(w, 400, "avisos inválidos: "+err.Error())
+			return
+		}
+		if err := sess.ConfigurarAvisos(cfg); err != nil {
+			_ = store.Delete(id)
+			writeError(w, 400, err.Error())
+			return
+		}
+	}
 	mapping, err := sess.SuggestMapping(data, nOpcoes, emailDomain)
 	if err != nil {
-		store.Delete(id)
+		_ = store.Delete(id)
 		writeError(w, 400, "erro ao processar arquivo: "+err.Error())
 		return
 	}
@@ -269,7 +289,7 @@ func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) 
 
 	// sem sessão (ex.: o servidor reiniciou): avisa pelo próprio stream, que o
 	// navegador só consegue ler se a resposta for um evento
-	sess := store.Get(r.URL.Query().Get("sessionId"))
+	sess := store.sessionFromRequest(r)
 	if sess == nil {
 		emit(map[string]string{"error": msgSessaoExpirada})
 		return
@@ -279,6 +299,7 @@ func (store *SessionStore) handleAlocar(w http.ResponseWriter, r *http.Request) 
 		emit(map[string]string{"error": err.Error()})
 		return
 	}
+	param = sess.comPreferenciaDaSessao(param)
 
 	// fila: com pouca CPU, uma alocação por vez; as outras esperam a vez
 	ctx := r.Context()
@@ -346,12 +367,35 @@ func lerParametros(q url.Values) (ParametrosAlocacao, error) {
 			return pa, fmt.Errorf("critérios inválidos: %w", err)
 		}
 	}
+	if interpretarBool(q.Get("sem_preferencia"), false) {
+		pa.SemPreferencia = true
+	}
+	if v := q.Get("horarios_livres"); v != "" {
+		v = strings.TrimSpace(v)
+		if strings.HasPrefix(v, "[") {
+			if err := json.Unmarshal([]byte(v), &pa.HorariosLivres); err != nil {
+				return pa, fmt.Errorf("horários inválidos: %w", err)
+			}
+		} else {
+			pa.HorariosLivres = []string{v}
+		}
+	}
 	return pa, pa.validar()
 }
 
-// msgSessaoExpirada explica o erro mais comum em produção: no plano gratuito
-// o servidor dorme sem uso e as sessões (em memória) se perdem.
-const msgSessaoExpirada = "sua sessão expirou (o servidor reinicia depois de um tempo sem uso); recomece enviando a planilha"
+func interpretarBool(v string, padrao bool) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "sim", "yes", "on":
+		return true
+	case "0", "false", "nao", "não", "no", "off":
+		return false
+	default:
+		return padrao
+	}
+}
+
+// A agenda persistida pode ser retomada pelo identificador mesmo após reinício.
+const msgSessaoExpirada = "Sua sessão expirou ou não foi encontrada; retome usando o identificador salvo ou envie uma nova planilha"
 
 // GET /api/capacidade?mesas_por_horario=...&min_pessoas_por_mesa=...
 // Prévia do que cabe com os parâmetros; sem parâmetros, usa os padrões.
@@ -366,6 +410,10 @@ func (store *SessionStore) handleCapacidade(w http.ResponseWriter, r *http.Reque
 		writeError(w, 400, err.Error())
 		return
 	}
+	if len(r.URL.Query()) == 0 {
+		param = sess.ParametrosAtuais()
+	}
+	param = sess.comPreferenciaDaSessao(param)
 	previa, err := sess.PreviaCapacidade(param)
 	if err != nil {
 		log.Printf("[ERRO] prévia de capacidade: %v", err)
@@ -403,11 +451,145 @@ func handleExemplo(w http.ResponseWriter, r *http.Request) {
 	w.Write(exemploXLSX)
 }
 
+// GET /api/resultado — a última alocação, inclusive realocações e avaliações.
+func (store *SessionStore) handleResultado(w http.ResponseWriter, r *http.Request) {
+	sess := store.sessionFromRequest(r)
+	if sess == nil {
+		writeError(w, 401, msgSessaoExpirada)
+		return
+	}
+	resultado, err := sess.ResultadoAtual()
+	if err != nil {
+		writeError(w, http.StatusNotFound, "nenhuma alocação ainda")
+		return
+	}
+	writeJSON(w, 200, resultado)
+}
+
+// GET /api/avisos — a mensagem e os canais configurados nesta sessão.
+func (store *SessionStore) handleGetAvisos(w http.ResponseWriter, r *http.Request) {
+	sess := store.sessionFromRequest(r)
+	if sess == nil {
+		writeError(w, 401, msgSessaoExpirada)
+		return
+	}
+	writeJSON(w, 200, sess.ConfigAtual())
+}
+
+// POST /api/avisos — grava a mensagem e os canais. Pode ser feito na entrada
+// ou depois, na tela de resultado.
+func (store *SessionStore) handlePutAvisos(w http.ResponseWriter, r *http.Request) {
+	sess := store.sessionFromRequest(r)
+	if sess == nil {
+		writeError(w, 401, msgSessaoExpirada)
+		return
+	}
+	var cfg ConfigAvisos
+	if err := decodeJSON(r, &cfg); err != nil {
+		writeError(w, 400, "body inválido: "+err.Error())
+		return
+	}
+	if err := sess.ConfigurarAvisos(cfg); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// POST /api/avisos/enviar — o administrador aceitou avisar todo mundo alocado.
+func (store *SessionStore) handleEnviarAvisos(w http.ResponseWriter, r *http.Request) {
+	sess := store.sessionFromRequest(r)
+	if sess == nil {
+		writeError(w, 401, msgSessaoExpirada)
+		return
+	}
+	var p pedidoEnvio
+	if err := decodeJSON(r, &p); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, 400, "pedido inválido")
+		return
+	}
+	op, err := sess.EnviarAvisos(p, true)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, op)
+}
+
+type pedidoRealocar struct {
+	Tipo    string `json:"tipo"` // "dia", "mesa" ou "pessoa"
+	De      string `json:"de"`
+	Para    string `json:"para"`
+	Horario string `json:"horario"`
+	Pessoa  string `json:"pessoa"`
+	MesaID  int    `json:"mesa_id"`
+	Avisar  bool   `json:"avisar"`
+}
+
+// POST /api/realocar — muda um dia, uma mesa ou uma pessoa.
+// avisar só dispara e-mail e WhatsApp quando o administrador marca.
+func (store *SessionStore) handleRealocar(w http.ResponseWriter, r *http.Request) {
+	sess := store.sessionFromRequest(r)
+	if sess == nil {
+		writeError(w, 401, msgSessaoExpirada)
+		return
+	}
+	var pedido pedidoRealocar
+	if err := decodeJSON(r, &pedido); err != nil {
+		writeError(w, 400, "body inválido: "+err.Error())
+		return
+	}
+	op, err := sess.RealocarAsync(pedido)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, op)
+}
+
+type itemAvaliacao struct {
+	ID        int    `json:"id"`
+	Pessoa    string `json:"pessoa"`
+	Resultado string `json:"resultado"`
+}
+
+type pedidoAvaliar struct {
+	itemAvaliacao
+	Itens []itemAvaliacao `json:"itens"`
+}
+
+// POST /api/avaliar — marca quem passou e quem não passou.
+func (store *SessionStore) handleAvaliar(w http.ResponseWriter, r *http.Request) {
+	sess := store.sessionFromRequest(r)
+	if sess == nil {
+		writeError(w, 401, msgSessaoExpirada)
+		return
+	}
+	var pedido pedidoAvaliar
+	if err := decodeJSON(r, &pedido); err != nil {
+		writeError(w, 400, "body inválido: "+err.Error())
+		return
+	}
+	itens := pedido.Itens
+	if len(itens) == 0 {
+		itens = []itemAvaliacao{pedido.itemAvaliacao}
+	}
+	op, err := sess.AvaliarLote(itens)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, op)
+}
+
 // DELETE /api/session — encerra a sessão atual.
 func (store *SessionStore) handleReset(w http.ResponseWriter, r *http.Request) {
 	id := r.Header.Get("X-Session-Id")
 	if id != "" {
-		store.Delete(id)
+		if err := store.Delete(id); err != nil {
+			writeError(w, 409, err.Error())
+			return
+		}
 	}
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
@@ -431,6 +613,18 @@ func buildRouter(store *SessionStore, distFS fs.FS) http.Handler {
 	mux.HandleFunc("GET /api/capacidade", store.handleCapacidade)
 	mux.HandleFunc("GET /api/alocar", store.handleAlocar)
 	mux.HandleFunc("GET /api/export", store.handleExport)
+	mux.HandleFunc("GET /api/resultado", store.handleResultado)
+	mux.HandleFunc("GET /api/avisos", store.handleGetAvisos)
+	mux.HandleFunc("POST /api/avisos", store.handlePutAvisos)
+	mux.HandleFunc("POST /api/avisos/enviar", store.handleEnviarAvisos)
+	mux.HandleFunc("POST /api/realocar", store.handleRealocar)
+	mux.HandleFunc("POST /api/avaliar", store.handleAvaliar)
+	mux.HandleFunc("GET /api/realocar/sugestoes", store.handleSugestoes)
+	mux.HandleFunc("GET /api/avisos/historico", store.handleHistorico)
+	mux.HandleFunc("GET /api/avisos/lotes/{id}", store.handleLote)
+	mux.HandleFunc("POST /api/avisos/repetir", store.handleRepetir)
+	mux.HandleFunc("POST /api/avisos/testar", store.handleTestar)
+	mux.HandleFunc("POST /api/avisos/previa", store.handlePreviaAvisos)
 	mux.HandleFunc("GET /api/exemplo", handleExemplo)
 	mux.HandleFunc("GET /api/versao", handleVersao)
 	mux.HandleFunc("DELETE /api/session", store.handleReset)
@@ -453,5 +647,5 @@ func buildRouter(store *SessionStore, distFS fs.FS) http.Handler {
 		fileServer.ServeHTTP(w, r)
 	})
 
-	return mux
+	return store.protegerSessao(mux)
 }

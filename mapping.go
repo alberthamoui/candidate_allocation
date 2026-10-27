@@ -30,11 +30,16 @@ func (s *Session) lerCabecalho(aba int) ([]string, error) {
 // SuggestMapping guarda o Excel na sessão, lê o cabeçalho da primeira aba e
 // sugere o mapeamento entre colunas e campos de Usuario pelo nome das colunas.
 func (s *Session) SuggestMapping(data []byte, quantidade_opcoes int, emailDomain string) ([]MappingItem, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.excelData = data
 	s.nOpcoes = quantidade_opcoes
 	s.emailDomain = emailDomain
 	header, err := s.lerCabecalho(0)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.persistirLocked(); err != nil {
 		return nil, err
 	}
 	return sugerirMapeamento(header, getUsuarioFields(quantidade_opcoes)), nil
@@ -43,6 +48,8 @@ func (s *Session) SuggestMapping(data []byte, quantidade_opcoes int, emailDomain
 // SuggestMappingAvaliador lê o cabeçalho da segunda aba do Excel e sugere
 // o mapeamento para campos de AvaliadorInfo.
 func (s *Session) SuggestMappingAvaliador() ([]MappingItem, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	header, err := s.lerCabecalho(1)
 	if err != nil {
 		return nil, err
@@ -53,6 +60,8 @@ func (s *Session) SuggestMappingAvaliador() ([]MappingItem, error) {
 // SuggestMappingRestricao lê o cabeçalho da terceira aba do Excel e sugere
 // o mapeamento para campos de Restricao.
 func (s *Session) SuggestMappingRestricao() ([]MappingItem, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	header, err := s.lerCabecalho(2)
 	if err != nil {
 		return nil, err
@@ -63,6 +72,8 @@ func (s *Session) SuggestMappingRestricao() ([]MappingItem, error) {
 // BuildUsuariosWithMapping lê a primeira aba do Excel aplicando o mapeamento
 // fornecido e retorna usuários validados e índices de duplicatas.
 func (s *Session) BuildUsuariosWithMapping(mappingItems []MappingItem) (UsuariosResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	data := s.excelData
 	nOpcoes := s.nOpcoes
 	readerData := bytes.NewReader(data)
@@ -88,7 +99,7 @@ func (s *Session) BuildUsuariosWithMapping(mappingItems []MappingItem) (Usuarios
 			Opcoes: make([]string, nOpcoes),
 		}
 		for _, mItem := range mappingItems {
-			if mItem.Indice >= len(row) {
+			if mItem.Indice < 0 || mItem.Indice >= len(row) {
 				continue
 			}
 			cell := row[mItem.Indice]
@@ -99,6 +110,8 @@ func (s *Session) BuildUsuariosWithMapping(mappingItems []MappingItem) (Usuarios
 				u.Nome = cell
 			case "cpf":
 				u.CPF = cell
+			case "telefone":
+				u.Telefone = cell
 			case "numero":
 				u.Numero = cell
 			case "semestre":
@@ -130,6 +143,8 @@ func (s *Session) BuildUsuariosWithMapping(mappingItems []MappingItem) (Usuarios
 
 // BuildAvaliadoresWithMapping lê a segunda aba do Excel aplicando o mapeamento fornecido.
 func (s *Session) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]AvaliadorInfo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.excelData == nil {
 		return nil, fmt.Errorf("dados do Excel ainda não carregados")
 	}
@@ -159,7 +174,7 @@ func (s *Session) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Ava
 	for _, row := range rows[1:] {
 		av := AvaliadorInfo{}
 		for _, m := range mappingItems {
-			if m.Indice >= len(row) {
+			if m.Indice < 0 || m.Indice >= len(row) {
 				continue
 			}
 			val := strings.TrimSpace(row[m.Indice])
@@ -185,6 +200,8 @@ func (s *Session) BuildAvaliadoresWithMapping(mappingItems []MappingItem) ([]Ava
 
 // BuildRestricoesWithMapping lê a terceira aba do Excel aplicando o mapeamento fornecido.
 func (s *Session) BuildRestricoesWithMapping(mappingItems []MappingItem) ([]Restricao, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	readerData := bytes.NewReader(s.excelData)
 	file, err := excelize.OpenReader(readerData)
 	if err != nil {
@@ -197,15 +214,15 @@ func (s *Session) BuildRestricoesWithMapping(mappingItems []MappingItem) ([]Rest
 	if err != nil {
 		return nil, fmt.Errorf("erro ao ler excel: %w", err)
 	}
-	if len(rows) < 2 {
-		return nil, fmt.Errorf("arquivo sem dados além do header")
+	if len(rows) < 1 {
+		return nil, fmt.Errorf("aba de restrições sem cabeçalho")
 	}
 
-	var restricoes []Restricao
+	restricoes := []Restricao{}
 	for _, row := range rows[1:] {
 		r := Restricao{}
 		for _, m := range mappingItems {
-			if m.Indice >= len(row) {
+			if m.Indice < 0 || m.Indice >= len(row) {
 				continue
 			}
 			cell := row[m.Indice]

@@ -20,11 +20,29 @@ type progressEvent struct {
 // RunAlocacao executa o algoritmo na sessão com os parâmetros dados (já
 // validados) e retorna o resultado. emit é chamado com eventos progressEvent.
 func (s *Session) RunAlocacao(ctx context.Context, param ParametrosAlocacao, emit func(any)) (AlocacaoResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return AlocacaoResponse{}, err
+	}
+	if s.preferenciaDefinida && !s.usarPreferencia {
+		param.SemPreferencia = true
+	}
+	if err := param.validar(); err != nil {
+		return AlocacaoResponse{}, err
+	}
+	antes, antesParam := clonarResultado(s.lastResult), s.parametros
 	emit(progressEvent{Step: "Carregando dados...", Pct: 15})
 
 	d, err := s.carregarDados()
 	if err != nil {
 		return AlocacaoResponse{}, err
+	}
+	if param.SemPreferencia {
+		if len(normalizarHorarios(param.HorariosLivres)) == 0 {
+			return AlocacaoResponse{}, fmt.Errorf("a preferência de horário está desligada: informe pelo menos um horário")
+		}
+		d = aplicarSemPreferencia(d, param.HorariosLivres)
 	}
 	prefs := d.prefs
 
@@ -39,6 +57,9 @@ func (s *Session) RunAlocacao(ctx context.Context, param ParametrosAlocacao, emi
 	}
 
 	res, mesas := fazerMelhorAlocacaoMesas(ctx, param, d.horarios, d.avals, prefs, d.hard, d.soft, d.atributos, onProgress)
+	if err := ctx.Err(); err != nil {
+		return AlocacaoResponse{}, err
+	}
 	emit(progressEvent{Step: "Finalizando...", Pct: 97})
 
 	mapMesa := make(map[int]*Mesa, len(mesas))
@@ -53,12 +74,41 @@ func (s *Session) RunAlocacao(ctx context.Context, param ParametrosAlocacao, emi
 		return AlocacaoResponse{}, fmt.Errorf("carregando candidatos: %w", err)
 	}
 	result := montarResultado(d, cands, res, mesas, param.Criterios)
+	if param.SemPreferencia {
+		result.marcarSemPreferencia()
+	}
+	s.aplicarAvaliacoes(&result)
+	s.parametros = param
 	s.lastResult = &result
-	return result, nil
+	var loteID string
+	if s.avisos.Ativo && s.avisos.EnviarAoAlocar {
+		ids := []int{}
+		for _, m := range result.Mesas {
+			for _, c := range m.Candidatos {
+				ids = append(ids, c.ID)
+			}
+		}
+		if len(ids) > 0 {
+			lote := s.prepararLoteLocked(ids)
+			s.novoLote = &lote
+			loteID = lote.ID
+		}
+	}
+	if err := s.persistirLocked(); err != nil {
+		s.lastResult, s.parametros, s.novoLote = antes, antesParam, nil
+		return AlocacaoResponse{}, err
+	}
+	if loteID != "" {
+		cfg := s.avisos
+		s.iniciarLote(loteID, cfg)
+	}
+	return *clonarResultado(s.lastResult), nil
 }
 
 // ExportResultado gera os bytes do arquivo .xlsx com a última alocação.
 func (s *Session) ExportResultado() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.lastResult == nil {
 		return nil, fmt.Errorf("nenhuma alocação disponível para exportar")
 	}
@@ -84,7 +134,7 @@ func (s *Session) ExportResultado() ([]byte, error) {
 	if err := f.SetSheetName("Sheet1", lista); err != nil {
 		return nil, err
 	}
-	for i, h := range []string{"Mesa", "Candidato", "Avaliadores"} {
+	for i, h := range []string{"Mesa", "Candidato", "Avaliadores", "Horário", "Email", "Número", "Avaliação", "Telefone WhatsApp"} {
 		celula(lista, i+1, 1, h)
 	}
 	row := 2
@@ -98,6 +148,11 @@ func (s *Session) ExportResultado() ([]byte, error) {
 			celula(lista, 1, row, mesa.Descricao)
 			celula(lista, 2, row, cand.Nome)
 			celula(lista, 3, row, avStr)
+			celula(lista, 4, row, mesa.DiaNome)
+			celula(lista, 5, row, emailDe(cand))
+			celula(lista, 6, row, cand.Numero)
+			celula(lista, 7, row, textoAvaliacao(cand.Avaliacao))
+			celula(lista, 8, row, cand.Telefone)
 			row++
 		}
 	}
@@ -114,14 +169,14 @@ func (s *Session) ExportResultado() ([]byte, error) {
 		DiaNome string
 		Mesas   []MesaResult
 	}
-	diaOrder := []int{}
-	diaMap := map[int]*diaGroup{}
+	diaOrder := []string{}
+	diaMap := map[string]*diaGroup{}
 	for _, mr := range s.lastResult.Mesas {
-		if _, ok := diaMap[mr.DiaID]; !ok {
-			diaOrder = append(diaOrder, mr.DiaID)
-			diaMap[mr.DiaID] = &diaGroup{DiaID: mr.DiaID, DiaNome: mr.DiaNome}
+		if _, ok := diaMap[mr.DiaNome]; !ok {
+			diaOrder = append(diaOrder, mr.DiaNome)
+			diaMap[mr.DiaNome] = &diaGroup{DiaID: mr.DiaID, DiaNome: mr.DiaNome}
 		}
-		diaMap[mr.DiaID].Mesas = append(diaMap[mr.DiaID].Mesas, mr)
+		diaMap[mr.DiaNome].Mesas = append(diaMap[mr.DiaNome].Mesas, mr)
 	}
 
 	curRow := 1
@@ -202,7 +257,7 @@ func (s *Session) ExportResultado() ([]byte, error) {
 	if _, err := f.NewSheet(nao); err != nil {
 		return nil, err
 	}
-	for i, h := range []string{"Nome", "Email Institucional", "Curso", "Semestre"} {
+	for i, h := range []string{"Nome", "Email Institucional", "Curso", "Semestre", "Número", "Avaliação", "Telefone WhatsApp"} {
 		celula(nao, i+1, 1, h)
 	}
 	for i, p := range s.lastResult.NaoAlocadosInfo {
@@ -211,6 +266,8 @@ func (s *Session) ExportResultado() ([]byte, error) {
 		celula(nao, 2, r, p.EmailInsper)
 		celula(nao, 3, r, p.Curso)
 		celula(nao, 4, r, p.Semestre)
+		celula(nao, 5, r, p.Numero)
+		celula(nao, 6, r, textoAvaliacao(p.Avaliacao))
 	}
 	if errCelula != nil {
 		return nil, errCelula

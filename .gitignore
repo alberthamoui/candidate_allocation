@@ -77,3 +77,6 @@ brag-output/
 Excels/*
 !Excels/base_exemplo.xlsx
 !Excels/teste_oficial.xlsx
+
+# Estado persistente privado das agendas e canais
+alocacao-dados/

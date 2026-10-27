@@ -6,11 +6,30 @@ import {
 	ArrowPathIcon,
 	CheckCircleIcon,
 	ExclamationTriangleIcon,
-	XMarkIcon,
+	XMarkIcon
 } from "@heroicons/react/24/outline";
-import { startAlocacao, downloadExcel, resetSession, getParametrosSalvos, AlocacaoResponse } from "../api";
+import {
+	startAlocacao,
+	downloadExcel,
+	resetSession,
+	getParametrosSalvos,
+	getResultado,
+	setSessionId,
+	consumirNovaAlocacao,
+	AlocacaoResponse
+} from "../api";
+import OperacoesAgenda from "../components/OperacoesAgenda";
 import PainelResultado from "../components/PainelResultado";
-import { Aviso, BarraAcoes, BotaoPerigo, BotaoPrimario, BotaoSecundario, CabecalhoPagina, Modal, Selo } from "../components/ui";
+import {
+	Aviso,
+	BarraAcoes,
+	BotaoPerigo,
+	BotaoPrimario,
+	BotaoSecundario,
+	CabecalhoPagina,
+	Modal,
+	Selo
+} from "../components/ui";
 
 function formatEta(ms: number): string {
 	if (ms <= 0) return "";
@@ -37,45 +56,72 @@ export default function Resultado() {
 	const startTimeRef = useRef<number | null>(null);
 
 	useEffect(() => {
-		const es = startAlocacao(
-			getParametrosSalvos(),
-			(ev) => {
-				if (ev.pct !== undefined && ev.pct > progressRef.current) {
-					progressRef.current = ev.pct;
-					setProgressPct(ev.pct);
-				}
-				if (ev.step) setProgressStep(ev.step);
-				if (ev.tentativa && ev.total && ev.tentativa > 0) {
-					if (startTimeRef.current === null) {
-						startTimeRef.current = Date.now();
-					} else {
-						const elapsed = Date.now() - startTimeRef.current;
-						const avgMs = elapsed / ev.tentativa;
-						const remainingMs = avgMs * (ev.total - ev.tentativa);
-						setEta(formatEta(remainingMs));
+		const sid = new URLSearchParams(location.search).get("sessao");
+		if (sid) setSessionId(sid);
+		let es: EventSource | undefined;
+		let cancelado = false;
+		async function iniciar() {
+			if (!consumirNovaAlocacao()) {
+				try {
+					const r = await getResultado();
+					if (!cancelado) {
+						setResult(r);
+						setLoading(false);
+					}
+					return;
+				} catch (e: any) {
+					if (!e.message.includes("nenhuma alocação")) {
+						if (!cancelado) {
+							setError(e.message);
+							setLoading(false);
+						}
+						return;
 					}
 				}
-			},
-			(result) => {
-				setProgressPct(100);
-				setProgressStep("Concluído!");
-				setResult(result);
-				setTimeout(() => setLoading(false), 400);
-			},
-			(msg) => {
-				setError("Erro ao executar alocação: " + msg);
-				setLoading(false);
 			}
-		);
+			if (cancelado) return;
+			es = startAlocacao(
+				getParametrosSalvos(),
+				(ev) => {
+					if (ev.pct !== undefined && ev.pct > progressRef.current) {
+						progressRef.current = ev.pct;
+						setProgressPct(ev.pct);
+					}
+					if (ev.step) setProgressStep(ev.step);
+					if (ev.tentativa && ev.total && ev.tentativa > 0) {
+						if (startTimeRef.current === null) {
+							startTimeRef.current = Date.now();
+						} else {
+							const elapsed = Date.now() - startTimeRef.current;
+							const avgMs = elapsed / ev.tentativa;
+							const remainingMs = avgMs * (ev.total - ev.tentativa);
+							setEta(formatEta(remainingMs));
+						}
+					}
+				},
+				(result) => {
+					setProgressPct(100);
+					setProgressStep("Concluído!");
+					setResult(result);
+					setTimeout(() => setLoading(false), 400);
+				},
+				(msg) => {
+					setError("Erro ao executar alocação: " + msg);
+					setLoading(false);
+				}
+			);
+		}
+		void iniciar();
 		return () => {
-			es.close();
+			cancelado = true;
+			es?.close();
 		};
 	}, []);
 
-	function handleExport() {
+	async function handleExport() {
 		setExporting(true);
 		try {
-			downloadExcel();
+			await downloadExcel();
 			setExportDone(true);
 			setTimeout(() => setExportDone(false), 2500);
 		} catch (err: any) {
@@ -166,7 +212,11 @@ export default function Resultado() {
 			)}
 
 			{error && (
-				<AvisoFlutuante tom="perigo" icone={<ExclamationTriangleIcon className="h-4 w-4" />} onFechar={() => setError(null)}>
+				<AvisoFlutuante
+					tom="perigo"
+					icone={<ExclamationTriangleIcon className="h-4 w-4" />}
+					onFechar={() => setError(null)}
+				>
 					{error}
 				</AvisoFlutuante>
 			)}
@@ -181,6 +231,7 @@ export default function Resultado() {
 				descricao={`${mesas.length} mesa${mesas.length !== 1 ? "s" : ""} preenchida${mesas.length !== 1 ? "s" : ""}.`}
 				acoes={
 					<>
+						{result.sem_preferencia && <Selo>Sem preferência de horário</Selo>}
 						<Selo tom="sucesso" className="px-3 py-1 text-xs">
 							<CheckCircleIcon className="h-3.5 w-3.5" />
 							{result.total_alocados} alocados
@@ -195,7 +246,9 @@ export default function Resultado() {
 				}
 			/>
 
-			<PainelResultado result={result} />
+			<OperacoesAgenda result={result} onResult={setResult}>
+				<PainelResultado result={result} />
+			</OperacoesAgenda>
 
 			<BarraAcoes dica="Exporte as mesas para uma planilha Excel.">
 				<BotaoSecundario onClick={() => navigate(-1)}>
@@ -220,7 +273,7 @@ function AvisoFlutuante({
 	tom,
 	icone,
 	children,
-	onFechar,
+	onFechar
 }: {
 	tom: "perigo" | "sucesso";
 	icone: ReactNode;
@@ -228,7 +281,10 @@ function AvisoFlutuante({
 	onFechar?: () => void;
 }) {
 	return (
-		<div className="fixed left-1/2 top-16 z-50 w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 rounded-[var(--radius)] bg-white shadow-[var(--shadow-lg)]" role="status">
+		<div
+			className="fixed left-1/2 top-16 z-50 w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 rounded-[var(--radius)] bg-white shadow-[var(--shadow-lg)]"
+			role="status"
+		>
 			<Aviso tom={tom} icone={icone}>
 				<div className="flex items-start justify-between gap-3">
 					<span>{children}</span>

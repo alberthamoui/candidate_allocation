@@ -2,8 +2,9 @@
 const NOMES: Record<string, string> = {
 	timestamp: "Data de envio",
 	nome: "Nome",
-	cpf: "CPF",
-	numero: "Telefone",
+	cpf: "CPF (opcional)",
+	numero: "Matrícula / RA",
+	telefone: "Telefone / WhatsApp (opcional)",
 	semestre: "Semestre",
 	curso: "Curso",
 	email_insper: "Email institucional",

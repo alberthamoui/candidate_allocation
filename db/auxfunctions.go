@@ -34,12 +34,17 @@ func AddHorario(db Executor, opcao string) (int64, error) {
 	return existing, err
 }
 
-// AddPessoa insere um novo registro em pessoa
+// AddPessoa insere um novo registro em pessoa. CPF vazio vira NULL: a coluna
+// é única, e o SQLite aceita vários NULL (vários candidatos sem CPF).
 func AddPessoa(db Executor, nome, cpf, numero, emailInsper, emailPessoal string, semestre int, curso string) (int64, error) {
+	var cpfVal any
+	if cpf = strings.TrimSpace(cpf); cpf != "" {
+		cpfVal = cpf
+	}
 	res, err := db.Exec(`
         INSERT INTO pessoa (nome,cpf, numero, email_insper, email_pessoal,  semestre, curso)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, nome, cpf, numero, emailInsper, emailPessoal, semestre, curso)
+    `, nome, cpfVal, numero, emailInsper, emailPessoal, semestre, curso)
 	if err != nil {
 		return 0, err
 	}

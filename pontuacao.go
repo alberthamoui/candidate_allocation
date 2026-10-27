@@ -14,7 +14,7 @@ import (
 // pontuarResultado calcula a pontuação de uma alocação com base nos
 // critérios definidos nas constantes PONTOS_OPCAO_*, PENALIDADE_SOFT e PENALIDADE_HARD.
 // Retorna um valor inteiro — quanto maior, melhor o resultado.
-func pontuarResultado(res ResultadoAlocacao, mesas []*Mesa, prefs map[int][]int, hard, soft map[int]map[int]bool) (int, map[string]int, int) {
+func pontuarResultado(res ResultadoAlocacao, mesas []*Mesa, prefs map[int][]int, hard, soft map[int]map[int]bool, semPreferencia ...bool) (int, map[string]int, int) {
 	var MAP_PENALIDADES = map[string]int{
 		"opcao_1":     0,
 		"opcao_2":     0,
@@ -51,13 +51,16 @@ func pontuarResultado(res ResultadoAlocacao, mesas []*Mesa, prefs map[int][]int,
 		}
 
 		// Pontos pela preferência de horário do candidato
-		for nivel, hid := range prefs[pid] {
-			if hid == m.DiaID {
-				score += pontosOpcao(nivel)
-				PONTOS_TOMADOS += pontosOpcao(nivel)
-				MAP_PENALIDADES[fmt.Sprintf("opcao_%d", nivel+1)] += 1
-				break
+		if len(semPreferencia) == 0 || !semPreferencia[0] {
+			for nivel, hid := range prefs[pid] {
+				if hid == m.DiaID {
+					score += pontosOpcao(nivel)
+					PONTOS_TOMADOS += pontosOpcao(nivel)
+					MAP_PENALIDADES[fmt.Sprintf("opcao_%d", nivel+1)] += 1
+					break
+				}
 			}
+
 		}
 
 		// Penalidade por violação de restrições por avaliador

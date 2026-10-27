@@ -165,6 +165,6 @@ test("com pouca capacidade, destaca e detalha quem ficou sem mesa", async ({ pag
 	await expect(tabela.locator("tbody tr[data-destacado]")).toHaveCount(semMesa);
 	await expect(page.getByText("Nenhuma mesa com candidatos")).toHaveCount(0);
 
-	await tabela.locator("tbody tr").first().getByRole("button").click();
+	await tabela.locator("tbody tr").first().getByRole("button").first().click();
 	await expect(page.getByRole("dialog")).toContainText("Sem mesa: não coube");
 });

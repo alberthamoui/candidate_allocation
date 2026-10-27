@@ -6,6 +6,7 @@ type Usuario struct {
 	Nome         string   `json:"nome"`
 	CPF          string   `json:"cpf"`
 	Numero       string   `json:"numero"`
+	Telefone     string   `json:"telefone"`
 	Semestre     string   `json:"semestre"`
 	Curso        string   `json:"curso"`
 	EmailInsper  string   `json:"email_insper"`
@@ -60,4 +61,8 @@ type AlocacaoResponse struct {
 	NaoAlocadosInfo []CandidatoResultado `json:"nao_alocados_info"`
 	Pontuacao       int                  `json:"pontuacao"`
 	Qualidade       []ItemQualidade      `json:"qualidade"`
+	// SemPreferencia é verdadeiro quando o ranking de horários foi desligado.
+	SemPreferencia bool     `json:"sem_preferencia,omitempty"`
+	Editado        bool     `json:"editado,omitempty"`
+	Alertas        []string `json:"alertas,omitempty"`
 }

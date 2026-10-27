@@ -16,9 +16,20 @@ import (
 var (
 	reEmailPessoal = regexp.MustCompile(`^[^@]+@[^@]+\.[^@]+$`)
 	reCPF          = regexp.MustCompile(`^\d{11}$`)
-	reNumero       = regexp.MustCompile(`^\d{9}$`)
+	reNumero       = regexp.MustCompile(`^\d{9}$|^\d{10,13}$`)
 	reSemestre     = regexp.MustCompile(`^([1-9]|10)$`)
 )
+
+// digitosNumero fica só com os dígitos, para aceitar "11 98888-7777" e "(11) 98888-7777".
+func digitosNumero(s string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(s) {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
 
 func getUsuarioFields(quantidade_opcoes int) []string {
 	t := reflect.TypeOf(Candidato{})
@@ -91,13 +102,22 @@ func processData(data []Candidato, emailDomain string) (map[int]ValidationResult
 		entrada.CPF = strings.TrimSpace(entrada.CPF)
 		entrada.EmailInsper = strings.ToLower(strings.TrimSpace(entrada.EmailInsper))
 		entrada.EmailPessoal = strings.ToLower(strings.TrimSpace(entrada.EmailPessoal))
-		entrada.Numero = strings.TrimSpace(entrada.Numero)
+		entrada.Numero = digitosNumero(entrada.Numero)
+		if entrada.Telefone != "" {
+			n, err := normalizarTelefone(entrada.Telefone)
+			if err != nil {
+				errs = append(errs, ErrorEntry{"telefone", err.Error()})
+			} else {
+				entrada.Telefone = "+" + n
+			}
+		}
 
-		// --- validações por regex (e zera o campo quando inválido) ---
-		if !reCPF.MatchString(entrada.CPF) {
+		// CPF é opcional. Se veio preenchido, continua tendo de ser 11 dígitos.
+		if entrada.CPF != "" && !reCPF.MatchString(entrada.CPF) {
 			errs = append(errs, ErrorEntry{"cpf", "cpf inválido"})
 		}
-		if !reNumero.MatchString(entrada.Numero) {
+		// Número identifica o candidato. O telefone de WhatsApp é um campo separado.
+		if entrada.Numero != "" && !reNumero.MatchString(entrada.Numero) {
 			errs = append(errs, ErrorEntry{"numero", "numero inválido"})
 		}
 		if !reSemestre.MatchString(entrada.Semestre) {
@@ -246,6 +266,9 @@ func gravarCandidatos(tx *sql.Tx, candidatos []Candidato) error {
 		id, err := dbpkg.AddPessoa(tx, usuario.Nome, usuario.CPF, usuario.Numero, usuario.EmailInsper, usuario.EmailPessoal, semestreInt, usuario.Curso)
 		if err != nil {
 			return fmt.Errorf("candidato %q (CPF %q) não foi salvo: %w", usuario.Nome, usuario.CPF, err)
+		}
+		if _, err := tx.Exec("UPDATE pessoa SET telefone = ? WHERE id = ?", usuario.Telefone, id); err != nil {
+			return err
 		}
 		preferencia := int64(0)
 		for _, opcao := range usuario.Opcoes {
