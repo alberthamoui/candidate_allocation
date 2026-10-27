@@ -314,7 +314,7 @@ export default function OperacoesAgenda({
           <summary className="cursor-pointer">
             Usar esta agenda pela CLI
           </summary>
-          <pre className="mt-2 overflow-auto rounded bg-[var(--bg-subtle)] p-3">{`alocador resultado -servidor ${location.origin} -sessao ${getSessionId()}`}</pre>
+          <pre className="mt-2 overflow-auto rounded bg-[var(--bg-subtle)] p-3">{`./server resultado -servidor ${location.origin} -sessao ${getSessionId()}`}</pre>
           <p>
             O ID dá acesso à agenda. Compartilhe somente com administradores
             autorizados.

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -422,16 +423,20 @@ func imprimirOperacao(op ResultadoOperacao) {
 }
 func executarCLI(args []string) error {
 	if len(args) == 0 || args[0] == "ajuda" || args[0] == "--help" || args[0] == "-h" {
-		fmt.Println(`Uso: alocador <comando> [-servidor http://localhost:8080] [-sessao ID] [opções]
+		fmt.Println(`Uso: ./server <comando> [-servidor http://localhost:8080] [-sessao ID] [opções]
 Comandos: alocar, resultado, capacidade, realocar-dia, realocar-mesa,
 realocar-pessoa, sugestoes, avaliar, avisos, enviar, historico, envio,
 repetir-falhas, exportar. Use <comando> -h para opções.
-O servidor (alocador servir) compartilha a mesma agenda com app e CLI.`)
+O servidor (./server servir) compartilha a mesma agenda com app e CLI.`)
 		return nil
 	}
 	rest, c, err := extrairRemoto(args)
 	if err != nil {
 		return err
 	}
-	return executarRemoto(rest, c)
+	err = executarRemoto(rest, c)
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	return err
 }
