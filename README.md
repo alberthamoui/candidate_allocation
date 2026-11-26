@@ -108,7 +108,7 @@ Uma linha por candidato que possui restrição. As siglas devem corresponder exa
 
 ### Pré-requisitos
 
-- [Go](https://golang.org/) 1.23+ (o `go.mod` indica a toolchain 1.24.2)
+- [Go](https://golang.org/) 1.26+
 - [Node.js](https://nodejs.org/) 20+ (prefira uma versão LTS ainda suportada)
 - Compilador C (necessário para `go-sqlite3`) — no Windows, instale o [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)
 - `make` (opcional, para os atalhos abaixo) — no Windows: `scoop install make` ou `choco install make`
