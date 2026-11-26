@@ -4,9 +4,9 @@
 # Os comandos funcionam tanto no cmd do Windows quanto no sh (Linux/Mac/Git
 # Bash): só `cd pasta && comando`, sem `./programa` nem rm/del.
 
-# Versão fixa do linter, a última que roda com Go 1.24 (as mais novas pedem
-# Go 1.25+). O `go run` baixa e guarda em cache na primeira vez.
-GOLANGCI_LINT := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0
+# Versão fixa do linter, compatível com Go 1.26. O `go run` baixa e guarda em
+# cache na primeira vez.
+GOLANGCI_LINT := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 
 ifeq ($(OS),Windows_NT)
   EXE := .exe
