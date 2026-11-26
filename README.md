@@ -108,8 +108,8 @@ Uma linha por candidato que possui restrição. As siglas devem corresponder exa
 
 ### Pré-requisitos
 
-- [Go](https://golang.org/) 1.21+
-- [Node.js](https://nodejs.org/) 18+
+- [Go](https://golang.org/) 1.23+ (o `go.mod` indica a toolchain 1.24.2)
+- [Node.js](https://nodejs.org/) 20+ (prefira uma versão LTS ainda suportada)
 - Compilador C (necessário para `go-sqlite3`) — no Windows, instale o [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)
 - `make` (opcional, para os atalhos abaixo) — no Windows: `scoop install make` ou `choco install make`
 
@@ -131,6 +131,8 @@ O [Makefile](Makefile) junta os comandos do dia a dia; `make` sozinho lista todo
 O golangci-lint não precisa ser instalado: o `make lint` roda uma versão fixa via `go run` (baixada e guardada em cache na primeira vez, o que leva ~2 min). Os arquivos `.go` usam fim de linha LF também no Windows ([.gitattributes](.gitattributes)); com CRLF, o formatador acusaria todos os arquivos.
 
 ### Desenvolvimento
+
+Em um clone novo, gere o frontend antes de rodar `go run`, `go build` ou `go test`: o Go incorpora os arquivos de `frontend/dist` no binário. Use `make frontend` (depois de instalar as dependências) ou o comando de build abaixo.
 
 ```bash
 git clone https://github.com/alberthamoui/candidate_allocation.git
@@ -158,7 +160,7 @@ go run .
 ### Testes
 
 ```bash
-# backend: algoritmo, mapeamento, API
+# backend: algoritmo, mapeamento, API (requer frontend/dist gerado)
 go test ./...
 
 # interface: abre um navegador e usa o app como uma pessoa (Playwright)
